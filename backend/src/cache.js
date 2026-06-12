@@ -15,3 +15,7 @@ export async function cached(key, ttlMs, producer) {
 export function clearCache() {
   store.clear();
 }
+
+export function bust(key) {
+  store.delete(key);
+}

@@ -38,9 +38,11 @@ export const config = {
   },
 
   reports: {
-    // Optional default spreadsheet share link (a pointer, not data). The owner can
-    // also paste one in the UI, which is stored per-session and takes precedence.
-    shareUrl: env.SPREADSHEET_SHARE_URL || '',
+    // REPORTS_ALLOW_LOCAL=1 enables a "use local test files" toggle that reads the
+    // .xlsx sitting in REPORTS_LOCAL_DIR — local dev only, so the same parser/report
+    // path can be exercised without a live SharePoint connection. Off in production.
+    allowLocal: env.REPORTS_ALLOW_LOCAL === '1',
+    localDir: env.REPORTS_LOCAL_DIR || '',
   },
 
   // Whether the app has the credentials to OFFER each source (not whether a given

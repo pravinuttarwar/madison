@@ -103,53 +103,107 @@ export function parseWorkbook(buffer) {
   return series;
 }
 
-// Shape the parsed series into the Reports DTO: latest populated week + week-over-week.
-// `asOf` lets callers/tests pin "today"; defaults to the real current date.
-export function reportFromWorkbook(buffer, asOf = new Date()) {
-  const all = parseWorkbook(buffer);
-  // Ignore empty template weeks and any week dated in the future — the latest REAL,
-  // already-happened week is what the report should show.
+const weekTotal = (w) => w.total || Object.values(w.specialties).reduce((a, b) => a + b, 0);
+const hasData = (w) =>
+  weekTotal(w) > 0 || Object.values(w.providers).some((v) => v > 0);
+
+// Merge weekly series from multiple files; on a duplicate week, keep the richer one.
+function mergeSeries(parsedList) {
+  const map = new Map();
+  for (const weeks of parsedList) {
+    for (const w of weeks) {
+      const ex = map.get(w.weekStart);
+      if (!ex || weekTotal(w) > weekTotal(ex)) map.set(w.weekStart, w);
+    }
+  }
+  return [...map.values()].sort((a, b) => (a.weekStart < b.weekStart ? -1 : 1));
+}
+
+const monthKey = (iso) => iso.slice(0, 7); // YYYY-MM
+const monthLabel = (mk) =>
+  new Date(mk + '-01T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+
+// Group weeks into calendar months (sum totals + per-modality).
+function byMonth(series) {
+  const m = new Map();
+  for (const w of series) {
+    const k = monthKey(w.weekStart);
+    if (!m.has(k)) m.set(k, { month: k, label: monthLabel(k), total: 0, modalities: {} });
+    const rec = m.get(k);
+    rec.total += weekTotal(w);
+    for (const [code, v] of Object.entries(w.specialties)) rec.modalities[code] = (rec.modalities[code] || 0) + v;
+  }
+  return [...m.values()].sort((a, b) => (a.month < b.month ? -1 : 1));
+}
+
+// Build the full Reports DTO from one or more parsed weekly series.
+// Latest week (W/W) + monthly trend (M/M) + year-over-year, blanks skipped.
+export function buildReport(parsedList, asOf = new Date()) {
   const cutoff = new Date(asOf); cutoff.setHours(23, 59, 59, 999);
-  const hasData = (w) =>
-    w.total > 0 ||
-    Object.values(w.specialties).some((v) => v > 0) ||
-    Object.values(w.providers).some((v) => v > 0);
-  const series = all.filter((w) => hasData(w) && new Date(w.weekStart) <= cutoff);
+  const series = mergeSeries(parsedList).filter((w) => hasData(w) && new Date(w.weekStart) <= cutoff);
   if (!series.length) {
     const err = new Error('spreadsheet_format_unrecognized');
     err.code = 'FORMAT';
     throw err;
   }
+
+  // ── latest week + week-over-week (skip all-zero rows) ──
   const last = series[series.length - 1];
   const prev = series[series.length - 2] || null;
-
-  const delta = (cur, prior) => (prior == null ? null : cur - prior);
-  const specialties = Object.keys(last.specialties).map((key) => ({
-    key,
-    label: SPECIALTY_NAMES[key] || key,
-    last: last.specialties[key],
-    prior: prev ? prev.specialties[key] ?? 0 : null,
-  }));
+  const row = (cur, prior) => prior == null ? null : cur - prior;
+  const modalities = Object.keys(last.specialties)
+    .map((key) => ({ key, label: SPECIALTY_NAMES[key] || key, last: last.specialties[key], prior: prev ? prev.specialties[key] ?? 0 : null }))
+    .filter((s) => s.last > 0 || (s.prior ?? 0) > 0)
+    .sort((a, b) => b.last - a.last);
   const providers = Object.keys(last.providers)
-    .map((name) => ({
-      name,
-      last: last.providers[name],
-      prior: prev ? prev.providers[name] ?? 0 : null,
-    }))
+    .map((name) => ({ name, last: last.providers[name], prior: prev ? prev.providers[name] ?? 0 : null }))
+    .filter((p) => p.last > 0 || (p.prior ?? 0) > 0)
     .sort((a, b) => b.last - a.last);
 
-  const totalLast = last.total || specialties.reduce((s, x) => s + x.last, 0);
-  const totalPrior = prev ? (prev.total || Object.values(prev.specialties).reduce((s, x) => s + x, 0)) : null;
+  // ── monthly trend (last 12 months with data) ──
+  const months = byMonth(series).filter((m) => m.total > 0).slice(-12);
 
+  // ── year-over-year: latest month vs the same month a year earlier ──
+  let yoy = null;
+  const allMonths = byMonth(series);
+  const latestMonth = allMonths.filter((m) => m.total > 0).pop();
+  if (latestMonth) {
+    const [y, mo] = latestMonth.month.split('-');
+    const priorKey = `${Number(y) - 1}-${mo}`;
+    const priorMonth = allMonths.find((m) => m.month === priorKey) || null;
+    if (priorMonth && priorMonth.total > 0) {
+      const codes = [...new Set([...Object.keys(latestMonth.modalities), ...Object.keys(priorMonth.modalities)])];
+      yoy = {
+        label: `${monthLabel(latestMonth.month)} vs ${monthLabel(priorMonth.month)}`,
+        total: { last: latestMonth.total, prior: priorMonth.total },
+        modalities: codes
+          .map((c) => ({ key: c, label: SPECIALTY_NAMES[c] || c, last: latestMonth.modalities[c] || 0, prior: priorMonth.modalities[c] || 0 }))
+          .filter((x) => x.last > 0 || x.prior > 0)
+          .sort((a, b) => b.last - a.last),
+      };
+    }
+  }
+
+  const totalLast = weekTotal(last);
+  const totalPrior = prev ? weekTotal(prev) : null;
   return {
-    weekStart: last.weekStart,
-    priorWeekStart: prev ? prev.weekStart : null,
-    totalEncounters: { last: totalLast, prior: totalPrior },
-    specialties,
-    providers,
-    covidTest: { last: last.covidTest, prior: prev ? prev.covidTest : null },
-    telehealth: { last: last.telehealth, prior: prev ? prev.telehealth : null },
+    week: {
+      weekStart: last.weekStart,
+      priorWeekStart: prev ? prev.weekStart : null,
+      totalEncounters: { last: totalLast, prior: totalPrior },
+      modalities,
+      providers,
+      covidTest: { last: last.covidTest, prior: prev ? prev.covidTest : null },
+      telehealth: { last: last.telehealth, prior: prev ? prev.telehealth : null },
+    },
+    months: months.map((m) => ({ month: m.month, label: m.label, total: m.total })),
+    yoy,
     weeksAvailable: series.length,
-    _delta: delta, // (unused export marker; kept for clarity)
+    _delta: row, // retained marker
   };
+}
+
+// Single-file convenience (kept for the probe/tests).
+export function reportFromWorkbook(buffer, asOf = new Date()) {
+  return buildReport([parseWorkbook(buffer)], asOf);
 }

@@ -1,9 +1,11 @@
 import { Router } from 'express';
+import { readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
 import { config } from './config.js';
-import { cached } from './cache.js';
+import { cached, bust } from './cache.js';
 import { demo } from './demo.js';
 import { currentSession } from './session.js';
-import { reportFromWorkbook } from './reports.js';
+import { parseWorkbook, buildReport } from './reports.js';
 import * as graph from './graph.js';
 import * as qbo from './qbo.js';
 import * as T from './transforms.js';
@@ -134,61 +136,108 @@ router.get('/financials', route('quickbooks',
 ));
 
 // ── weekly report (spreadsheet) ───────────────────────────────────────────────
-// The owner pastes a SharePoint/OneDrive share link; we download the workbook (Graph
-// shares API), parse it IN MEMORY, and return the latest week + week-over-week. The
-// parsed result is cached per-session (REPORTS_TTL) and refreshable on demand. The
-// file bytes are never written to disk.
+// The owner adds one or more spreadsheet share links, keyed by YEAR (so the Dr's
+// month-to-month / year-to-year comparisons work). Each file is read IN MEMORY via the
+// Graph shares API, parsed, and the combined report (week + monthly + YoY) is cached
+// per-session. A local-test mode (REPORTS_ALLOW_LOCAL=1, dev only) reads on-disk .xlsx
+// through the SAME parser path, so the feature can be validated without live SharePoint.
 const REPORTS_TTL = 6 * 60 * 60 * 1000; // 6h
 
-function reportsUrl() {
-  return currentSession()?.reports?.url || config.reports.shareUrl || '';
+const yearFromName = (name) => (String(name).match(/(20\d{2})/) || [])[1] || '';
+
+// Read one source → parsed weekly series + display name. Throws on read/format error.
+async function readSource(src) {
+  if (src.kind === 'local') {
+    const buf = readFileSync(path.join(config.reports.localDir, src.file));
+    return { parsed: parseWorkbook(buf), fileName: src.file };
+  }
+  const { name, buffer } = await graph.downloadShared(src.url);
+  return { parsed: parseWorkbook(buffer), fileName: name };
 }
 
-async function buildReport() {
-  const url = reportsUrl();
-  if (!url) return { configured: false };
-  const { name, buffer } = await graph.downloadShared(url);
-  const r = reportFromWorkbook(buffer);
-  return { configured: true, fileName: name, ...r };
+// Build the combined report from this visitor's configured sources.
+async function buildCombined() {
+  const s = currentSession();
+  const sources = s?.reports?.sources || [];
+  const base = { configured: sources.length > 0, allowLocal: config.reports.allowLocal };
+  if (!sources.length) return { ...base, sources: [] };
+
+  const parsedList = [];
+  const meta = [];
+  for (const src of sources) {
+    const { parsed, fileName } = await readSource(src);
+    src.fileName = fileName; // remember for display
+    parsedList.push(parsed);
+    meta.push({ year: src.year, kind: src.kind, fileName });
+  }
+  const report = buildReport(parsedList);
+  return { ...base, sources: meta, ...report };
 }
 
 router.get('/reports', route('spreadsheet',
-  async (req) => {
-    if (!reportsUrl()) return { configured: false };
-    if (req.query.refresh === '1') return cached(sk('reports'), 0, buildReport); // bust
-    return cached(sk('reports'), REPORTS_TTL, buildReport);
-  },
-  async () => ({ configured: true, ...demo.reports() }),
+  (req) => cached(sk('reports'), req.query.refresh === '1' ? 0 : REPORTS_TTL, buildCombined),
+  async () => ({ configured: true, sources: [], ...demo.reports() }),
 ));
 
-// Set/clear the spreadsheet source for THIS visitor; validates by parsing it once.
+// List configured sources (+ whether local-test mode is available).
+router.get('/reports/sources', route('spreadsheet',
+  async () => ({
+    allowLocal: config.reports.allowLocal,
+    sources: (currentSession()?.reports?.sources || []).map((s) => ({ year: s.year, kind: s.kind, fileName: s.fileName })),
+  }),
+  async () => ({ allowLocal: false, sources: [] }),
+));
+
+// Add/update a source for THIS visitor (overwrite same year). Validates by parsing once.
+//   body: { url, year? }            → a SharePoint/OneDrive share link
+//   body: { local: true }           → load the on-disk test files (dev only)
 router.post('/reports/source', async (req, res) => {
   const s = currentSession();
   if (!s?.graph.refreshToken) return res.status(401).json({ error: 'not_authenticated' });
-  const url = String(req.body?.url || '').trim();
-  s.reports.url = url;
-  if (!url) return res.json({ configured: false });
+  const { url, year, local } = req.body || {};
   try {
-    const { name, buffer } = await graph.downloadShared(url);
-    const r = reportFromWorkbook(buffer);
-    const out = { configured: true, fileName: name, ...r };
-    // cache it immediately so the next GET is instant
-    await cached(sk('reports'), REPORTS_TTL, async () => out);
-    res.json(out);
+    if (local) {
+      if (!config.reports.allowLocal) return res.status(403).json({ error: 'local_disabled' });
+      const files = readdirSync(config.reports.localDir).filter((f) => /\.xlsx$/i.test(f));
+      if (!files.length) return res.status(404).json({ error: 'no_local_files' });
+      s.reports.sources = files.map((f) => ({ kind: 'local', file: f, year: yearFromName(f) || f, fileName: f }));
+    } else {
+      const link = String(url || '').trim();
+      if (!link) return res.status(400).json({ error: 'no_url' });
+      const { name, buffer } = await graph.downloadShared(link);
+      parseWorkbook(buffer); // validate it parses
+      const yr = String(year || yearFromName(name) || new Date().getFullYear());
+      s.reports.sources = [...s.reports.sources.filter((x) => x.year !== yr), { kind: 'url', url: link, year: yr, fileName: name }];
+    }
+    bust(sk('reports'));
+    res.json(await cached(sk('reports'), REPORTS_TTL, buildCombined));
   } catch (err) {
-    s.reports.url = ''; // don't keep a bad URL
+    // eslint-disable-next-line no-console
+    console.error('[reports/source] status=%s msg=%s', err.status, String(err.message || err).slice(0, 500));
     if (err.code === 'FORMAT') return res.status(422).json({ error: 'format_unrecognized' });
     if (err.status === 403) return res.status(403).json({ error: 'no_file_permission' });
     res.status(502).json({ error: 'read_failed', message: String(err.message || err) });
   }
 });
 
-// Debug probe: can the CURRENT scope read this share link? (used to decide if we need
-// Files.Read.All / Sites.Read.All). Returns the resolved name or the Graph error.
+// Remove a source by year, rebuild.
+router.delete('/reports/source/:year', async (req, res) => {
+  const s = currentSession();
+  if (!s?.graph.refreshToken) return res.status(401).json({ error: 'not_authenticated' });
+  s.reports.sources = (s.reports.sources || []).filter((x) => x.year !== req.params.year);
+  bust(sk('reports'));
+  try {
+    res.json(await cached(sk('reports'), REPORTS_TTL, buildCombined));
+  } catch (err) {
+    res.status(502).json({ error: 'read_failed', message: String(err.message || err) });
+  }
+});
+
+// Debug probe: can the CURRENT scope read this share link? (decides Files.Read.All / Sites.Read.All)
 router.get('/reports/probe', async (req, res) => {
   const s = currentSession();
   if (!s?.graph.refreshToken) return res.status(401).json({ error: 'not_authenticated' });
-  const url = String(req.query.url || reportsUrl());
+  const url = String(req.query.url || '');
   if (!url) return res.status(400).json({ error: 'no_url' });
   try {
     const meta = await graph.resolveShare(url);

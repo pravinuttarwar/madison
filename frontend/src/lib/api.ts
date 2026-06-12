@@ -83,21 +83,29 @@ export type CalendarData = { today: ScheduleItem[]; week: CalendarDay[] };
 export type FinancialsData = { weekly: WeeklyFinancial; daily: DailyFinancial };
 
 export type MetricWoW = { last: number; prior: number | null };
-export type SpecialtyRow = { key: string; label: string; last: number; prior: number | null };
+export type ModalityRow = { key: string; label: string; last: number; prior: number | null };
 export type ProviderRow = { name: string; last: number; prior: number | null };
+export type MonthRow = { month: string; label: string; total: number };
+export type ReportSource = { year: string; kind: 'url' | 'local'; fileName?: string };
+export type YoY = { label: string; total: MetricWoW; modalities: ModalityRow[] };
 
-// Reports now reads the owner's real weekly spreadsheet (a SharePoint/OneDrive share
-// link). `configured:false` → the owner hasn't connected a file yet (show the paste UI).
+// Reports reads the owner's real weekly spreadsheet(s) (SharePoint/OneDrive share links,
+// keyed by year — or local test files). `configured:false` → none connected yet.
 export type ReportsData = {
   configured: boolean;
-  fileName?: string;
-  weekStart?: string;
-  priorWeekStart?: string | null;
-  totalEncounters?: MetricWoW;
-  specialties?: SpecialtyRow[];
-  providers?: ProviderRow[];
-  covidTest?: MetricWoW;
-  telehealth?: MetricWoW;
+  allowLocal?: boolean;
+  sources?: ReportSource[];
+  week?: {
+    weekStart: string;
+    priorWeekStart: string | null;
+    totalEncounters: MetricWoW;
+    modalities: ModalityRow[];
+    providers: ProviderRow[];
+    covidTest?: MetricWoW;
+    telehealth?: MetricWoW;
+  };
+  months?: MonthRow[];
+  yoy?: YoY | null;
   weeksAvailable?: number;
 };
 
@@ -216,10 +224,19 @@ export function getReports(refresh = false): Promise<ReportsData> {
   return read('spreadsheet', `/api/reports${refresh ? '?refresh=1' : ''}`, { configured: false });
 }
 
-// Set (or clear) the spreadsheet share link for this visitor; returns the parsed report
-// or throws ApiError (422 = format not recognized, 403 = no file access).
-export function setReportsSource(url: string): Promise<ReportsData> {
-  return fetchJson<ReportsData>('/api/reports/source', { method: 'POST', body: JSON.stringify({ url }) });
+// Add/update a spreadsheet source (overwrite same year). Throws ApiError on 422/403.
+export function addReportsSource(url: string, year?: string): Promise<ReportsData> {
+  return fetchJson<ReportsData>('/api/reports/source', { method: 'POST', body: JSON.stringify({ url, year }) });
+}
+
+// Load the on-disk test files (dev-only local mode) through the same parser path.
+export function loadLocalReports(): Promise<ReportsData> {
+  return fetchJson<ReportsData>('/api/reports/source', { method: 'POST', body: JSON.stringify({ local: true }) });
+}
+
+// Remove a source by year.
+export function removeReportsSource(year: string): Promise<ReportsData> {
+  return fetchJson<ReportsData>(`/api/reports/source/${encodeURIComponent(year)}`, { method: 'DELETE' });
 }
 
 export function getDashboard(view: ViewMode): Promise<DashboardData> {
