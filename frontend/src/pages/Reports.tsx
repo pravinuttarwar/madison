@@ -162,14 +162,141 @@ function MetricList({ rows }: { rows: { label: string; last: number; prior: numb
   );
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const YEAR_COLORS = ['var(--color-chart-2)', 'var(--color-primary)', 'var(--color-chart-3)', 'var(--color-chart-5)', 'var(--color-chart-4)'];
+
+// Multi-year monthly line chart — one line per year, so adding a year is just another
+// line (scales cleanly, reads as a trend instead of an arrow).
+function YearLineChart({ ym }: { ym: { years: string[]; totals: Record<string, number[]> } }) {
+  const { years, totals } = ym;
+  const W = 640, H = 240, padL = 42, padR = 14, padT = 14, padB = 26;
+  const max = Math.max(1, ...years.flatMap((y) => totals[y] || []));
+  const xAt = (i: number) => padL + (i / 11) * (W - padL - padR);
+  const yAt = (v: number) => H - padB - (v / max) * (H - padT - padB);
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(max * f));
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Monthly encounters by year">
+        {ticks.map((t) => (
+          <g key={t}>
+            <line x1={padL} x2={W - padR} y1={yAt(t)} y2={yAt(t)} stroke="var(--color-border)" strokeWidth="1" />
+            <text x={padL - 6} y={yAt(t) + 3} textAnchor="end" fontSize="9" fill="var(--color-muted-foreground)">{t.toLocaleString()}</text>
+          </g>
+        ))}
+        {MONTHS.map((m, i) => (
+          <text key={m} x={xAt(i)} y={H - 8} textAnchor="middle" fontSize="9" fill="var(--color-muted-foreground)">{m[0]}</text>
+        ))}
+        {years.map((y, yi) => {
+          const pts = (totals[y] || []).map((v, i) => ({ i, v })).filter((p) => p.v > 0);
+          if (!pts.length) return null;
+          const color = YEAR_COLORS[yi % YEAR_COLORS.length];
+          const d = pts.map((p, k) => `${k === 0 ? 'M' : 'L'} ${xAt(p.i).toFixed(1)} ${yAt(p.v).toFixed(1)}`).join(' ');
+          return (
+            <g key={y}>
+              <path d={d} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
+              {pts.map((p) => <circle key={p.i} cx={xAt(p.i)} cy={yAt(p.v)} r="2.5" fill={color} />)}
+            </g>
+          );
+        })}
+      </svg>
+      <div className="mt-1 flex flex-wrap justify-center gap-4">
+        {years.map((y, yi) => (
+          <span key={y} className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: YEAR_COLORS[yi % YEAR_COLORS.length] }} /> {y}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function pctChip(a: number, b: number) {
+  if (a === 0) return b > 0 ? <span className="text-success">new</span> : <span className="text-muted-foreground">—</span>;
+  const pct = Math.round(((b - a) / a) * 100);
+  const cls = pct > 0 ? 'text-success' : pct < 0 ? 'text-destructive' : 'text-muted-foreground';
+  return <span className={cls}>{pct > 0 ? '+' : ''}{pct}%</span>;
+}
+
+// Pick any two periods (year or month) and see them side by side by modality + provider.
+function PeriodCompare({ data }: { data: ReportsData }) {
+  const periods = data.periods ?? {};
+  const avail = data.available ?? { years: [], months: [] };
+  const names = data.modalityNames ?? {};
+  const options = [
+    ...avail.years.map((y) => ({ id: `year:${y}`, label: y })),
+    ...avail.months.map((m) => ({ id: `month:${m}`, label: periods[`month:${m}`]?.label || m })),
+  ];
+  const lastY = avail.years.length ? `year:${avail.years[avail.years.length - 1]}` : (avail.months.length ? `month:${avail.months[avail.months.length - 1]}` : '');
+  const prevY = avail.years.length >= 2 ? `year:${avail.years[avail.years.length - 2]}` : lastY;
+  const [a, setA] = useState(prevY);
+  const [b, setB] = useState(lastY);
+  const pa = periods[a]; const pb = periods[b];
+
+  const sel = (val: string, set: (v: string) => void) => (
+    <select value={val} onChange={(e) => set(e.target.value)} className="rounded-lg border border-border bg-background px-2 py-1 text-xs font-semibold text-foreground outline-none">
+      {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+    </select>
+  );
+
+  function rows(field: 'modalities' | 'providers') {
+    if (!pa || !pb) return [];
+    const keys = [...new Set([...Object.keys(pa[field]), ...Object.keys(pb[field])])];
+    return keys
+      .map((k) => ({ label: field === 'modalities' ? names[k] || k : k, a: pa[field][k] || 0, b: pb[field][k] || 0 }))
+      .filter((r) => r.a > 0 || r.b > 0)
+      .sort((x, y) => y.b - x.b);
+  }
+
+  const table = (title: string, field: 'modalities' | 'providers') => (
+    <div>
+      <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</div>
+      <table className="w-full text-sm">
+        <tbody className="divide-y divide-border">
+          {rows(field).map((r) => (
+            <tr key={r.label}>
+              <td className="py-1.5 pr-3 font-medium text-foreground">{r.label}</td>
+              <td className="py-1.5 px-2 text-right tabular-nums text-muted-foreground">{r.a.toLocaleString()}</td>
+              <td className="py-1.5 px-2 text-right tabular-nums text-foreground">{r.b.toLocaleString()}</td>
+              <td className="py-1.5 pl-2 text-right text-xs font-semibold tabular-nums">{pctChip(r.a, r.b)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  if (!pa || !pb) return <p className="py-6 text-center text-sm text-muted-foreground">Add a second period to compare.</p>;
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        Compare {sel(a, setA)} <span>vs</span> {sel(b, setB)}
+      </div>
+      <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-2 border-b border-border pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <span />
+        <span className="pr-2 text-right">{pa.label}</span>
+        <span className="px-2 text-right">{pb.label}</span>
+        <span className="pl-2 text-right">Δ</span>
+      </div>
+      <div className="flex items-end justify-between rounded-lg bg-muted/40 px-3 py-2">
+        <span className="text-xs font-semibold text-foreground">Total</span>
+        <span className="flex items-center gap-3 tabular-nums">
+          <span className="text-muted-foreground">{pa.total.toLocaleString()}</span>
+          <span className="font-semibold text-foreground">{pb.total.toLocaleString()}</span>
+          <span className="w-12 text-right text-xs font-semibold">{pctChip(pa.total, pb.total)}</span>
+        </span>
+      </div>
+      {table('By modality', 'modalities')}
+      {table('By provider', 'providers')}
+    </div>
+  );
+}
+
 function ReportView({ data, onChange }: { data: ReportsData; onChange: (r: ReportsData) => void }) {
   const [refreshing, setRefreshing] = useState(false);
   const [adding, setAdding] = useState(false);
   const week = data.week!;
-  const months = data.months ?? [];
-  const yoy = data.yoy ?? null;
+  const ym = data.yearMonthly;
   const sources = data.sources ?? [];
-  const maxMonth = Math.max(1, ...months.map((m) => m.total));
 
   async function refresh() {
     setRefreshing(true);
@@ -246,52 +373,23 @@ function ReportView({ data, onChange }: { data: ReportsData; onChange: (r: Repor
         </Panel>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        {/* Monthly trend */}
-        <Panel title="Monthly trend" subtitle="Total encounters per month" source="OneDrive / SharePoint" sourceMode={spreadsheetMode}>
-          {months.length ? (
-            <ul className="space-y-2.5">
-              {months.map((m) => (
-                <li key={m.month} className="flex items-center gap-3">
-                  <span className="w-20 shrink-0 text-xs font-medium text-muted-foreground">{m.label}</span>
-                  <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full rounded-full bg-chart-2" style={{ width: `${Math.round((m.total / maxMonth) * 100)}%` }} />
-                  </div>
-                  <span className="w-14 text-right text-xs font-semibold tabular-nums text-foreground">{m.total.toLocaleString()}</span>
-                </li>
-              ))}
-            </ul>
-          ) : <p className="py-6 text-center text-sm text-muted-foreground">Not enough data for a monthly trend.</p>}
-        </Panel>
+      {/* Monthly totals across years — the primary comparison visual */}
+      <Panel
+        title="Monthly encounters by year"
+        subtitle={ym && ym.years.length > 1 ? 'Each line is a year — compare month-to-month and year-to-year' : 'Add a prior-year file to overlay year-over-year'}
+        source="OneDrive / SharePoint" sourceMode={spreadsheetMode}
+      >
+        {ym && ym.years.length ? <YearLineChart ym={ym} /> : (
+          <p className="flex items-center justify-center gap-2 py-6 text-center text-sm text-muted-foreground">
+            <CalendarRange className="h-4 w-4" aria-hidden /> Not enough data yet.
+          </p>
+        )}
+      </Panel>
 
-        {/* Year over year */}
-        <Panel
-          title="Year over year"
-          subtitle={yoy ? yoy.label : 'Add a prior-year file to compare'}
-          source="OneDrive / SharePoint" sourceMode={spreadsheetMode}
-        >
-          {yoy ? (
-            <>
-              <div className="mb-3 flex items-end justify-between border-b border-border pb-3">
-                <div>
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Total (month)</div>
-                  <div className="text-2xl font-semibold tabular-nums text-foreground">{yoy.total.last.toLocaleString()}</div>
-                </div>
-                {yoy.total.prior != null && (
-                  <span className="flex items-center gap-2 text-sm tabular-nums text-muted-foreground">
-                    vs {yoy.total.prior.toLocaleString()} <Trend delta={yoy.total.last - yoy.total.prior} />
-                  </span>
-                )}
-              </div>
-              <MetricList rows={yoy.modalities} />
-            </>
-          ) : (
-            <p className="flex items-center justify-center gap-2 py-6 text-center text-sm text-muted-foreground">
-              <CalendarRange className="h-4 w-4" aria-hidden /> Connect this year and last year to compare.
-            </p>
-          )}
-        </Panel>
-      </div>
+      {/* Pick any two periods, side by side */}
+      <Panel title="Side-by-side comparison" subtitle="Any two years or months, by modality and provider" source="OneDrive / SharePoint" sourceMode={spreadsheetMode}>
+        <PeriodCompare data={data} />
+      </Panel>
 
       <p className="text-[11px] text-muted-foreground">
         Read live from your spreadsheet ({data.weeksAvailable ?? 0} weeks available) · in memory only,

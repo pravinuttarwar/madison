@@ -88,6 +88,11 @@ export type ProviderRow = { name: string; last: number; prior: number | null };
 export type MonthRow = { month: string; label: string; total: number };
 export type ReportSource = { year: string; kind: 'url' | 'local'; fileName?: string };
 export type YoY = { label: string; total: MetricWoW; modalities: ModalityRow[] };
+export type Period = {
+  id: string; kind: 'year' | 'month'; label: string;
+  total: number; modalities: Record<string, number>; providers: Record<string, number>;
+};
+export type YearMonthly = { years: string[]; totals: Record<string, number[]> };
 
 // Reports reads the owner's real weekly spreadsheet(s) (SharePoint/OneDrive share links,
 // keyed by year — or local test files). `configured:false` → none connected yet.
@@ -106,6 +111,10 @@ export type ReportsData = {
   };
   months?: MonthRow[];
   yoy?: YoY | null;
+  yearMonthly?: YearMonthly;
+  periods?: Record<string, Period>;
+  available?: { years: string[]; months: string[] };
+  modalityNames?: Record<string, string>;
   weeksAvailable?: number;
 };
 

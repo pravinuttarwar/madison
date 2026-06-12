@@ -11,3 +11,6 @@ _uploads/
 # Customer-provided data — never commit (real patient counts)
 backend/*.xlsx
 backend/_data/
+
+# Persisted report source links (practice config, not data)
+backend/.reports-sources.json

@@ -6,6 +6,7 @@ import { cached, bust } from './cache.js';
 import { demo } from './demo.js';
 import { currentSession } from './session.js';
 import { parseWorkbook, buildReport } from './reports.js';
+import { loadSources, saveSources } from './reports-store.js';
 import * as graph from './graph.js';
 import * as qbo from './qbo.js';
 import * as T from './transforms.js';
@@ -142,8 +143,15 @@ router.get('/financials', route('quickbooks',
 // per-session. A local-test mode (REPORTS_ALLOW_LOCAL=1, dev only) reads on-disk .xlsx
 // through the SAME parser path, so the feature can be validated without live SharePoint.
 const REPORTS_TTL = 6 * 60 * 60 * 1000; // 6h
+const RK = 'reports:v1'; // GLOBAL cache key — the spreadsheet is practice-level, not per-user
 
 const yearFromName = (name) => (String(name).match(/(20\d{2})/) || [])[1] || '';
+
+// Sources persist globally (practice config). Drop local ones where local mode is off
+// (e.g. a leftover local source carried to a server that has no on-disk files).
+function activeSources() {
+  return loadSources().filter((s) => s.kind !== 'local' || config.reports.allowLocal);
+}
 
 // Read one source → parsed weekly series + display name. Throws on read/format error.
 async function readSource(src) {
@@ -155,10 +163,9 @@ async function readSource(src) {
   return { parsed: parseWorkbook(buffer), fileName: name };
 }
 
-// Build the combined report from this visitor's configured sources.
+// Build the combined report from the configured sources (downloaded with the caller's token).
 async function buildCombined() {
-  const s = currentSession();
-  const sources = s?.reports?.sources || [];
+  const sources = activeSources();
   const base = { configured: sources.length > 0, allowLocal: config.reports.allowLocal };
   if (!sources.length) return { ...base, sources: [] };
 
@@ -166,16 +173,14 @@ async function buildCombined() {
   const meta = [];
   for (const src of sources) {
     const { parsed, fileName } = await readSource(src);
-    src.fileName = fileName; // remember for display
     parsedList.push(parsed);
-    meta.push({ year: src.year, kind: src.kind, fileName });
+    meta.push({ year: src.year, kind: src.kind, fileName: fileName || src.fileName });
   }
-  const report = buildReport(parsedList);
-  return { ...base, sources: meta, ...report };
+  return { ...base, sources: meta, ...buildReport(parsedList) };
 }
 
 router.get('/reports', route('spreadsheet',
-  (req) => cached(sk('reports'), req.query.refresh === '1' ? 0 : REPORTS_TTL, buildCombined),
+  (req) => cached(RK, req.query.refresh === '1' ? 0 : REPORTS_TTL, buildCombined),
   async () => ({ configured: true, sources: [], ...demo.reports() }),
 ));
 
@@ -183,14 +188,14 @@ router.get('/reports', route('spreadsheet',
 router.get('/reports/sources', route('spreadsheet',
   async () => ({
     allowLocal: config.reports.allowLocal,
-    sources: (currentSession()?.reports?.sources || []).map((s) => ({ year: s.year, kind: s.kind, fileName: s.fileName })),
+    sources: activeSources().map((s) => ({ year: s.year, kind: s.kind, fileName: s.fileName })),
   }),
   async () => ({ allowLocal: false, sources: [] }),
 ));
 
-// Add/update a source for THIS visitor (overwrite same year). Validates by parsing once.
-//   body: { url, year? }            → a SharePoint/OneDrive share link
-//   body: { local: true }           → load the on-disk test files (dev only)
+// Add/update a source (overwrite same year), persisted globally. Validates by parsing once.
+//   body: { url, year? }   → a SharePoint/OneDrive share link
+//   body: { local: true }  → load the on-disk test files (dev only)
 router.post('/reports/source', async (req, res) => {
   const s = currentSession();
   if (!s?.graph.refreshToken) return res.status(401).json({ error: 'not_authenticated' });
@@ -200,17 +205,17 @@ router.post('/reports/source', async (req, res) => {
       if (!config.reports.allowLocal) return res.status(403).json({ error: 'local_disabled' });
       const files = readdirSync(config.reports.localDir).filter((f) => /\.xlsx$/i.test(f));
       if (!files.length) return res.status(404).json({ error: 'no_local_files' });
-      s.reports.sources = files.map((f) => ({ kind: 'local', file: f, year: yearFromName(f) || f, fileName: f }));
+      saveSources(files.map((f) => ({ kind: 'local', file: f, year: yearFromName(f) || f, fileName: f })));
     } else {
       const link = String(url || '').trim();
       if (!link) return res.status(400).json({ error: 'no_url' });
       const { name, buffer } = await graph.downloadShared(link);
       parseWorkbook(buffer); // validate it parses
       const yr = String(year || yearFromName(name) || new Date().getFullYear());
-      s.reports.sources = [...s.reports.sources.filter((x) => x.year !== yr), { kind: 'url', url: link, year: yr, fileName: name }];
+      saveSources([...loadSources().filter((x) => x.year !== yr), { kind: 'url', url: link, year: yr, fileName: name }]);
     }
-    bust(sk('reports'));
-    res.json(await cached(sk('reports'), REPORTS_TTL, buildCombined));
+    bust(RK);
+    res.json(await cached(RK, REPORTS_TTL, buildCombined));
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('[reports/source] status=%s msg=%s', err.status, String(err.message || err).slice(0, 500));
@@ -224,10 +229,10 @@ router.post('/reports/source', async (req, res) => {
 router.delete('/reports/source/:year', async (req, res) => {
   const s = currentSession();
   if (!s?.graph.refreshToken) return res.status(401).json({ error: 'not_authenticated' });
-  s.reports.sources = (s.reports.sources || []).filter((x) => x.year !== req.params.year);
-  bust(sk('reports'));
+  saveSources(loadSources().filter((x) => x.year !== req.params.year));
+  bust(RK);
   try {
-    res.json(await cached(sk('reports'), REPORTS_TTL, buildCombined));
+    res.json(await cached(RK, REPORTS_TTL, buildCombined));
   } catch (err) {
     res.status(502).json({ error: 'read_failed', message: String(err.message || err) });
   }

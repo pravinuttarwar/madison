@@ -136,6 +136,43 @@ function byMonth(series) {
   return [...m.values()].sort((a, b) => (a.month < b.month ? -1 : 1));
 }
 
+// Aggregate a set of weeks → total + per-modality + per-provider (for side-by-side).
+function aggregate(weeks) {
+  const modalities = {};
+  const providers = {};
+  let total = 0;
+  for (const w of weeks) {
+    total += weekTotal(w);
+    for (const [k, v] of Object.entries(w.specialties)) modalities[k] = (modalities[k] || 0) + v;
+    for (const [k, v] of Object.entries(w.providers)) providers[k] = (providers[k] || 0) + v;
+  }
+  return { total, modalities, providers };
+}
+
+// Build the comparable periods (each year + each month) keyed for the compare UI.
+function buildPeriods(series) {
+  const yearGroups = new Map();
+  const monthGroups = new Map();
+  for (const w of series) {
+    const y = w.weekStart.slice(0, 4);
+    const mk = monthKey(w.weekStart);
+    (yearGroups.get(y) || yearGroups.set(y, []).get(y)).push(w);
+    (monthGroups.get(mk) || monthGroups.set(mk, []).get(mk)).push(w);
+  }
+  const periods = {};
+  const years = [];
+  for (const [y, ws] of [...yearGroups].sort()) {
+    periods[`year:${y}`] = { id: `year:${y}`, kind: 'year', label: y, ...aggregate(ws) };
+    years.push(y);
+  }
+  const months = [];
+  for (const [mk, ws] of [...monthGroups].sort()) {
+    periods[`month:${mk}`] = { id: `month:${mk}`, kind: 'month', label: monthLabel(mk), ...aggregate(ws) };
+    months.push(mk);
+  }
+  return { periods, available: { years, months } };
+}
+
 // Build the full Reports DTO from one or more parsed weekly series.
 // Latest week (W/W) + monthly trend (M/M) + year-over-year, blanks skipped.
 export function buildReport(parsedList, asOf = new Date()) {
@@ -184,6 +221,18 @@ export function buildReport(parsedList, asOf = new Date()) {
     }
   }
 
+  // ── per-year monthly matrix (Jan–Dec totals per year) → multi-line YoY chart ──
+  const years = [...new Set(series.map((w) => w.weekStart.slice(0, 4)))].sort();
+  const totalsByYear = {};
+  for (const y of years) totalsByYear[y] = Array(12).fill(0);
+  for (const w of series) {
+    totalsByYear[w.weekStart.slice(0, 4)][Number(w.weekStart.slice(5, 7)) - 1] += weekTotal(w);
+  }
+  const yearMonthly = { years, totals: totalsByYear };
+
+  // ── comparable periods (each year + each month) for the side-by-side selector ──
+  const { periods, available } = buildPeriods(series);
+
   const totalLast = weekTotal(last);
   const totalPrior = prev ? weekTotal(prev) : null;
   return {
@@ -198,6 +247,10 @@ export function buildReport(parsedList, asOf = new Date()) {
     },
     months: months.map((m) => ({ month: m.month, label: m.label, total: m.total })),
     yoy,
+    yearMonthly,
+    periods,
+    available,
+    modalityNames: SPECIALTY_NAMES,
     weeksAvailable: series.length,
     _delta: row, // retained marker
   };
