@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+
+/* ── Madison "Command Center" design system ──────────────────────────────────
+   Palette taken directly from the customer's own madison_medical_jarvis_v2.html
+   mockup: a near-black command-center canvas with a signature Madison crimson
+   (#C0002A — their red "M") for primary actions/active nav, and a GitHub-dark
+   style semantic set (green / amber / blue / purple). Dark is the primary, on-brand
+   experience (and the default); the light block below is a faithful daytime variant.
+   Use primary SPARINGLY — active nav, key actions, one emphasis moment per screen. */
+@theme {
+  /* Neutrals (light variant) — warm-cool off-white with the crimson sitting on top. */
+  --color-background: #faf9f9;
+  --color-foreground: #1a1316;
+  --color-card: #ffffff;
+  --color-card-foreground: #1a1316;
+  --color-muted: #f2eff0;
+  --color-muted-foreground: #6b5e62;
+  --color-secondary: #f2eff0;
+  --color-secondary-foreground: #1a1316;
+  --color-accent: #fbe9ec;          /* shadcn 'accent' = subtle HOVER surface (faint red tint) */
+  --color-accent-foreground: #1a1316;
+  --color-border: #e6e0e2;
+  --color-input: #e6e0e2;
+
+  /* Brand — Madison crimson primary + a steady blue accent (the mockup's --blue). */
+  --color-primary: #c0002a;
+  --color-primary-foreground: #ffffff;
+  --color-brand: #1f6feb;           /* secondary accent (bg-brand / text-brand) */
+  --color-brand-foreground: #ffffff;
+  --color-ring: #c0002a;
+
+  /* Semantic — also carried by ICON + SHAPE + TEXT in the UI (color-blind safe) */
+  --color-success: #1a7f37; --color-success-foreground: #ffffff;
+  --color-warning: #9a6700; --color-warning-foreground: #ffffff;
+  --color-destructive: #c0002a; --color-destructive-foreground: #ffffff;
+
+  /* Data-viz palette — the mockup's accents (crimson / blue / amber / green / purple) */
+  --color-chart-1: #c0002a; --color-chart-2: #1f6feb; --color-chart-3: #9a6700;
+  --color-chart-4: #1a7f37; --color-chart-5: #8250df;
+
+  /* Shape */
+  --radius: 0.75rem;
+}
+
+/* ── Dark mode (.dark on <html>, the default) — the customer's actual mockup:
+   near-black panels, crimson primary, and the bright green/amber/blue/purple
+   accents that read on a dark canvas. ───────────────────────────────────────── */
+.dark {
+  --color-background: #0a0a0c;
+  --color-foreground: #e8e8ea;
+  --color-card: #121216;
+  --color-card-foreground: #e8e8ea;
+  --color-muted: #17171d;
+  --color-muted-foreground: #8a8a94;
+  --color-secondary: #17171d;
+  --color-secondary-foreground: #e8e8ea;
+  --color-accent: #1f1f27;
+  --color-accent-foreground: #e8e8ea;
+  --color-border: #25252d;
+  --color-input: #25252d;
+
+  --color-primary: #c0002a;
+  --color-primary-foreground: #ffffff;
+  --color-brand: #58a6ff;
+  --color-brand-foreground: #06182e;
+  --color-ring: #c0002a;
+
+  --color-success: #3fb950; --color-success-foreground: #04130a;
+  --color-warning: #d29922; --color-warning-foreground: #1f1300;
+  --color-destructive: #e5484d; --color-destructive-foreground: #1f0606;
+
+  --color-chart-1: #f0506e; --color-chart-2: #58a6ff; --color-chart-3: #d29922;
+  --color-chart-4: #3fb950; --color-chart-5: #a371f7;
+}

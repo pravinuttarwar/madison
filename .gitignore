@@ -1,0 +1,9 @@
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/docs/context/
+_plan/
+_concept/
+_uploads/
+.page.bak/
+*.log

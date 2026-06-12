@@ -1,0 +1,86 @@
+{
+  "name": "my-react-app",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint . --fix",
+    "preview": "vite preview",
+    "lint:check": "eslint . --ext .ts",
+    "format:check": "prettier --check .",
+    "prettier:fix": "prettier --write .",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "release": "standard-version",
+    "commit": "cz"
+  },
+  "dependencies": {
+    "@reduxjs/toolkit": "^2.10.1",
+    "crypto-js": "^4.2.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-redux": "^9.2.0",
+    "redux-persist": "^6.0.0",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.5.5",
+    "class-variance-authority": "^0.7.1",
+    "lucide-react": "^0.460.0",
+    "react-router-dom": "^7.1.1"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
+    "@eslint/js": "^9.21.0",
+    "@tailwindcss/postcss": "^4.1.17",
+    "@types/crypto-js": "^4.2.2",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@typescript-eslint/eslint-plugin": "^8.32.1",
+    "@typescript-eslint/parser": "^8.32.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.22",
+    "commitizen": "^4.3.1",
+    "cz-conventional-changelog": "^3.3.0",
+    "cz-customizable": "^7.5.1",
+    "eslint": "^9.27.0",
+    "eslint-config-prettier": "^10.1.5",
+    "eslint-plugin-prettier": "^5.4.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.19",
+    "globals": "^15.15.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.0.0",
+    "postcss": "^8.5.6",
+    "prettier": "^3.5.3",
+    "standard-version": "^9.5.0",
+    "tailwindcss": "^4.1.17",
+    "typescript": "~5.7.2",
+    "typescript-eslint": "^8.24.1",
+    "vite": "^6.2.0"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged"
+    }
+  },
+  "lint-staged": {
+    "*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.tsx": [
+      "eslint --fix",
+      "prettier --write"
+    ]
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-customizable"
+    },
+    "cz-customizable": {
+      "config": ".cz.config.cjs"
+    }
+  }
+}

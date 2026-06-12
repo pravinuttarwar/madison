@@ -1,0 +1,16 @@
+{
+  "name": "madison-command-center",
+  "private": true,
+  "description": "Madison Command Center — single-repo: Express BFF serves the built React frontend on one port.",
+  "scripts": {
+    "install:all": "cd frontend && pnpm install && cd ../backend && npm install",
+    "build": "cd frontend && pnpm install && pnpm build",
+    "start": "cd backend && node src/server.js",
+    "serve": "npm run build && npm run start",
+    "dev:backend": "cd backend && node --watch src/server.js",
+    "dev:frontend": "cd frontend && pnpm dev"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

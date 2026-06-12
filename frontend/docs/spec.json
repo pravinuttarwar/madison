@@ -1,0 +1,141 @@
+{
+  "kind": "prototype",
+  "project_name": "Madison Command Center",
+  "one_liner": "A clickable prototype that gives the practice owner a single command-center view of email, calendar, tasks, financials and weekly reports.",
+  "summary": "Madison Command Center is a working, clickable version of the dashboard you designed — one place to open each morning and see what matters: your important emails and follow-ups, this week's calendar, tasks by owner, a clean financial snapshot, and your providers' weekly report. It keeps your Monday-vs-weekday view, presents your QuickBooks numbers without the visual clutter, and shows the weekly spreadsheet as a live snapshot. This first version runs on realistic sample data so you can click through the real experience; the live connections to Outlook, QuickBooks and your spreadsheets are the next step we'd wire up together.",
+  "hero_message": "",
+  "pages": [
+    {
+      "name": "Dashboard",
+      "path": "/",
+      "purpose": "The command-center home: a single strategic rollup that pulls the week into one glance — important emails and follow-ups, top priorities, the financial snapshot, weekly report highlights and today's schedule — with the Monday view (last week recap) / Weekday view (today) toggle front and center.",
+      "phase": "core"
+    },
+    {
+      "name": "Reports",
+      "path": "/reports",
+      "purpose": "The providers' weekly operational rollup as a real-time snapshot — new patients, encounters by specialty, week-over-week deltas — read from the weekly spreadsheet, so the owner no longer waits for it to be handed over.",
+      "phase": "core"
+    },
+    {
+      "name": "Financials",
+      "path": "/financials",
+      "purpose": "A clean, high-level financial view sourced from QuickBooks (deposits, variable spend week-to-date / month-to-date, net contribution) that fixes the 'QuickBooks is visual nonsense' pain.",
+      "phase": "core"
+    },
+    {
+      "name": "Email Queue",
+      "path": "/email",
+      "purpose": "Important-email triage plus an awaiting-response follow-up engine that surfaces messages sent with no reply, so nothing important slips.",
+      "phase": "core"
+    },
+    {
+      "name": "Calendar",
+      "path": "/calendar",
+      "purpose": "The Outlook calendar in context — today's schedule and the week ahead — alongside the rest of the operational picture.",
+      "phase": "core"
+    },
+    {
+      "name": "Tasks",
+      "path": "/tasks",
+      "purpose": "Tasks grouped by owner with due and overdue status, so accountability across the team is visible at a glance.",
+      "phase": "core"
+    }
+  ],
+  "key_flows": [
+    "Open to the Dashboard and toggle between Monday view (last week recap) and Weekday view (today).",
+    "Drill from the Dashboard into Reports, Financials, Email Queue, Calendar or Tasks.",
+    "Scan important emails and the awaiting-response follow-up list in the Email Queue.",
+    "Review the weekly report and its week-over-week deltas in Reports.",
+    "Check the clean financial snapshot in Financials without opening QuickBooks."
+  ],
+  "evidence": [
+    {
+      "source": "Discovery call",
+      "date": "2026-05-28",
+      "content": "It would be nice if all these platforms existed in one spot."
+    },
+    {
+      "source": "Discovery call",
+      "date": "2026-05-28",
+      "content": "My important emails, I want to be notified. I want to be able to open up my laptop, see what my important emails are in, any projects of the week, the reporting that my staff is already doing... The financials."
+    },
+    {
+      "source": "Discovery call",
+      "date": "2026-05-28",
+      "content": "When I pull QBO up on my screen, it's just massive amounts of nonsense."
+    },
+    {
+      "source": "Discovery call",
+      "date": "2026-05-28",
+      "content": "My Monday view tells me what happened last week."
+    },
+    {
+      "source": "Discovery call",
+      "date": "2026-05-28",
+      "content": "It's just a matter of connecting these dots."
+    },
+    {
+      "source": "In-person working session",
+      "date": "2026-06-03",
+      "content": "It then creates like 9 or 10 duplicates per code... there's no way to go back and check and make sure."
+    }
+  ],
+  "asked_questions": [
+    "For the Reports view, could you share a sample of your providers' weekly spreadsheet so we mirror the exact metrics and layout you rely on, and confirm where those files live (OneDrive/SharePoint)?",
+    "For Financials, which accounts should feed the view given the bank switch you mentioned, and which cost categories should we treat as 'fixed' so the spend numbers match how you think about them?",
+    "To connect Outlook email/calendar and your task list, your Microsoft 365 administrator would grant read-only access — can you confirm who administers your Microsoft 365?"
+  ],
+  "risks_or_assumptions": [
+    "We mirrored your own dashboard and, per our last conversation, left OUT the CureMD/EHR and direct bank-feed pieces, the Projects card and the AI assistant panel — please confirm that's still the scope for now.",
+    "We assumed Reports is a real-time snapshot of your providers' weekly spreadsheet with no historical storage — please confirm.",
+    "We assumed the weekly report comes from a single provider's spreadsheet each Monday — please tell us if multiple files are involved.",
+    "Financials will be sourced from QuickBooks (not a direct bank feed) for now — please confirm.",
+    "We designed the interface to be color-blind-accessible (status shown by labels and shapes, not color alone) — we'll validate the palette with you."
+  ],
+  "feasibility": [
+    {
+      "item": "Consolidated command-center dashboard with Monday/Weekday toggle",
+      "status": "shown",
+      "note": "Fully demonstrated in this prototype on sample data."
+    },
+    {
+      "item": "Color-blind-accessible design",
+      "status": "shown",
+      "note": "Built in from the start; status conveyed by text and shape, not color alone. We'd validate the exact palette with you."
+    },
+    {
+      "item": "Email triage + awaiting-response follow-up engine (Outlook)",
+      "status": "feasible-needs-validation",
+      "note": "Depends on your Microsoft 365 administrator granting read-only access to mail; we'd confirm the setup in discovery."
+    },
+    {
+      "item": "Calendar (Outlook) and Tasks (Microsoft To Do)",
+      "status": "feasible-needs-validation",
+      "note": "Depends on the same read-only Microsoft 365 access; we'd confirm scopes in discovery."
+    },
+    {
+      "item": "Financials from QuickBooks",
+      "status": "feasible-needs-validation",
+      "note": "Depends on what QuickBooks exposes via its connection and on identifying which accounts are 'fixed' vs 'variable'; we'd confirm in discovery."
+    },
+    {
+      "item": "Weekly Reports from provider spreadsheets",
+      "status": "feasible-needs-validation",
+      "note": "Depends on the file locations and the metric/cell layout you share; we'd confirm in discovery."
+    },
+    {
+      "item": "Real-time refresh with day-over-day financial deltas",
+      "status": "feasible-needs-validation",
+      "note": "A live snapshot is straightforward; showing change-since-yesterday needs a small daily snapshot to compare against, which we'd confirm fits your no-storage preference."
+    },
+    {
+      "item": "Secure, HIPAA-aware production hosting",
+      "status": "discovery-phase",
+      "note": "Live data runs through a secure read-only backend with no credentials in the browser; we'd define the hosting and access controls together in discovery."
+    }
+  ],
+  "needs_backend": false,
+  "tech_notes": "This first version is a frontend-only clickable prototype (React + TypeScript + Vite + Tailwind) running on realistic sample data, designed to be color-blind-accessible from the start. The live connections — Outlook email/calendar and tasks, QuickBooks financials, and your weekly spreadsheets — would run through a secure, read-only backend with no credentials ever exposed in the browser, which we'd stand up in the next phase.",
+  "_domain": "madisonmedicalnj.com"
+}
