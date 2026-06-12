@@ -143,7 +143,9 @@ router.get('/financials', route('quickbooks',
 // per-session. A local-test mode (REPORTS_ALLOW_LOCAL=1, dev only) reads on-disk .xlsx
 // through the SAME parser path, so the feature can be validated without live SharePoint.
 const REPORTS_TTL = 6 * 60 * 60 * 1000; // 6h
-const RK = 'reports:v1'; // GLOBAL cache key — the spreadsheet is practice-level, not per-user
+// Per-SESSION cache key — each visitor's report is built with THEIR OWN token, so a
+// user without access to the file never sees another user's data (matches email/calendar).
+const RK = () => sk('reports:v1');
 
 const yearFromName = (name) => (String(name).match(/(20\d{2})/) || [])[1] || '';
 
@@ -182,7 +184,7 @@ async function buildCombined() {
 }
 
 router.get('/reports', route('spreadsheet',
-  (req) => cached(RK, req.query.refresh === '1' ? 0 : REPORTS_TTL, buildCombined),
+  (req) => cached(RK(), req.query.refresh === '1' ? 0 : REPORTS_TTL, buildCombined),
   async () => ({ configured: true, sources: [], ...demo.reports() }),
 ));
 
@@ -216,8 +218,8 @@ router.post('/reports/source', async (req, res) => {
       const yr = String(year || yearFromName(name) || new Date().getFullYear());
       saveSources([...loadSources().filter((x) => x.year !== yr), { kind: 'url', url: link, year: yr, fileName: name }]);
     }
-    bust(RK);
-    res.json(await cached(RK, REPORTS_TTL, buildCombined));
+    bust(RK());
+    res.json(await cached(RK(), REPORTS_TTL, buildCombined));
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('[reports/source] status=%s msg=%s', err.status, String(err.message || err).slice(0, 500));
@@ -232,9 +234,9 @@ router.delete('/reports/source/:year', async (req, res) => {
   const s = currentSession();
   if (!s?.graph.refreshToken) return res.status(401).json({ error: 'not_authenticated' });
   saveSources(loadSources().filter((x) => x.year !== req.params.year));
-  bust(RK);
+  bust(RK());
   try {
-    res.json(await cached(RK, REPORTS_TTL, buildCombined));
+    res.json(await cached(RK(), REPORTS_TTL, buildCombined));
   } catch (err) {
     res.status(502).json({ error: 'read_failed', message: String(err.message || err) });
   }
