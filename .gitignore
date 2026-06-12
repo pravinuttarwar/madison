@@ -7,3 +7,7 @@ _concept/
 _uploads/
 .page.bak/
 *.log
+
+# Customer-provided data — never commit (real patient counts)
+backend/*.xlsx
+backend/_data/
