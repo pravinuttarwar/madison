@@ -70,9 +70,10 @@ function OwnerBoard({ owners }: { owners: OwnerTasks[] }) {
         <FilterChips filter={filter} setFilter={setFilter} counts={counts} />
       </div>
 
-      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid items-start gap-5 md:grid-cols-2 xl:grid-cols-3">
         {owners.map((o) => {
           const list = o.tasks.filter(match).sort((a, b) => ORDER[a.status] - ORDER[b.status]);
+          const capped = o.open > o.tasks.length; // backend caps loaded tasks per owner
           return (
             <Panel
               key={o.upn}
@@ -84,16 +85,21 @@ function OwnerBoard({ owners }: { owners: OwnerTasks[] }) {
               }
             >
               <div className="mb-3"><OwnerChip label={o.name} full={o.name} /></div>
-              {list.length === 0 ? (
-                <p className="py-4 text-center text-xs text-muted-foreground">No tasks match this filter.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {list.slice(0, 8).map((t) => <TaskRow key={t.id} t={t} />)}
-                  {list.length > 8 && (
-                    <li className="pt-1 text-center text-xs text-muted-foreground">+{list.length - 8} more</li>
-                  )}
-                </ul>
-              )}
+              {/* Fixed-height, scrollable list → all cards line up at the same height */}
+              <div className="h-64 overflow-y-auto pr-1">
+                {list.length === 0 ? (
+                  <p className="py-4 text-center text-xs text-muted-foreground">No tasks match this filter.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {list.map((t) => <TaskRow key={t.id} t={t} />)}
+                    {capped && filter === 'all' && (
+                      <li className="pt-1 text-center text-[11px] text-muted-foreground">
+                        Showing {o.tasks.length} of {o.open} — open To Do for the rest
+                      </li>
+                    )}
+                  </ul>
+                )}
+              </div>
             </Panel>
           );
         })}
