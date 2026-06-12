@@ -16,24 +16,32 @@ async function appGet(path) {
 }
 
 // Resolve a UPN/email → { id, name, upn } (User.ReadBasic.All). Null if not found.
+// Cached in memory — user IDs are stable, so we resolve each UPN only once.
+const _userCache = new Map();
 export async function resolveUser(upn) {
+  const key = upn.toLowerCase();
+  if (_userCache.has(key)) return _userCache.get(key);
+  let val = null;
   try {
     const j = await appGet(`/users/${encodeURIComponent(upn)}?$select=id,displayName,userPrincipalName`);
-    return { id: j.id, name: j.displayName, upn: j.userPrincipalName };
-  } catch {
-    return null;
-  }
+    val = { id: j.id, name: j.displayName, upn: j.userPrincipalName };
+  } catch { /* leave null */ }
+  if (val) _userCache.set(key, val);
+  return val;
 }
 
-// All of a user's To Do tasks across their lists (Tasks.Read.All, app-only).
+// All of a user's To Do tasks across their lists (Tasks.Read.All, app-only). The
+// per-list fetches run in PARALLEL and select only the fields we render.
 export async function userTodoTasks(userId) {
   const lists = (await appGet(`/users/${userId}/todo/lists`)).value || [];
-  const all = [];
-  for (const l of lists) {
-    const r = await appGet(`/users/${userId}/todo/lists/${encodeURIComponent(l.id)}/tasks?$top=200`);
-    for (const t of r.value || []) all.push({ ...t, _list: l.displayName });
-  }
-  return all;
+  // NOTE: the To Do tasks endpoint rejects $select (400). $top=200 is one page.
+  const perList = await Promise.all(
+    lists.map(async (l) => {
+      const r = await appGet(`/users/${userId}/todo/lists/${encodeURIComponent(l.id)}/tasks?$top=200`);
+      return (r.value || []).map((t) => ({ ...t, _list: l.displayName }));
+    }),
+  );
+  return perList.flat();
 }
 
 // Read-only GET against Graph. The owner's mailbox: /me when MS_USER is blank, else /users/{upn}.

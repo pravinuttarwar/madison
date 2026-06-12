@@ -121,34 +121,40 @@ router.get('/calendar', route('outlook',
 // ── tasks ──────────────────────────────────────────────────────────────────��─
 // Multi-owner "tasks by owner" when a team is configured (app-only, Tasks.Read.All);
 // otherwise the signed-in person's own To Do (delegated). DTO carries `multiOwner`.
+const STATUS_ORDER = { overdue: 0, 'due-today': 1, upcoming: 2, done: 3 };
+const TASKS_TEAM_TTL = 5 * 60 * 1000; // 5 min — team task lists don't change second-to-second
+
 async function buildTeamTasks(upns) {
-  const owners = [];
-  for (const upn of upns) {
-    const u = await graph.resolveUser(upn);
-    if (!u) continue;
-    let tasks = [];
-    try { tasks = T.tasksFromGraph(await graph.userTodoTasks(u.id)); } catch { /* skip unreadable */ }
-    const open = tasks.filter((t) => t.status !== 'done');
-    owners.push({
-      upn: u.upn,
-      name: u.name,
-      open: open.length,
-      overdue: tasks.filter((t) => t.status === 'overdue').length,
-      dueToday: tasks.filter((t) => t.status === 'due-today').length,
-      tasks: open
-        .sort((a, b) => ({ overdue: 0, 'due-today': 1, upcoming: 2, done: 3 }[a.status] - { overdue: 0, 'due-today': 1, upcoming: 2, done: 3 }[b.status]))
-        .slice(0, 50),
-    });
-  }
+  // All owners fetched in PARALLEL (each owner's lists are parallel too) → wall-clock is
+  // the slowest single owner, not the sum.
+  const owners = (
+    await Promise.all(
+      upns.map(async (upn) => {
+        const u = await graph.resolveUser(upn);
+        if (!u) return null;
+        let tasks = [];
+        try { tasks = T.tasksFromGraph(await graph.userTodoTasks(u.id)); } catch { /* skip unreadable */ }
+        const open = tasks.filter((t) => t.status !== 'done');
+        return {
+          upn: u.upn,
+          name: u.name,
+          open: open.length,
+          overdue: tasks.filter((t) => t.status === 'overdue').length,
+          dueToday: tasks.filter((t) => t.status === 'due-today').length,
+          tasks: open.sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]).slice(0, 50),
+        };
+      }),
+    )
+  ).filter(Boolean);
   owners.sort((a, b) => b.overdue - a.overdue || b.open - a.open);
   return { multiOwner: true, owners };
 }
 
 router.get('/tasks', route('microsoftToDo',
-  async () => {
+  async (req) => {
     const team = config.tasks.teamUpns;
     if (team.length && config.hasGraphCreds) {
-      return cached(sk('tasks-team'), TTL, () => buildTeamTasks(team));
+      return cached(sk('tasks-team'), req.query.refresh === '1' ? 0 : TASKS_TEAM_TTL, () => buildTeamTasks(team));
     }
     return { multiOwner: false, tasks: T.tasksFromGraph(await cached(sk('tasks'), TTL, () => graph.listTodoTasks())) };
   },
