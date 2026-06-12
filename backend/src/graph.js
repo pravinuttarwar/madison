@@ -1,7 +1,40 @@
 import { config } from './config.js';
-import { graphToken } from './auth.js';
+import { graphToken, appToken } from './auth.js';
 
 const BASE = 'https://graph.microsoft.com/v1.0';
+
+// ── App-only reads (team tasks) — use the app's Application permissions ────────
+async function appGet(path) {
+  const token = await appToken();
+  const res = await fetch(`${BASE}${path}`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
+  if (!res.ok) {
+    const err = new Error(`Graph(app) GET ${path} → ${res.status}: ${await res.text()}`);
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+}
+
+// Resolve a UPN/email → { id, name, upn } (User.ReadBasic.All). Null if not found.
+export async function resolveUser(upn) {
+  try {
+    const j = await appGet(`/users/${encodeURIComponent(upn)}?$select=id,displayName,userPrincipalName`);
+    return { id: j.id, name: j.displayName, upn: j.userPrincipalName };
+  } catch {
+    return null;
+  }
+}
+
+// All of a user's To Do tasks across their lists (Tasks.Read.All, app-only).
+export async function userTodoTasks(userId) {
+  const lists = (await appGet(`/users/${userId}/todo/lists`)).value || [];
+  const all = [];
+  for (const l of lists) {
+    const r = await appGet(`/users/${userId}/todo/lists/${encodeURIComponent(l.id)}/tasks?$top=200`);
+    for (const t of r.value || []) all.push({ ...t, _list: l.displayName });
+  }
+  return all;
+}
 
 // Read-only GET against Graph. The owner's mailbox: /me when MS_USER is blank, else /users/{upn}.
 function root() {

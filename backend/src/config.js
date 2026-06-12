@@ -37,6 +37,16 @@ export const config = {
       .filter(Boolean),
   },
 
+  tasks: {
+    // Team members (UPNs/emails) for the multi-owner "tasks by owner" board, read
+    // app-only via Tasks.Read.All. Empty → the Tasks page stays single-user (the
+    // signed-in person's own To Do).
+    teamUpns: (env.TASKS_TEAM_USERS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  },
+
   reports: {
     // REPORTS_ALLOW_LOCAL=1 enables a "use local test files" toggle that reads the
     // .xlsx sitting in REPORTS_LOCAL_DIR — local dev only, so the same parser/report

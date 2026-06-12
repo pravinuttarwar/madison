@@ -217,8 +217,13 @@ export function getCalendar(): Promise<CalendarData> {
   });
 }
 
-export function getTasks(): Promise<Task[]> {
-  return read('microsoftToDo', '/api/tasks', mock.TASKS);
+// Tasks: multi-owner ("tasks by owner", app-only) when a team is configured, else the
+// signed-in person's own To Do.
+export type OwnerTasks = { upn: string; name: string; open: number; overdue: number; dueToday: number; tasks: Task[] };
+export type TasksData = { multiOwner: boolean; tasks?: Task[]; owners?: OwnerTasks[] };
+
+export function getTasks(): Promise<TasksData> {
+  return read('microsoftToDo', '/api/tasks', { multiOwner: false, tasks: mock.TASKS });
 }
 
 export function getFinancials(): Promise<FinancialsData> {

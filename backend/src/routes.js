@@ -119,7 +119,41 @@ router.get('/calendar', route('outlook',
 ));
 
 // ── tasks ──────────────────────────────────────────────────────────────────��─
-router.get('/tasks', route('microsoftToDo', async () => T.tasksFromGraph(await cached(sk('tasks'), TTL, () => graph.listTodoTasks())), async () => demo.tasks()));
+// Multi-owner "tasks by owner" when a team is configured (app-only, Tasks.Read.All);
+// otherwise the signed-in person's own To Do (delegated). DTO carries `multiOwner`.
+async function buildTeamTasks(upns) {
+  const owners = [];
+  for (const upn of upns) {
+    const u = await graph.resolveUser(upn);
+    if (!u) continue;
+    let tasks = [];
+    try { tasks = T.tasksFromGraph(await graph.userTodoTasks(u.id)); } catch { /* skip unreadable */ }
+    const open = tasks.filter((t) => t.status !== 'done');
+    owners.push({
+      upn: u.upn,
+      name: u.name,
+      open: open.length,
+      overdue: tasks.filter((t) => t.status === 'overdue').length,
+      dueToday: tasks.filter((t) => t.status === 'due-today').length,
+      tasks: open
+        .sort((a, b) => ({ overdue: 0, 'due-today': 1, upcoming: 2, done: 3 }[a.status] - { overdue: 0, 'due-today': 1, upcoming: 2, done: 3 }[b.status]))
+        .slice(0, 50),
+    });
+  }
+  owners.sort((a, b) => b.overdue - a.overdue || b.open - a.open);
+  return { multiOwner: true, owners };
+}
+
+router.get('/tasks', route('microsoftToDo',
+  async () => {
+    const team = config.tasks.teamUpns;
+    if (team.length && config.hasGraphCreds) {
+      return cached(sk('tasks-team'), TTL, () => buildTeamTasks(team));
+    }
+    return { multiOwner: false, tasks: T.tasksFromGraph(await cached(sk('tasks'), TTL, () => graph.listTodoTasks())) };
+  },
+  async () => ({ multiOwner: false, tasks: demo.tasks() }),
+));
 
 // ── financials ─────────────────────────────────────────────────────────────��─
 router.get('/financials', route('quickbooks',
