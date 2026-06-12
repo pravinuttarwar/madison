@@ -34,10 +34,12 @@ export async function resolveUser(upn) {
 // per-list fetches run in PARALLEL and select only the fields we render.
 export async function userTodoTasks(userId) {
   const lists = (await appGet(`/users/${userId}/todo/lists`)).value || [];
-  // NOTE: the To Do tasks endpoint rejects $select (400). $top=200 is one page.
+  // Only OPEN tasks — we never show/count completed ones, so skip them at the source
+  // (smaller payload). NOTE: the To Do tasks endpoint rejects $select (400) but accepts
+  // $filter + $top. $top=200 is one page (plenty of open items per list).
   const perList = await Promise.all(
     lists.map(async (l) => {
-      const r = await appGet(`/users/${userId}/todo/lists/${encodeURIComponent(l.id)}/tasks?$top=200`);
+      const r = await appGet(`/users/${userId}/todo/lists/${encodeURIComponent(l.id)}/tasks?$filter=status%20ne%20'completed'&$top=200`);
       return (r.value || []).map((t) => ({ ...t, _list: l.displayName }));
     }),
   );
