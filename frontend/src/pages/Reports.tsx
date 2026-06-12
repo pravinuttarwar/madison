@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   RefreshCw, FileSpreadsheet, Link2, Loader2, AlertCircle, Users, Plus, X, HardDrive, CalendarRange,
 } from 'lucide-react';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { Panel, Trend, Bar, KpiTile } from '@/components/primitives';
 import { Loading } from '@/components/AsyncState';
 import { useApi } from '@/hooks/useApi';
@@ -165,80 +166,50 @@ function MetricList({ rows }: { rows: { label: string; last: number; prior: numb
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const YEAR_COLORS = ['var(--color-chart-2)', 'var(--color-primary)', 'var(--color-chart-3)', 'var(--color-chart-5)', 'var(--color-chart-4)'];
 
-// Multi-year monthly line chart — one line per year (scales cleanly, reads as a trend).
-// Interactive: hover shows a guide line + a readout of every year's value for that month.
+// Multi-year monthly line chart (Recharts) — one line per year, with hover tooltip,
+// legend and a responsive container. Each added year is just another <Line>.
+function ReportTooltip({ active, payload, label }: { active?: boolean; payload?: { name: string; value: number; color: string }[]; label?: string }) {
+  if (!active || !payload?.length) return null;
+  const rows = payload.filter((p) => p.value != null && p.value > 0);
+  if (!rows.length) return null;
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-md">
+      <div className="mb-1 font-semibold text-foreground">{label}</div>
+      {rows.map((p) => (
+        <div key={p.name} className="flex items-center gap-2 text-muted-foreground">
+          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />
+          {p.name}: <span className="font-semibold tabular-nums text-foreground">{p.value.toLocaleString()}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function YearLineChart({ ym }: { ym: { years: string[]; totals: Record<string, number[]> } }) {
   const { years, totals } = ym;
-  const [hover, setHover] = useState<number | null>(null);
-  const W = 640, H = 240, padL = 42, padR = 14, padT = 14, padB = 26;
-  const max = Math.max(1, ...years.flatMap((y) => totals[y] || []));
-  const xAt = (i: number) => padL + (i / 11) * (W - padL - padR);
-  const yAt = (v: number) => H - padB - (v / max) * (H - padT - padB);
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(max * f));
   const color = (yi: number) => YEAR_COLORS[yi % YEAR_COLORS.length];
-
-  function onMove(e: React.MouseEvent<SVGSVGElement>) {
-    const r = e.currentTarget.getBoundingClientRect();
-    const svgX = ((e.clientX - r.left) / r.width) * W;
-    const idx = Math.round(((svgX - padL) / (W - padL - padR)) * 11);
-    setHover(Math.max(0, Math.min(11, idx)));
-  }
-
+  const data = MONTHS.map((m, i) => {
+    const row: Record<string, number | string | null> = { month: m };
+    for (const y of years) {
+      const v = totals[y]?.[i] ?? 0;
+      row[y] = v > 0 ? v : null; // null → no point (partial years stop cleanly)
+    }
+    return row;
+  });
   return (
-    <div>
-      {/* readout */}
-      <div className="mb-2 flex min-h-[20px] flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-        {hover != null ? (
-          <>
-            <span className="font-semibold text-foreground">{MONTHS[hover]}</span>
-            {years.map((y, yi) => (
-              (totals[y]?.[hover] ?? 0) > 0 && (
-                <span key={y} className="inline-flex items-center gap-1.5 text-muted-foreground">
-                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color(yi) }} />
-                  {y}: <span className="font-semibold tabular-nums text-foreground">{totals[y][hover].toLocaleString()}</span>
-                </span>
-              )
-            ))}
-          </>
-        ) : (
-          <span className="text-muted-foreground">Hover the chart for each month's numbers.</span>
-        )}
-      </div>
-      <svg
-        viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Monthly encounters by year"
-        onMouseMove={onMove} onMouseLeave={() => setHover(null)}
-      >
-        {ticks.map((t) => (
-          <g key={t}>
-            <line x1={padL} x2={W - padR} y1={yAt(t)} y2={yAt(t)} stroke="var(--color-border)" strokeWidth="1" />
-            <text x={padL - 6} y={yAt(t) + 3} textAnchor="end" fontSize="9" fill="var(--color-muted-foreground)">{t.toLocaleString()}</text>
-          </g>
-        ))}
-        {MONTHS.map((m, i) => (
-          <text key={m} x={xAt(i)} y={H - 8} textAnchor="middle" fontSize="9"
-            fill={hover === i ? 'var(--color-foreground)' : 'var(--color-muted-foreground)'} fontWeight={hover === i ? 700 : 400}>{m[0]}</text>
-        ))}
-        {hover != null && <line x1={xAt(hover)} x2={xAt(hover)} y1={padT} y2={H - padB} stroke="var(--color-muted-foreground)" strokeWidth="1" strokeDasharray="3 3" />}
-        {years.map((y, yi) => {
-          const pts = (totals[y] || []).map((v, i) => ({ i, v })).filter((p) => p.v > 0);
-          if (!pts.length) return null;
-          const d = pts.map((p, k) => `${k === 0 ? 'M' : 'L'} ${xAt(p.i).toFixed(1)} ${yAt(p.v).toFixed(1)}`).join(' ');
-          return (
-            <g key={y}>
-              <path d={d} fill="none" stroke={color(yi)} strokeWidth="2" strokeLinejoin="round" />
-              {pts.map((p) => <circle key={p.i} cx={xAt(p.i)} cy={yAt(p.v)} r={hover === p.i ? 4 : 2.5} fill={color(yi)} stroke="var(--color-card)" strokeWidth={hover === p.i ? 1.5 : 0} />)}
-            </g>
-          );
-        })}
-      </svg>
-      <div className="mt-1 flex flex-wrap justify-center gap-4">
+    <ResponsiveContainer width="100%" height={260}>
+      <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -6 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+        <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={{ stroke: 'var(--color-border)' }} />
+        <YAxis tick={{ fontSize: 11, fill: 'var(--color-muted-foreground)' }} tickLine={false} axisLine={false} width={48} />
+        <Tooltip content={<ReportTooltip />} cursor={{ stroke: 'var(--color-muted-foreground)', strokeDasharray: '3 3' }} />
+        <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
         {years.map((y, yi) => (
-          <span key={y} className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color(yi) }} /> {y}
-          </span>
+          <Line key={y} type="monotone" dataKey={y} name={y} stroke={color(yi)} strokeWidth={2}
+            dot={{ r: 2.5, fill: color(yi) }} activeDot={{ r: 4 }} connectNulls />
         ))}
-      </div>
-    </div>
+      </LineChart>
+    </ResponsiveContainer>
   );
 }
 
