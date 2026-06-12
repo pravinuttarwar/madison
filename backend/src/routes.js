@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { cached } from './cache.js';
 import { demo } from './demo.js';
 import { currentSession } from './session.js';
+import { reportFromWorkbook } from './reports.js';
 import * as graph from './graph.js';
 import * as qbo from './qbo.js';
 import * as T from './transforms.js';
@@ -133,18 +134,69 @@ router.get('/financials', route('quickbooks',
 ));
 
 // ── weekly report (spreadsheet) ───────────────────────────────────────────────
+// The owner pastes a SharePoint/OneDrive share link; we download the workbook (Graph
+// shares API), parse it IN MEMORY, and return the latest week + week-over-week. The
+// parsed result is cached per-session (REPORTS_TTL) and refreshable on demand. The
+// file bytes are never written to disk.
+const REPORTS_TTL = 6 * 60 * 60 * 1000; // 6h
+
+function reportsUrl() {
+  return currentSession()?.reports?.url || config.reports.shareUrl || '';
+}
+
+async function buildReport() {
+  const url = reportsUrl();
+  if (!url) return { configured: false };
+  const { name, buffer } = await graph.downloadShared(url);
+  const r = reportFromWorkbook(buffer);
+  return { configured: true, fileName: name, ...r };
+}
+
 router.get('/reports', route('spreadsheet',
-  async () => {
-    const map = config.graph.namedRanges; // { metricKey: rangeName }
-    const labels = {}; // optional: metricKey → label
-    const values = {};
-    for (const [key, rangeName] of Object.entries(map)) {
-      values[key] = await graph.workbookNamedRange(rangeName);
-    }
-    return T.reportsFromRanges(values, labels);
+  async (req) => {
+    if (!reportsUrl()) return { configured: false };
+    if (req.query.refresh === '1') return cached(sk('reports'), 0, buildReport); // bust
+    return cached(sk('reports'), REPORTS_TTL, buildReport);
   },
-  async () => demo.reports(),
+  async () => ({ configured: true, ...demo.reports() }),
 ));
+
+// Set/clear the spreadsheet source for THIS visitor; validates by parsing it once.
+router.post('/reports/source', async (req, res) => {
+  const s = currentSession();
+  if (!s?.graph.refreshToken) return res.status(401).json({ error: 'not_authenticated' });
+  const url = String(req.body?.url || '').trim();
+  s.reports.url = url;
+  if (!url) return res.json({ configured: false });
+  try {
+    const { name, buffer } = await graph.downloadShared(url);
+    const r = reportFromWorkbook(buffer);
+    const out = { configured: true, fileName: name, ...r };
+    // cache it immediately so the next GET is instant
+    await cached(sk('reports'), REPORTS_TTL, async () => out);
+    res.json(out);
+  } catch (err) {
+    s.reports.url = ''; // don't keep a bad URL
+    if (err.code === 'FORMAT') return res.status(422).json({ error: 'format_unrecognized' });
+    if (err.status === 403) return res.status(403).json({ error: 'no_file_permission' });
+    res.status(502).json({ error: 'read_failed', message: String(err.message || err) });
+  }
+});
+
+// Debug probe: can the CURRENT scope read this share link? (used to decide if we need
+// Files.Read.All / Sites.Read.All). Returns the resolved name or the Graph error.
+router.get('/reports/probe', async (req, res) => {
+  const s = currentSession();
+  if (!s?.graph.refreshToken) return res.status(401).json({ error: 'not_authenticated' });
+  const url = String(req.query.url || reportsUrl());
+  if (!url) return res.status(400).json({ error: 'no_url' });
+  try {
+    const meta = await graph.resolveShare(url);
+    res.json({ ok: true, name: meta.name, sizeKB: meta.sizeKB });
+  } catch (err) {
+    res.json({ ok: false, status: err.status || 0, message: String(err.message || err).slice(0, 300) });
+  }
+});
 
 // ── dashboard aggregate (BFF) ─────────────────────────────────────────────────
 router.get('/dashboard', async (req, res) => {

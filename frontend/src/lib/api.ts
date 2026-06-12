@@ -26,7 +26,6 @@ import type {
   CalendarDay,
   Task,
   WeeklyMetric,
-  EncounterRow,
   WeeklyFinancial,
   DailyFinancial,
 } from '@/lib/data';
@@ -83,11 +82,23 @@ export type CalendarData = { today: ScheduleItem[]; week: CalendarDay[] };
 
 export type FinancialsData = { weekly: WeeklyFinancial; daily: DailyFinancial };
 
+export type MetricWoW = { last: number; prior: number | null };
+export type SpecialtyRow = { key: string; label: string; last: number; prior: number | null };
+export type ProviderRow = { name: string; last: number; prior: number | null };
+
+// Reports now reads the owner's real weekly spreadsheet (a SharePoint/OneDrive share
+// link). `configured:false` → the owner hasn't connected a file yet (show the paste UI).
 export type ReportsData = {
-  weekNumber: number;
-  metrics: WeeklyMetric[];
-  encountersBySpecialty: EncounterRow[];
-  totalEncounters: { last: number; prior: number };
+  configured: boolean;
+  fileName?: string;
+  weekStart?: string;
+  priorWeekStart?: string | null;
+  totalEncounters?: MetricWoW;
+  specialties?: SpecialtyRow[];
+  providers?: ProviderRow[];
+  covidTest?: MetricWoW;
+  telehealth?: MetricWoW;
+  weeksAvailable?: number;
 };
 
 // The Dashboard is a composed (BFF) view — the backend fans out to the sources it
@@ -140,16 +151,21 @@ function dashboardLive(): boolean {
   return Object.values(SOURCE_MODES).some((m) => m !== 'mock');
 }
 
-async function fetchJson<T>(path: string): Promise<T> {
+async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${config.apiUrl}${path}`, {
-    headers: { Accept: 'application/json' },
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...init?.headers,
+    },
     credentials: 'include', // backend holds the session/token; browser never sees keys
   });
-  // 403 (Microsoft not connected) / 401 (unauthorized) on a data call = the in-memory
-  // session is gone → bounce to login rather than render blanks.
-  if (res.status === 403 || res.status === 401) {
+  // 401 = the in-memory Microsoft session is gone → bounce to login. (403 is a real
+  // "forbidden" — e.g. a file the user can't access — and is left for the caller.)
+  if (res.status === 401) {
     _onAuthError?.();
-    throw new ApiError(res.status, path, 'Session expired — please sign in again');
+    throw new ApiError(401, path, 'Session expired — please sign in again');
   }
   if (!res.ok) throw new ApiError(res.status, path, res.statusText);
   return (await res.json()) as T;
@@ -195,13 +211,15 @@ export function getFinancials(): Promise<FinancialsData> {
   });
 }
 
-export function getReports(): Promise<ReportsData> {
-  return read('spreadsheet', '/api/reports', {
-    weekNumber: mock.WEEK_NUMBER,
-    metrics: mock.WEEKLY_METRICS,
-    encountersBySpecialty: mock.ENCOUNTERS_BY_SPECIALTY,
-    totalEncounters: mock.TOTAL_ENCOUNTERS,
-  });
+export function getReports(refresh = false): Promise<ReportsData> {
+  // Mock mode has no backend → "not configured" so the page shows its pending/connect UI.
+  return read('spreadsheet', `/api/reports${refresh ? '?refresh=1' : ''}`, { configured: false });
+}
+
+// Set (or clear) the spreadsheet share link for this visitor; returns the parsed report
+// or throws ApiError (422 = format not recognized, 403 = no file access).
+export function setReportsSource(url: string): Promise<ReportsData> {
+  return fetchJson<ReportsData>('/api/reports/source', { method: 'POST', body: JSON.stringify({ url }) });
 }
 
 export function getDashboard(view: ViewMode): Promise<DashboardData> {

@@ -47,7 +47,9 @@ export function sessionMiddleware(req, res, next) {
   if (!sid || !sessions.has(sid)) {
     if (sessions.size > 5000) sweep();
     sid = randomBytes(18).toString('hex');
-    sessions.set(sid, { id: sid, lastSeen: Date.now(), ...freshTokens() });
+    // `reports.url` = the spreadsheet share link the owner pastes (a pointer, not data);
+    // kept across logout within the same browser so it isn't re-pasted each session.
+    sessions.set(sid, { id: sid, lastSeen: Date.now(), reports: { url: '' }, ...freshTokens() });
     res.cookie(COOKIE, sid, {
       httpOnly: true,
       sameSite: 'lax', // sent on the top-level OAuth redirect back to /callback

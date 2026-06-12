@@ -37,6 +37,12 @@ export const config = {
       .filter(Boolean),
   },
 
+  reports: {
+    // Optional default spreadsheet share link (a pointer, not data). The owner can
+    // also paste one in the UI, which is stored per-session and takes precedence.
+    shareUrl: env.SPREADSHEET_SHARE_URL || '',
+  },
+
   // Whether the app has the credentials to OFFER each source (not whether a given
   // visitor is connected — that's per-session). Drives the source-status badges.
   hasGraphCreds: Boolean(env.MS_CLIENT_ID && env.MS_CLIENT_SECRET),

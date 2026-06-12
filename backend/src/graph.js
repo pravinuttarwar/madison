@@ -13,8 +13,37 @@ async function get(path) {
   const res = await fetch(`${BASE}${path}`, {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
   });
-  if (!res.ok) throw new Error(`Graph GET ${path} → ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    const err = new Error(`Graph GET ${path} → ${res.status}: ${await res.text()}`);
+    err.status = res.status;
+    throw err;
+  }
   return res.json();
+}
+
+// ── Shared file (SharePoint / OneDrive-for-Business sharing link) ─────────────
+// Encode a sharing URL the way Graph's /shares API expects: u! + base64url(url).
+function encodeShareUrl(url) {
+  const b64 = Buffer.from(url, 'utf8').toString('base64');
+  return 'u!' + b64.replace(/=+$/, '').replace(/\//g, '_').replace(/\+/g, '-');
+}
+
+// Resolve a sharing link to its driveItem metadata (name + pre-authenticated download URL).
+// Read-only. Returns { name, downloadUrl, sizeKB } or throws (err.status set on Graph errors).
+export async function resolveShare(sharingUrl) {
+  const meta = await get(
+    `/shares/${encodeShareUrl(sharingUrl)}/driveItem?$select=name,size,@microsoft.graph.downloadUrl`,
+  );
+  return { name: meta.name, downloadUrl: meta['@microsoft.graph.downloadUrl'], sizeKB: Math.round((meta.size || 0) / 1024) };
+}
+
+// Download a shared file's bytes into a Buffer (parsed in memory, never written to disk).
+export async function downloadShared(sharingUrl) {
+  const { name, downloadUrl } = await resolveShare(sharingUrl);
+  if (!downloadUrl) throw new Error('No download URL on shared item');
+  const res = await fetch(downloadUrl); // pre-authenticated; no auth header needed
+  if (!res.ok) throw new Error(`Shared file download → ${res.status}`);
+  return { name, buffer: Buffer.from(await res.arrayBuffer()) };
 }
 
 // Inbox — important/recent messages.
