@@ -5,7 +5,7 @@ import { config } from './config.js';
 import { cached, bust } from './cache.js';
 import { demo } from './demo.js';
 import { currentSession } from './session.js';
-import { parseWorkbook, buildReport } from './reports.js';
+import { parseWorkbook, buildReport, restampYear } from './reports.js';
 import { loadSources, saveSources } from './reports-store.js';
 import * as graph from './graph.js';
 import * as qbo from './qbo.js';
@@ -153,14 +153,16 @@ function activeSources() {
   return loadSources().filter((s) => s.kind !== 'local' || config.reports.allowLocal);
 }
 
-// Read one source → parsed weekly series + display name. Throws on read/format error.
+// Read one source → parsed weekly series (year-corrected to the source's year) + name.
 async function readSource(src) {
+  let buffer, fileName;
   if (src.kind === 'local') {
-    const buf = readFileSync(path.join(config.reports.localDir, src.file));
-    return { parsed: parseWorkbook(buf), fileName: src.file };
+    buffer = readFileSync(path.join(config.reports.localDir, src.file));
+    fileName = src.file;
+  } else {
+    ({ name: fileName, buffer } = await graph.downloadShared(src.url));
   }
-  const { name, buffer } = await graph.downloadShared(src.url);
-  return { parsed: parseWorkbook(buffer), fileName: name };
+  return { parsed: restampYear(parseWorkbook(buffer), src.year), fileName };
 }
 
 // Build the combined report from the configured sources (downloaded with the caller's token).

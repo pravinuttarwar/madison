@@ -103,9 +103,21 @@ export function parseWorkbook(buffer) {
   return series;
 }
 
-const weekTotal = (w) => w.total || Object.values(w.specialties).reduce((a, b) => a + b, 0);
-const hasData = (w) =>
-  weekTotal(w) > 0 || Object.values(w.providers).some((v) => v > 0);
+// Total encounters for a week: the TOTAL row, else summed modalities, else summed
+// providers (some weeks have only the provider tab filled).
+const weekTotal = (w) =>
+  w.total ||
+  Object.values(w.specialties).reduce((a, b) => a + b, 0) ||
+  Object.values(w.providers).reduce((a, b) => a + b, 0);
+const hasData = (w) => weekTotal(w) > 0;
+
+// Re-stamp every week's YEAR to the source's declared year (month/day kept). Corrects
+// the Dr's mis-dated tabs (a copied month tab that still shows the prior year).
+export function restampYear(weeks, year) {
+  const y = String(year || '');
+  if (!/^\d{4}$/.test(y)) return weeks;
+  return weeks.map((w) => ({ ...w, weekStart: `${y}${w.weekStart.slice(4)}` }));
+}
 
 // Merge weekly series from multiple files; on a duplicate week, keep the richer one.
 function mergeSeries(parsedList) {

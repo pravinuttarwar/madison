@@ -247,12 +247,15 @@ function PeriodCompare({ data }: { data: ReportsData }) {
       .sort((x, y) => y.b - x.b);
   }
 
-  const table = (title: string, field: 'modalities' | 'providers') => (
+  const table = (title: string, field: 'modalities' | 'providers') => {
+    const data = rows(field);
+    if (!data.length) return null; // skip blank tables
+    return (
     <div>
       <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</div>
       <table className="w-full text-sm">
         <tbody className="divide-y divide-border">
-          {rows(field).map((r) => (
+          {data.map((r) => (
             <tr key={r.label}>
               <td className="py-1.5 pr-3 font-medium text-foreground">{r.label}</td>
               <td className="py-1.5 px-2 text-right tabular-nums text-muted-foreground">{r.a.toLocaleString()}</td>
@@ -263,7 +266,8 @@ function PeriodCompare({ data }: { data: ReportsData }) {
         </tbody>
       </table>
     </div>
-  );
+    );
+  };
 
   if (!pa || !pb) return <p className="py-6 text-center text-sm text-muted-foreground">Add a second period to compare.</p>;
   return (
