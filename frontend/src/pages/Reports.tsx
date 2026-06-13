@@ -372,6 +372,7 @@ function ReportView({ data, onChange }: { data: ReportsData; onChange: (r: Repor
 
       {/* Connected sources */}
       <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Connected files</span>
         {sources.map((s) => (
           <span key={s.year} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs text-foreground shadow-sm">
             <FileSpreadsheet className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
@@ -388,6 +389,10 @@ function ReportView({ data, onChange }: { data: ReportsData; onChange: (r: Repor
           <Plus className="h-3.5 w-3.5" aria-hidden /> Add year
         </button>
       </div>
+      <p className="-mt-2 text-[11px] text-muted-foreground">
+        Files power the multi-year chart and year-over-year comparison below. The "Latest week"
+        figures always reflect your most recent week, so removing an older year won't change them.
+      </p>
       {adding && (
         <Panel title="Add another year" source="OneDrive / SharePoint" sourceMode={spreadsheetMode}>
           <AddSourceForm onResult={(r) => { onChange(r); setAdding(false); }} />
