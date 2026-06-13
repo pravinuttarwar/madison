@@ -432,9 +432,10 @@ function ReportView({ data, onChange }: { data: ReportsData; onChange: (r: Repor
         )}
       </Panel>
 
-      {/* Pick any two periods, side by side */}
+      {/* Pick any two periods, side by side. key on the available periods → the A/B
+          selectors reset to valid defaults when a year is added/removed. */}
       <Panel title="Side-by-side comparison" subtitle="Any two years or months, by modality and provider" source="OneDrive / SharePoint" sourceMode={spreadsheetMode}>
-        <PeriodCompare data={data} />
+        <PeriodCompare key={(data.available?.years ?? []).join(',') + '|' + (data.available?.months?.length ?? 0)} data={data} />
       </Panel>
 
       <p className="text-[11px] text-muted-foreground">
