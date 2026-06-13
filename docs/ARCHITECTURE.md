@@ -283,6 +283,26 @@ hits `${VITE_API_URL}${path}` when the source is live and returns sample data ot
 3. Render `<Loading />` / `<ErrorState />` from `@/components/AsyncState` for the two states.
 4. Implement the matching backend route returning the same shape.
 
+### Charts & data-viz — convention by visual type
+
+We deliberately use **two rendering approaches, picked by what the visual IS** — not one library
+everywhere. Keep this consistent:
+
+- **Plotted charts → Recharts** (the charting lib). Use it when there's an axis + series:
+  trends over time, multi-series comparisons. Today that's the year-over-year `LineChart` in
+  `pages/Reports.tsx` (the only place Recharts is imported). Recharts is **code-split** there via
+  `React.lazy` (see `App.tsx`) so its ~100 KB only loads when Reports opens — keep new plotted
+  charts inside that lazy boundary.
+- **Ranked / progress bars → CSS** (a `<div>` with `width: %`). Use it for a list of label → value
+  rows with a proportional bar + delta chip — they're list UI, not plotted charts. The shared
+  primitive is `components/primitives.tsx` (`MetricList`); also `Financials.tsx` (deposits, spend
+  by category). Bars carry meaning via the `chart-1..5` / `success/warning/destructive` tokens.
+
+Rule of thumb: **does it need an axis?** Yes → Recharts (lazy). No (it's a ranked/progress list)
+→ CSS bar. Don't push ranked lists through Recharts (loses the inline delta chips, adds weight),
+and don't hand-roll an axis chart (use the lib). The Microsoft logo SVG on the login button is
+not a chart.
+
 ### Per-source backend checklist
 
 | Source | API | Read scope(s) | Sandbox for dev |
