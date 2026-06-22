@@ -180,7 +180,7 @@ export function KpiTile({
         {Icon && <Icon className="h-4 w-4 text-muted-foreground" aria-hidden />}
       </div>
       <div className="mt-2 flex items-end justify-between gap-2">
-        <span className="text-2xl font-semibold tabular-nums text-foreground">{value}</span>
+        <span className="font-mono text-2xl font-semibold tabular-nums text-foreground">{value}</span>
         {trend}
       </div>
       {sub && <p className="mt-1 text-xs text-muted-foreground">{sub}</p>}
