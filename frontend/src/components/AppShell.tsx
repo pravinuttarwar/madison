@@ -256,7 +256,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   className={cn(
                     'inline-flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors',
                     active
-                      ? 'border-primary text-primary'
+                      ? 'border-primary text-primary [text-shadow:0_0_10px_rgba(192,0,42,0.45)]'
                       : 'border-transparent text-muted-foreground hover:text-foreground',
                   )}
                 >

@@ -41,6 +41,11 @@
 
   /* Shape */
   --radius: 0.75rem;
+
+  /* Typography — taken from the customer's mockup: Fraunces for display/headings,
+     JetBrains Mono for figures/KPIs. Body stays the default sans for legibility. */
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 }
 
 /* ── Dark mode (.dark on <html>, the default) — the customer's actual mockup:
@@ -72,4 +77,20 @@
 
   --color-chart-1: #f0506e; --color-chart-2: #58a6ff; --color-chart-3: #d29922;
   --color-chart-4: #3fb950; --color-chart-5: #a371f7;
+}
+
+/* ── Mockup treatment: Fraunces display headings + the crimson "glow" accent ───── */
+@layer base {
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.015em;
+  }
+}
+
+@layer utilities {
+  /* The mockup's --red-glow (rgba(192,0,42,0.15)) as a soft halo for primary / active
+     elements. Subtle, dark-canvas-tuned; use sparingly (active nav, key actions). */
+  .glow-primary {
+    box-shadow: 0 2px 16px -2px rgba(192, 0, 42, 0.38);
+  }
 }
