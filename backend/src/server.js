@@ -7,6 +7,13 @@ import { config } from './config.js';
 import { sessionMiddleware, currentSession, clearCurrentSession } from './session.js';
 import { router } from './routes.js';
 
+// Pin the process to the practice timezone so all date/time bucketing + display
+// (QuickBooks day buckets, calendar/email times, "yesterday"/"last week" windows)
+// is correct regardless of the host server's zone or how the process is launched
+// (systemd, npm, raw node). An operator can still override by exporting TZ. Safe to
+// set here — no imported module reads Date at load time. (MBI-26)
+process.env.TZ = process.env.TZ || 'America/New_York';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Single-repo deploy: the backend also serves the built frontend, so one Node process
 // (one port) serves the SPA + /api + OAuth. Override with FRONTEND_DIST if needed.

@@ -8,10 +8,10 @@ function root() {
   return config.graph.user ? `/users/${encodeURIComponent(config.graph.user)}` : '/me';
 }
 
-async function get(path) {
+async function get(path, extraHeaders = {}) {
   const token = await graphToken();
   const res = await fetch(`${BASE}${path}`, {
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', ...extraHeaders },
   });
   if (!res.ok) throw new Error(`Graph GET ${path} → ${res.status}: ${await res.text()}`);
   return res.json();
@@ -57,9 +57,13 @@ export async function calendarView(startISO, endISO) {
   const sel =
     'subject,start,end,location,attendees,isAllDay,bodyPreview,' +
     'isOnlineMeeting,onlineMeeting,onlineMeetingUrl,organizer,showAs';
+  // Force UTC so event start/end come back as a known zone (Graph otherwise returns a
+  // zoneless dateTime in the mailbox's zone); transforms.graphInstant reads it as UTC
+  // and the UI renders it in the practice zone (TZ=America/New_York).
   const json = await get(
     `${root()}/calendarView?startDateTime=${startISO}&endDateTime=${endISO}` +
       `&$orderby=start/dateTime&$top=100&$select=${sel}`,
+    { Prefer: 'outlook.timezone="UTC"' },
   );
   return json.value || [];
 }
