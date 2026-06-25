@@ -6,7 +6,7 @@ process.env.TZ = 'America/New_York';
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { financialsFromQbo, calendarFromGraph } from '../src/transforms.js';
+import { financialsFromQbo, calendarFromGraph, tasksFromGraph } from '../src/transforms.js';
 
 // 2026-06-24 is a Wednesday. QBO TxnDate is a date-only string in the company's
 // local zone — it must bucket under Wed, not roll back a day via UTC-midnight parsing.
@@ -50,6 +50,40 @@ test('event display time is ET wall-clock and DST-correct', () => {
 
   const winter = calendarFromGraph([{ start: { dateTime: '2026-01-15T14:00:00Z' }, subject: 'Winter 9am' }]);
   assert.equal(winter.week[0].events[0].time, '09:00'); // EST
+});
+
+// To Do dues are all-day calendar dates (midnight). A task due TODAY must read
+// 'due-today', not 'overdue' just because midnight has passed — compare by the
+// practice-zone calendar date, not the instant.
+test('To Do task due today (practice zone) is due-today, not overdue', () => {
+  const now = new Date('2026-06-25T18:00:00Z'); // 14:00 ET on 2026-06-25
+  const todo = [{ id: 'x1', title: 'Due today', dueDateTime: { dateTime: '2026-06-25T00:00:00.0000000', timeZone: 'UTC' } }];
+  const [task] = tasksFromGraph(todo, now);
+  assert.equal(task.status, 'due-today');
+});
+
+test('To Do task status by practice-zone calendar date (overdue / due-today / upcoming / done)', () => {
+  const now = new Date('2026-06-25T18:00:00Z'); // 2026-06-25 ET
+  const todo = [
+    { id: 'o', title: 'Yesterday', dueDateTime: { dateTime: '2026-06-24T00:00:00.0000000', timeZone: 'UTC' } },
+    { id: 't', title: 'Today', dueDateTime: { dateTime: '2026-06-25T00:00:00.0000000', timeZone: 'UTC' } },
+    { id: 'u', title: 'Tomorrow', dueDateTime: { dateTime: '2026-06-26T00:00:00.0000000', timeZone: 'UTC' } },
+    { id: 'd', title: 'Finished', status: 'completed', dueDateTime: { dateTime: '2026-06-24T00:00:00.0000000', timeZone: 'UTC' } },
+  ];
+  const byId = Object.fromEntries(tasksFromGraph(todo, now).map((t) => [t.id, t.status]));
+  assert.equal(byId.o, 'overdue');
+  assert.equal(byId.t, 'due-today');
+  assert.equal(byId.u, 'upcoming');
+  assert.equal(byId.d, 'done');
+});
+
+// The displayed due date is the calendar date, even when the dueDateTime carries a Z
+// (UTC) — slicing the date part avoids the all-day off-by-one that UTC→ET would cause.
+test('To Do due date displays the calendar date (no off-by-one for an all-day UTC due)', () => {
+  const now = new Date('2026-06-20T18:00:00Z');
+  const todo = [{ id: 'z', title: 'All-day UTC', dueDateTime: { dateTime: '2026-06-25T00:00:00Z', timeZone: 'UTC' } }];
+  const [task] = tasksFromGraph(todo, now);
+  assert.equal(task.due, 'Jun 25');
 });
 
 // Microsoft Graph returns calendar times as a ZONELESS dateTime plus a separate

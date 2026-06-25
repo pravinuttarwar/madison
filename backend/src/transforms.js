@@ -196,19 +196,22 @@ export function calendarFromGraph(events) {
 }
 
 // ── tasks (Microsoft To Do — single user) ─────────────────────────────────────
-export function tasksFromGraph(todo) {
-  const now = new Date();
+export function tasksFromGraph(todo, now = new Date()) {
+  const todayYmd = localYmd(now);
   return todo.map((t, i) => {
-    const due = t.dueDateTime?.dateTime ? new Date(t.dueDateTime.dateTime) : null;
+    // To Do dues are all-day calendar dates (midnight in some zone). Take the date part
+    // literally — ignore the time/zone — so an all-day due isn't shifted across midnight,
+    // and compare by practice-zone calendar date so "overdue"/"due-today" are correct.
+    const dueYmd = t.dueDateTime?.dateTime ? String(t.dueDateTime.dateTime).slice(0, 10) : null;
     let status = 'upcoming';
     if (t.status === 'completed') status = 'done';
-    else if (due && due < now) status = 'overdue';
-    else if (due && due.toDateString() === now.toDateString()) status = 'due-today';
+    else if (dueYmd && dueYmd < todayYmd) status = 'overdue';
+    else if (dueYmd && dueYmd === todayYmd) status = 'due-today';
     return {
       id: t.id || `t${i}`,
       title: t.title || '(untitled)',
       owner: 'DCR', // To Do is per-user; multi-owner needs Planner + an owner map (see ARCHITECTURE.md)
-      due: due ? due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No date',
+      due: dueYmd ? parseLocalDate(dueYmd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No date',
       status,
     };
   });
