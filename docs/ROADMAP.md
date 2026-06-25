@@ -46,8 +46,10 @@ Rough sequence (full day-by-day in [FIRST-WEEK-PLAN.md](FIRST-WEEK-PLAN.md)):
    the owner can self-consent for his own mailbox. Wire the awaiting-response follow-up engine.
 3. **Financial layer** — QuickBooks OAuth; deposits + variable spend with the confirmed fixed-cost
    account list; the minimal daily scalar snapshot for day-over-day deltas.
-4. **Spreadsheet ingestion** — read the provider Excel file(s) via Graph Excel named ranges → the
-   12 metrics, once the file layout is confirmed (MBI-22).
+4. **Spreadsheet ingestion** — first **connect the workbook** (UI to paste a OneDrive/SharePoint
+   link → resolve to a Graph drive path → validate read-only reachability → persist the non-PHI
+   path; MBI-29/30), then read the provider Excel via Graph Excel named ranges → the 12 metrics,
+   once the file layout is confirmed (MBI-22).
 5. **Auth & access** — Microsoft Entra ID SSO + MFA for the dashboard; small managed allowlist
    (the owner first, optionally a few senior staff later).
 
