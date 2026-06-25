@@ -64,7 +64,9 @@ Madison Command Center is a working, clickable version of the dashboard you desi
 - _(none yet)_
 
 ## How to resume
-Read this file. Read `docs/spec.json` for the current spec. Read the latest `docs/iterations/*.md` for recent thinking. Then ask the SDR what they want to do.
+Read this file, then **[README.md](README.md)** — it's the developer hub and links the full doc set
+(customer intent, status, roadmap, modules, architecture, testing). The approved scope/blueprint is
+`frontend/docs/spec.json`; recent thinking is in `frontend/docs/iterations/*.md`. Then ask what to do.
 
 ---
 
@@ -73,6 +75,13 @@ Read this file. Read `docs/spec.json` for the current spec. Read the latest `doc
 > The sections above are the SDR/sales prototype record and are partly stale (e.g. "Backend:
 > deferred" — a read-only backend now exists). The notes below reflect the **current code at HEAD**.
 > Authoritative engineer handover: `handover.md`.
+
+## Documentation set (read these first)
+**[README.md](README.md)** is the developer hub and links everything. The `docs/` set:
+`CUSTOMER.md` (who/why + what's in/out of scope), `STATUS.md` (done vs remaining, tied to Jira epic
+MBI-18), `ROADMAP.md` (phases), `MODULES.md` (code map + seams), `ARCHITECTURE.md` (integration
+contract + feasibility), `TESTING.md` (the gate + how work is built), `FIRST-WEEK-PLAN.md`
+(go-live sequence). **Update `STATUS.md` when a story ships.**
 
 ## Stack & layout (monorepo, single-port deploy)
 - **frontend/** — React 19 + TypeScript + Vite 6 + Tailwind v4, `react-router-dom` v7 (HashRouter), **pnpm**.
@@ -86,16 +95,18 @@ Read this file. Read `docs/spec.json` for the current spec. Read the latest `doc
 - `npm run serve` — production-style: build frontend, then backend serves SPA + `/api` on one port.
 
 ## Test gate (one command) — **established during onboarding**
-- `npm test` (repo root) = `test:backend` + `test:frontend`.
-  - **backend** — `node --test` characterization suite (`backend/test/characterization.test.js`): spawns the
-    real server in `DEMO_MODE` on a free port and pins the `/api/*` contract (email importance/unread flags,
-    Daily vs Monday dashboard, 12 report metrics, source-status modes, JSON-404). No network, no creds.
+- `npm test` (repo root) = `test:backend` + `test:frontend`. Full detail in **[docs/TESTING.md](docs/TESTING.md)**.
+  - **backend** — `node --test` suites: `characterization.test.js` (spawns the real server in
+    `DEMO_MODE`, pins the `/api/*` contract — email importance/unread/**category**, Daily vs Monday
+    dashboard, 12 report metrics, source-status, JSON-404), `email-category.test.js` (category
+    classifier + a HIPAA audit/safe-logging check), `transforms.test.js` (pure mapper + timezone
+    units). No network, no creds.
   - **frontend** — `tsc -b --noEmit` typecheck (pins the type-level DTO contract) **plus
-    Vitest + Testing Library render checks** (`src/**/*.test.tsx`, jsdom). `test:frontend` runs
+    Vitest + Testing Library render checks** (`src/**/*.test.{ts,tsx}`, jsdom). `test:frontend` runs
     both. Render tests are pinned to standalone mock mode (see `vitest.config.ts` `test.env`) so
     they don't depend on a dev's local `.env` wiring live sources.
-- This was added by onboarding (the repo shipped with **no tests**). **Extend this suite before/with any
-  behavior change** — it is the AFK-build safety net.
+- The repo shipped with **no tests**; this suite is the AFK-build safety net. **Extend it before/with
+  any behavior change.**
 
 ## Compliance & logging posture (profile: `hipaa`)
 - `.health-harness/compliance.json` = `hipaa`. In-scope sources (mail, calendar, tasks, QBO, ops spreadsheets)
@@ -118,10 +129,13 @@ Read this file. Read `docs/spec.json` for the current spec. Read the latest `doc
 - **Branches:** feature branches off `main`, PRs target `main` (an `IN REVIEW` Jira status exists).
 - ESLint + Prettier + lint-staged/husky on the frontend. Match existing code style; no mass reformat.
 
-## Known gaps / cleanup (candidate first tasks — pin with characterization tests before changing)
-- **Microsoft Teams** source is hardcoded `mock` (`server.js:223`) — never wired (out of scope per SOW).
+## Known gaps / cleanup (candidate tasks — pin with characterization tests before changing)
+- **Microsoft Teams** source is hardcoded `mock` (`server.js`) — never wired (out of scope per SOW).
 - **Dead scaffolding (frontend):** Redux + redux-persist + `crypto-js` (hardcoded key — *not* a real
-  security control), orphaned `pages/Overview.tsx` & `pages/Connections.tsx`, and an unreachable `isMonday`
-  branch in `Financials.tsx` (Monday/Weekday toggle UI was removed). Remove or revive deliberately.
+  security control) and orphaned `pages/Overview.tsx` & `pages/Connections.tsx`. Remove or revive deliberately.
 - **Day-over-day deltas** would need a minimal daily financial snapshot persisted — reconcile with the
   owner's no-storage preference before building.
+- (Resolved) The previously-unreachable `isMonday` branch in `Financials.tsx` is now live — MBI-20
+  restored the Daily/Monday toggle.
+
+See **[docs/STATUS.md](docs/STATUS.md)** for the full done-vs-remaining picture and open Jira items.
