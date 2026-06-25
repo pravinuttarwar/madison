@@ -25,7 +25,7 @@ function qboConnected() {
 function sourceReady(id) {
   if (config.demoMode) return true;
   if (id === 'quickbooks') return qboConnected();
-  return graphConnected(); // outlook, microsoftToDo, microsoftTeams, spreadsheet
+  return graphConnected(); // outlook, microsoftToDo, spreadsheet
 }
 
 // Wrap a route: demo → sample; configured → live producer; else → signal "not connected".
@@ -220,7 +220,6 @@ router.get('/sources/status', (_req, res) => {
   res.json([
     { id: 'outlook', label: 'Outlook', mode: mode(g) },
     { id: 'microsoftToDo', label: 'Microsoft To Do', mode: mode(g) },
-    { id: 'microsoftTeams', label: 'Microsoft Teams', mode: 'mock' },
     { id: 'quickbooks', label: 'QuickBooks', mode: mode(qboConnected()) },
     { id: 'spreadsheet', label: 'Weekly spreadsheet', mode: mode(g) },
   ]);
