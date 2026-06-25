@@ -1,15 +1,20 @@
 import { secureLocalStorage } from '@/utils/secureStorage';
 
-// Single source of truth for the app's display preferences (theme + color-vision
-// palette). Applied at boot (main.tsx) so the very first paint — including the login
-// screen, which never mounts the in-app Display menu — respects the saved choice.
-// Defaults to dark + color-vision-friendly when nothing is stored yet.
+// Single source of truth for the app's display preferences. The app ships ONE canonical
+// dark "command-center" palette (Dr. Romano's v2 mockup) — there is no light mode (MBI-21:
+// the owner wants a single dark mode). The only display preference is the Color-Vision-
+// Friendly palette, which is ON by default and persisted, applied at boot (main.tsx) so the
+// very first paint — including the login screen, which never mounts the in-app menu —
+// respects it.
 
-export const THEME_KEY = 'madison_theme';
 export const COLORS_KEY = 'madison_colors';
+// Legacy key written by the removed Light/Dark toggle. Retired on boot so a stored "light"
+// can never resurface a light state now that the app is dark-only.
+export const THEME_KEY = 'madison_theme';
 
-// Color-vision-friendly palette: retunes status + chart hues. Status is ALWAYS also
-// conveyed by icon, shape and label, never color alone.
+// Color-vision-friendly palette: retunes status + chart hues (Okabe-Ito, safe across
+// deuteranopia/protanopia/tritanopia). Status is ALWAYS also conveyed by icon, shape and
+// label, never color alone.
 export const CV_FRIENDLY_VARS: Record<string, string> = {
   '--color-success': '#1f6fb2',
   '--color-warning': '#9a6700',
@@ -21,21 +26,12 @@ export const CV_FRIENDLY_VARS: Record<string, string> = {
   '--color-chart-5': '#8e44ad',
 };
 
-export function getDarkPref(): boolean {
-  const saved = secureLocalStorage.getItem(THEME_KEY);
-  return saved === null ? true : saved === 'dark';
-}
-
 export function getFriendlyPref(): boolean {
-  // Default OFF so the customer's true command-center palette (green/amber/crimson)
-  // shows out of the box. Status is also conveyed by icon + label, so this stays
-  // accessible; the color-vision-friendly palette remains a one-tap toggle.
+  // Default ON (MBI-21): the practice owner is colorblind, so the color-vision-friendly
+  // palette is the out-of-the-box scheme. Status is also conveyed by icon + shape + label,
+  // so the standard command-center palette stays accessible and is one tap away in Display.
   const saved = secureLocalStorage.getItem(COLORS_KEY);
-  return saved === null ? false : saved === 'friendly';
-}
-
-export function applyDark(dark: boolean) {
-  document.documentElement.classList.toggle('dark', dark);
+  return saved === null ? true : saved === 'friendly';
 }
 
 export function applyFriendly(friendly: boolean) {
@@ -47,18 +43,21 @@ export function applyFriendly(friendly: boolean) {
   }
 }
 
-export function setDarkPref(dark: boolean) {
-  secureLocalStorage.setItem(THEME_KEY, dark ? 'dark' : 'light');
-  applyDark(dark);
-}
-
 export function setFriendlyPref(friendly: boolean) {
   secureLocalStorage.setItem(COLORS_KEY, friendly ? 'friendly' : 'standard');
   applyFriendly(friendly);
 }
 
+// The app is dark-only; retire any legacy Light/Dark preference left in storage so it can't
+// resurface a light state. The dark palette itself is the canonical theme in index.css.
+function retireLegacyThemePref() {
+  if (secureLocalStorage.getItem(THEME_KEY) !== null) {
+    secureLocalStorage.removeItem(THEME_KEY);
+  }
+}
+
 // Apply persisted (or default) preferences immediately. Call once at app boot.
 export function initTheme() {
-  applyDark(getDarkPref());
+  retireLegacyThemePref();
   applyFriendly(getFriendlyPref());
 }

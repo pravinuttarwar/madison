@@ -119,7 +119,7 @@ export function Trend({
 }
 
 // ── Status pill — color-blind safe: distinct ICON + label, color reinforces ───
-type StatusKind = 'overdue' | 'due-today' | 'upcoming' | 'done' | 'urgent';
+export type StatusKind = 'overdue' | 'due-today' | 'upcoming' | 'done' | 'urgent';
 const STATUS_META: Record<StatusKind, { label: string; icon: LucideIcon; cls: string }> = {
   overdue: { label: 'Overdue', icon: AlertTriangle, cls: 'border-destructive/30 bg-destructive/10 text-destructive' },
   'due-today': { label: 'Due today', icon: Clock, cls: 'border-warning/30 bg-warning/10 text-warning' },
