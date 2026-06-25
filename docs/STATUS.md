@@ -20,7 +20,7 @@ holds the active feature stories. This doc summarizes; the tickets are authorita
 | Tasks grouped by owner, due/overdue | Tasks (`/tasks`) | ✅ UI done on sample data |
 | Clean QuickBooks snapshot (deposits, variable spend, net contribution) | Financials (`/financials`) | 🟡 UI done; QBO not connected; fixed-cost exclusion is config-only |
 | Weekly provider spreadsheet snapshot + WoW deltas | Reports (`/reports`) | 🟡 UI done with the 12 metrics; spreadsheet read not wired (MBI-22) |
-| Color-blind-accessible UI (never color alone) | accessibility primitives + Display menu | ✅ Pattern in place; exact-palette match open (MBI-21) |
+| Color-blind-accessible UI (never color alone) | accessibility primitives + Display menu | ✅ Done — exact dark palette + Color-Vision-Friendly default (MBI-21) |
 | Timezone-correct dates (practice zone, America/New_York) | dashboard view default + date transforms | ✅ Done (MBI-26/27/28) |
 | Mirror the owner's design; drop CureMD, Plaid, AI panel, Projects, Connections, Teams | app shell + composition | ✅ Done |
 | EHR / clinical reporting, AI assistant, front-desk reconciliation | — | ⛔ Out of scope (see [CUSTOMER.md](CUSTOMER.md)) |
@@ -44,18 +44,38 @@ Legend: ✅ done · 🟡 prototype/partial (UI real, live data pending) · ⛔ o
 - **Timezone hardening (MBI-26 / MBI-27 / MBI-28).** QuickBooks/Outlook transforms, the
   Daily/Monday auto-default, and To Do due dates all compute against the **practice zone**
   (`America/New_York`) so calendar-date buckets and "overdue/due-today" are correct.
-
-### 🟡 Remaining (open in Jira — blocked on customer inputs)
-
 - **[MBI-21](https://connecthealth.atlassian.net/browse/MBI-21) — Colorblind-strict palette matching the original design.**
-  Production palette must use strong black/red/white and match the original design's exact hex.
-  **Blocked on:** the owner's original design file/HTML to extract exact color codes, and
-  confirmation of the specific color-vision type. (The never-color-alone pattern already holds; this
-  is the exact-match + default-palette polish.)
+  One canonical **dark** command-center palette taken verbatim from the owner's `madison_medical_jarvis_v2.html`
+  mockup (strong black `#0a0a0c` / crimson `#C0002A` / white `#e8e8ea`); **light mode removed** (the owner
+  wants a single dark mode), and **Color-Vision-Friendly is the default-on** scheme. Status stays icon +
+  shape + text, never color alone.
+- **[MBI-31](https://connecthealth.atlassian.net/browse/MBI-31) — Dashboard crash on an unclassified email category.**
+  `CategoryBadge` falls back to `action-needed` instead of dereferencing an undefined lookup (found running live).
+- **[MBI-32](https://connecthealth.atlassian.net/browse/MBI-32) — Removed the out-of-scope Microsoft Teams data source**
+  (dead `mock` flag, never wired). Calendar "Microsoft Teams" meeting venues are kept.
+- **[MBI-40](https://connecthealth.atlassian.net/browse/MBI-40) — Removed dead frontend scaffolding** (Redux
+  store + redux-persist + orphaned `pages/Overview.tsx`); bundle −18 kB. (`crypto-js` kept — it backs the live
+  `secureStorage`.)
+
+### 🟡 Remaining (open in Jira)
+
+- **[MBI-33](https://connecthealth.atlassian.net/browse/MBI-33) — Remove sample data, go live-only (Phase-2 epic).**
+  Graduate from the sample-data prototype to a **live-only product**. Live integration is already wired to
+  **sandbox** apps (badges read `sandbox`; `live` on the production apps). Stories **MBI-34→39**; the key
+  sequencing constraint is **MBI-34 (relocate sample payloads into `test/fixtures`) must land first** — the
+  test gate depends on the sample paths (frontend render tests in mock mode; backend characterization in
+  `DEMO_MODE`), so removing them before fixtures exist breaks `npm test`.
 - **[MBI-22](https://connecthealth.atlassian.net/browse/MBI-22) — Operational reporting from SharePoint/OneDrive spreadsheets.**
   Reports must read the practice's departmental spreadsheets via Microsoft Graph Excel (not CureMD/
-  PNC), aggregate multiple files, and ship a documented file template. **Blocked on:** the file
-  organization (folder + named-range layout); customer is open to our proposed template.
+  PNC). **Build-prep (2026-06-25) split this into "connect the workbook now, map the metrics later":**
+  - **[MBI-29](https://connecthealth.atlassian.net/browse/MBI-29) — Paste & validate a workbook link** —
+    revive/route `Connections.tsx`, resolve a OneDrive/SharePoint share-URL → Graph drive path, confirm
+    read-only reachability. **Unblocked — ready to build** (no customer input needed).
+  - **[MBI-30](https://connecthealth.atlassian.net/browse/MBI-30) — Persist the link & read `/api/reports`
+    off it** — durable **non-PHI** drive path (path only, never cell values); blocked-by MBI-29.
+  - **Parked — realign MBI-22 when the practice shares all departmental sheet formats:** the named-range
+    → 12-metric mapping + file architecture (**single canonical workbook** chosen). **Blocked on:** the
+    file layout (folder + named-range map); customer is open to our proposed template.
 
 ---
 
@@ -63,10 +83,13 @@ Legend: ✅ done · 🟡 prototype/partial (UI real, live data pending) · ⛔ o
 
 Tracked in [CLAUDE.md](../CLAUDE.md) "Known gaps". Current candidates:
 
-- **Dead scaffolding (frontend):** Redux + redux-persist + `crypto-js` (hardcoded key — *not* a
-  real security control), and orphaned `pages/Overview.tsx` / `pages/Connections.tsx`. Remove or
-  revive deliberately.
-- **Microsoft Teams source** is hardcoded `mock` — never wired (out of scope per SOW).
+- **Dead scaffolding (frontend) — ✅ RESOLVED ([MBI-40](https://connecthealth.atlassian.net/browse/MBI-40)):**
+  Redux + redux-persist + orphaned `pages/Overview.tsx` removed. `crypto-js` is **kept** — it is *not*
+  dead; it backs the live `secureStorage` (weak hardcoded-key "encryption" on non-PHI local prefs — a
+  plain-storage swap would be its own deliberate ticket). (`pages/Connections.tsx` is being **revived**
+  by [MBI-29](https://connecthealth.atlassian.net/browse/MBI-29) — do not delete it.)
+- **Microsoft Teams source — ✅ RESOLVED ([MBI-32](https://connecthealth.atlassian.net/browse/MBI-32)):**
+  removed end-to-end (was hardcoded `mock`, never wired, out of scope per SOW).
 - **Day-over-day deltas** need a minimal daily financial snapshot persisted — reconcile with the
   owner's no-storage preference before building (see [ARCHITECTURE.md §6](ARCHITECTURE.md)).
 

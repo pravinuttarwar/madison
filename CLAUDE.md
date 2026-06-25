@@ -130,11 +130,17 @@ contract + feasibility), `TESTING.md` (the gate + how work is built), `FIRST-WEE
 - ESLint + Prettier + lint-staged/husky on the frontend. Match existing code style; no mass reformat.
 
 ## Known gaps / cleanup (candidate tasks — pin with characterization tests before changing)
-- **Microsoft Teams** source is hardcoded `mock` (`server.js`) — never wired (out of scope per SOW).
-- **Dead scaffolding (frontend):** Redux + redux-persist + `crypto-js` (hardcoded key — *not* a real
-  security control) and orphaned `pages/Overview.tsx` & `pages/Connections.tsx`. Remove or revive deliberately.
 - **Day-over-day deltas** would need a minimal daily financial snapshot persisted — reconcile with the
   owner's no-storage preference before building.
+- **`crypto-js` / `secureStorage`** — weak hardcoded-key "encryption" on non-PHI local prefs; *not* a real
+  security control. It is **live** (backs session + theme prefs), so it is NOT dead code — swapping it for
+  plain storage would be its own deliberate ticket.
+- **Go live-only (Phase-2 epic MBI-33, MBI-34→39):** remove the runtime sample-data path so the app is
+  live-only. **MBI-34 must land first** — relocate sample payloads into `test/fixtures`, because the gate
+  depends on them (frontend render tests in mock mode; backend characterization in `DEMO_MODE`).
+- (Resolved) **Microsoft Teams** source removed — MBI-32 (was hardcoded `mock`, out of scope).
+- (Resolved) **Dead scaffolding** (Redux + redux-persist + orphaned `pages/Overview.tsx`) removed — MBI-40.
+  (`pages/Connections.tsx` is being **deliberately revived** by MBI-29 as the workbook-connection UI — do not delete it.)
 - (Resolved) The previously-unreachable `isMonday` branch in `Financials.tsx` is now live — MBI-20
   restored the Daily/Monday toggle.
 
