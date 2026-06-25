@@ -90,15 +90,18 @@ contract + feasibility), `TESTING.md` (the gate + how work is built), `FIRST-WEE
   frontend DTOs. **No database; no PHI at rest.** In production it also serves the built SPA (one port).
 
 ## Run
-- `npm run dev:frontend` — Vite dev server (mock data; no backend needed).
-- `npm run dev:backend` — Express BFF on :8787. `DEMO_MODE=1` serves deterministic sample data (no creds).
+- `npm run dev:frontend` — Vite dev server; point `VITE_API_URL` at the backend (live-only).
+- `npm run dev:backend` — Express BFF on :8787. Live-only: each route serves real data once that
+  source is connected via OAuth, else 401 (Microsoft) / 503 (QuickBooks).
 - `npm run serve` — production-style: build frontend, then backend serves SPA + `/api` on one port.
 
 ## Test gate (one command) — **established during onboarding**
 - `npm test` (repo root) = `test:backend` + `test:frontend`. Full detail in **[docs/TESTING.md](docs/TESTING.md)**.
-  - **backend** — `node --test` suites: `characterization.test.js` (spawns the real server in
-    `DEMO_MODE`, pins the `/api/*` contract — email importance/unread/**category**, Daily vs Monday
-    dashboard, 12 report metrics, source-status, JSON-404), `email-category.test.js` (category
+  - **backend** — `node --test` suites: `characterization-fixtures.test.js` (spawns the real server with
+    `FIXTURES_DIR` so `graph.js`/`qbo.js` resolve from synthetic upstream payloads, pins the `/api/*`
+    contract through the **live** route + transforms path — email importance/unread/**category**, Daily vs
+    Monday dashboard, 12 report metrics, source-status, JSON-404), `demo-retired.test.js` (proves
+    `DEMO_MODE` is inert — no runtime sample path), `email-category.test.js` (category
     classifier + a HIPAA audit/safe-logging check), `transforms.test.js` (pure mapper + timezone
     units). No network, no creds.
   - **frontend** — `tsc -b --noEmit` typecheck (pins the type-level DTO contract) **plus
@@ -119,10 +122,10 @@ contract + feasibility), `TESTING.md` (the gate + how work is built), `FIRST-WEE
 
 ## Seams (where to make changes safely)
 - **Frontend data-access seam:** `frontend/src/lib/api.ts` — every page reads through async getters
-  (`getDashboard`, `getEmails`, …). The fetch-from-backend branch is gated on `VITE_API_URL` /
-  `VITE_LIVE_*`. Pages don't change to go live.
+  (`getDashboard`, `getEmails`, …) which fetch the backend (`VITE_API_URL`). Live-only since MBI-35.
 - **Backend contract seam:** `backend/src/transforms.js` maps Graph/QBO → the exact frontend DTOs;
-  `backend/src/demo.js` is the sample-data mirror. `routes.js` wires sources → producers.
+  `routes.js` wires sources → live producers. In tests, `graph.js`/`qbo.js` resolve from synthetic
+  fixtures via `FIXTURES_DIR` (see `backend/src/fixtures.js`).
 
 ## Conventions (theirs — follow, don't reformat)
 - **Commits:** Conventional Commits (`type(scope): subject`, e.g. `ui(theme):`, `chore:`) — keep it.
@@ -135,9 +138,10 @@ contract + feasibility), `TESTING.md` (the gate + how work is built), `FIRST-WEE
 - **`crypto-js` / `secureStorage`** — weak hardcoded-key "encryption" on non-PHI local prefs; *not* a real
   security control. It is **live** (backs session + theme prefs), so it is NOT dead code — swapping it for
   plain storage would be its own deliberate ticket.
-- **Go live-only (Phase-2 epic MBI-33, MBI-34→39):** remove the runtime sample-data path so the app is
-  live-only. **MBI-34 must land first** — relocate sample payloads into `test/fixtures`, because the gate
-  depends on them (frontend render tests in mock mode; backend characterization in `DEMO_MODE`).
+- **Go live-only (Phase-2 epic MBI-33):** MBI-34 (fixtures), MBI-35 (frontend live-only), and MBI-36
+  (backend `DEMO_MODE`/`demo.js` retired) are **done** — the runtime sample path is gone end-to-end and the
+  gate runs the live path offline against fixtures. **Remaining:** MBI-37 (harden empty/error + auth states),
+  MBI-38 (Connections badges consume live `/api/sources/status` + `SourceMode` cleanup), MBI-39 (demo's fate).
 - (Resolved) **Microsoft Teams** source removed — MBI-32 (was hardcoded `mock`, out of scope).
 - (Resolved) **Dead scaffolding** (Redux + redux-persist + orphaned `pages/Overview.tsx`) removed — MBI-40.
   (`pages/Connections.tsx` is being **deliberately revived** by MBI-29 as the workbook-connection UI — do not delete it.)

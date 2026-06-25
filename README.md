@@ -24,8 +24,8 @@ Node ≥ 20 required.
 npm run install:all     # install both workspaces
 
 # Day-to-day development
-npm run dev:frontend    # Vite dev server — mock data, no backend needed (start here)
-npm run dev:backend     # Express BFF on :8787 (set DEMO_MODE=1 for deterministic sample data)
+npm run dev:frontend    # Vite dev server — point VITE_API_URL at the backend for data
+npm run dev:backend     # Express BFF on :8787 (live-only; connect a source via OAuth)
 
 # Production-style single-port run (backend builds + serves the SPA + /api)
 npm run serve
@@ -34,9 +34,10 @@ npm run serve
 npm test                # backend characterization + frontend typecheck + render tests
 ```
 
-The frontend works standalone with **no env vars** — every source resolves to bundled sample
-data. Going live on a source = implement its backend route, point `VITE_API_URL` at the backend,
-and flip that source in `SOURCE_MODES`. Details in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+The app is **live-only**: the frontend fetches every source from the backend (`VITE_API_URL`),
+and the backend serves real data once that source is connected via OAuth (otherwise 401/503). The
+test gate runs the same live path offline against synthetic fixtures. Details in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
@@ -45,12 +46,12 @@ and flip that source in `SOURCE_MODES`. Details in [docs/ARCHITECTURE.md](docs/A
 ```
 frontend/         React 19 + TypeScript + Vite 6 + Tailwind v4, react-router-dom v7 (HashRouter)
   src/pages/        the six tabs: Dashboard, Reports, Financials, EmailQueue, Calendar, Tasks
-  src/lib/          api.ts (data-access seam), data.ts (DTOs + mock data), format.ts
+  src/lib/          api.ts (data-access seam), data.ts (DTO types + UI constants), format.ts
   src/components/   AppShell, primitives (accessibility-safe), AsyncState, ui/ (shadcn)
   docs/spec.json    approved scope + the customer's design blueprint
 backend/          Node ≥20 ESM, Express 4 — read-only BFF, in-memory sessions, NO database
   src/routes.js     source → producer wiring        src/transforms.js  Graph/QBO → frontend DTOs
-  src/demo.js       sample-data mirror (DEMO_MODE)   src/graph.js/qbo.js  upstream clients
+  src/graph.js/qbo.js  upstream clients (live; resolve from fixtures under FIXTURES_DIR in tests)
   test/             node:test characterization + unit suites
 docs/             the documentation set below
 ```

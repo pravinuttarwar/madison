@@ -22,14 +22,17 @@ logic is tested against it. Run the gate the same way locally.
 ## What each suite pins
 
 ### Backend (`backend/test/`)
-- **`characterization.test.js`** — spawns the **real server** in `DEMO_MODE` on a free port and
-  exercises `/api/*` over HTTP, pinning the contract the frontend depends on: email
-  importance/unread/**category** flags, Daily vs Monday dashboard shapes, the 12 report metrics,
-  source-status modes, JSON-404. This is the AFK-build safety net — *extend it with any behavior
-  change.*
+- **`characterization-fixtures.test.js`** — spawns the **real server** with `FIXTURES_DIR` set (so
+  `graph.js`/`qbo.js` resolve from synthetic upstream payloads) and exercises `/api/*` over the
+  **live route + transforms path** — no `DEMO_MODE`, no creds, no network. Pins the contract the
+  frontend depends on: email importance/unread/**category** flags, Daily vs Monday dashboard shapes,
+  the 12 report metrics, source-status modes, JSON-404. The AFK-build safety net — *extend it with any
+  behavior change.*
+- **`demo-retired.test.js`** — proves the runtime sample path is gone: even with `DEMO_MODE=1` set,
+  routes never serve sample data (401/503 when disconnected) and `/health` carries no `demoMode` flag.
 - **`email-category.test.js`** — unit tests for the email category classifier
-  (`classifyCategory`, `emailsFromGraph`) **and** a HIPAA check: a `/api/email` read emits the
-  audit line and **no subject/sender/body leaks into logs** (safe-logging).
+  (`classifyCategory`, `emailsFromGraph`) **and** a HIPAA check (on the live/fixtures path): a
+  `/api/email` read emits the audit line and **no subject/sender/body leaks into logs** (safe-logging).
 - **`transforms.test.js`** — unit tests for the pure `transforms.js` mappers (incl. timezone-correct
   date handling).
 
@@ -37,17 +40,17 @@ logic is tested against it. Run the gate the same way locally.
 - **`tsc -b --noEmit`** — the type-level DTO contract (`Email`, `DashboardData`, …).
 - **Render tests** (`src/**/*.test.{ts,tsx}`): `pages/Dashboard.test.tsx` (Daily/Monday composition,
   WoW deltas, the icon+text category badge, null-safety), `pages/Financials.test.tsx`,
-  `context/view-mode.test.tsx`, `lib/format.test.ts`. Pinned to **standalone mock mode** via
-  `vitest.config.ts` `test.env` so they never depend on a dev's local `.env`.
+  `context/view-mode.test.tsx`, `lib/format.test.ts`. They run offline against the captured fixtures
+  via a `fetch` stub (`src/test/setup.ts`), so they never depend on a dev's local `.env`.
 
 ## Verifying behavior by hand
 
-Tests prove the contract; to *see* it working:
+Tests prove the contract; to *see* it working, connect a source via OAuth, then:
 
 ```bash
-npm run dev:frontend          # click through all six tabs on sample data
-DEMO_MODE=1 npm run dev:backend
-curl localhost:8787/api/dashboard | jq      # inspect the live DTO shape
+npm run dev:backend
+npm run dev:frontend          # with VITE_API_URL pointed at the backend
+curl localhost:8787/api/dashboard | jq      # inspect the live DTO shape (once connected)
 curl localhost:8787/api/email | jq '.[].category'   # e.g. confirm category values
 ```
 
