@@ -3,8 +3,9 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { ViewModeProvider, type ViewMode } from '@/context/view-mode';
 import { UserProvider } from '@/context/UserContext';
-import Dashboard, { MondayView } from '@/pages/Dashboard';
+import Dashboard, { MondayView, CategoryBadge } from '@/pages/Dashboard';
 import { getDashboard, type DashboardData } from '@/lib/api';
+import type { EmailCategory } from '@/lib/data';
 
 afterEach(cleanup);
 
@@ -91,6 +92,22 @@ describe('Dashboard — email category briefing (MBI-19)', () => {
     // …and each label is paired with an icon (svg) inside the same badge — so the
     // category is conveyed by icon + text, satisfying the color-blind requirement.
     expect(actionNeeded[0].querySelector('svg')).toBeTruthy();
+  });
+});
+
+describe('Dashboard — CategoryBadge degrades gracefully', () => {
+  it('renders a known category as its label + icon', () => {
+    render(<CategoryBadge category="management" />);
+    expect(screen.getByText('Management')).toBeTruthy();
+  });
+
+  it('falls back to "Action needed" (never crashes) for a missing/unknown category', () => {
+    // Mirrors a live Graph email arriving without a recognized category.
+    const { container } = render(
+      <CategoryBadge category={undefined as unknown as EmailCategory} />,
+    );
+    expect(screen.getByText('Action needed')).toBeTruthy();
+    expect(container.querySelector('svg')).not.toBeNull();
   });
 });
 

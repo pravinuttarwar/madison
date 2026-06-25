@@ -41,8 +41,11 @@ const EMAIL_CATEGORY_META: Record<EmailCategory, { label: string; Icon: LucideIc
   'action-needed': { label: 'Action needed', Icon: AlertCircle, tone: 'text-warning' },
 };
 
-function CategoryBadge({ category }: { category: EmailCategory }) {
-  const meta = EMAIL_CATEGORY_META[category];
+export function CategoryBadge({ category }: { category: EmailCategory }) {
+  // Fall back to the classifier's own default ('action-needed') if an email arrives with a
+  // missing or unrecognized category (e.g. a live Graph message not yet classified) so the
+  // briefing degrades gracefully instead of crashing on an undefined lookup.
+  const meta = EMAIL_CATEGORY_META[category] ?? EMAIL_CATEGORY_META['action-needed'];
   const Icon = meta.Icon;
   return (
     <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
