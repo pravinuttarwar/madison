@@ -76,6 +76,9 @@ Legend: ✅ done · 🟡 prototype/partial (UI real, live data pending) · ⛔ o
   decision (MBI-39):** the published `share.mindbowser.com` demo is a **deliberately frozen artifact** — the live-only
   build is **not** deployed to that URL (so it stays the working sample-data demo). ⚠️ Do **not** "fix" the public demo
   by deploying `main` to it; that's intentional, not a regression.
+- **[MBI-41](https://connecthealth.atlassian.net/browse/MBI-41) — Removed the Display & Accessibility control.** The
+  header `DisplayMenu` (+ its `Seg` helper and the orphaned divider) is gone; the **Color-Vision-Friendly palette stays
+  the default**, applied at boot in `main.tsx` via `theme.ts` (no in-app toggle). `theme.ts` left intact.
 
 ### 🟡 Remaining (open in Jira)
 
