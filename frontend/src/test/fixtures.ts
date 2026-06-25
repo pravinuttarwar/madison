@@ -1,4 +1,4 @@
-import type { DashboardData } from '@/lib/api';
+import type { DashboardData, FinancialsData, MeData } from '@/lib/api';
 
 // Synthetic dashboard fixture (MBI-34) — a self-contained Monday-view payload for render
 // tests, independent of the runtime lib/data mock that MBI-35 removes. Captured from the
@@ -679,3 +679,17 @@ export const dashboardMonday = {
   ],
   "awaitingThresholdHours": 48
 } as DashboardData;
+
+// Weekday-view payload — same underlying synthetic data, view flipped. The live BFF
+// returns the same shape with `view: 'weekday'`; the Daily composition reads
+// financialDay / emails / schedule / priorityToday (all present above).
+export const dashboardWeekday: DashboardData = { ...dashboardMonday, view: 'weekday' };
+
+// Financials getter payload, derived from the dashboard's weekly + daily figures.
+export const financialsFixture: FinancialsData = {
+  weekly: dashboardMonday.financialWeek!,
+  daily: dashboardMonday.financialDay!,
+};
+
+// Signed-in profile (the live /api/me shape). Synthetic.
+export const meFixture: MeData = { displayName: dashboardMonday.owner, mail: '' };
