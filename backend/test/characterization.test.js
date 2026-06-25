@@ -99,6 +99,19 @@ test('GET /api/email — full list with importance/unread flags (prioritization 
   assert.equal(unreadImportant, 3);
 });
 
+test('GET /api/email — every email carries a valid category; important set spans all three buckets (MBI-19)', async () => {
+  const { status, body } = await getJson('/api/email');
+  assert.equal(status, 200);
+  const VALID = ['management', 'operational', 'action-needed'];
+  for (const e of body) {
+    assert.ok(VALID.includes(e.category), `category must be a valid enum, got ${e.category}`);
+  }
+  // The dashboard briefing shows only important emails by category — the sample data
+  // must exercise all three buckets so the categorized UI is demoable.
+  const importantCats = new Set(body.filter((e) => e.important).map((e) => e.category));
+  for (const c of VALID) assert.ok(importantCats.has(c), `important emails should include a ${c} example`);
+});
+
 test('GET /api/email/:id — body resolves for a known id', async () => {
   const { status, body } = await getJson('/api/email/e1');
   assert.equal(status, 200);
