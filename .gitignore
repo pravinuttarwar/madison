@@ -11,3 +11,8 @@ _uploads/
 # Customer-provided data — never commit (real patient counts)
 backend/*.xlsx
 backend/_data/
+
+# Harness scratch — volatile, not committed (durable config IS committed:
+# .health-harness/project.json, compliance.json)
+.health-harness/sprints/
+.health-harness/current-sprint

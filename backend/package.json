@@ -6,7 +6,8 @@
   "description": "Read-only backend-for-frontend for the Madison Command Center. Holds OAuth tokens, calls Microsoft Graph + QuickBooks read-only, transforms to the front-end DTO shapes. No PHI stored.",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "dev": "node --watch src/server.js",
+    "test": "node --test test/"
   },
   "engines": {
     "node": ">=20"

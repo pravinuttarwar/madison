@@ -1,0 +1,5 @@
+{
+  "profile": "hipaa",
+  "rationale": "Madison Medical — healthcare practice ops dashboard. Touches ePHI-adjacent operational data (patient volumes, provider reporting) and integrates email/calendar/financials. SOW commits to read-only, no-PHI-at-rest.",
+  "setAt": "2026-06-25"
+}
