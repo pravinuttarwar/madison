@@ -90,7 +90,10 @@ Read this file. Read `docs/spec.json` for the current spec. Read the latest `doc
   - **backend** — `node --test` characterization suite (`backend/test/characterization.test.js`): spawns the
     real server in `DEMO_MODE` on a free port and pins the `/api/*` contract (email importance/unread flags,
     Daily vs Monday dashboard, 12 report metrics, source-status modes, JSON-404). No network, no creds.
-  - **frontend** — `tsc -b --noEmit` typecheck (pins the type-level DTO contract).
+  - **frontend** — `tsc -b --noEmit` typecheck (pins the type-level DTO contract) **plus
+    Vitest + Testing Library render checks** (`src/**/*.test.tsx`, jsdom). `test:frontend` runs
+    both. Render tests are pinned to standalone mock mode (see `vitest.config.ts` `test.env`) so
+    they don't depend on a dev's local `.env` wiring live sources.
 - This was added by onboarding (the repo shipped with **no tests**). **Extend this suite before/with any
   behavior change** — it is the AFK-build safety net.
 
