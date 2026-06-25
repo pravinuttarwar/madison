@@ -3,25 +3,16 @@
 ## Intent
 Madison Command Center is a working, clickable version of the dashboard you designed — one place to open each morning and see what matters: your important emails and follow-ups, this week's calendar, tasks by owner, a clean financial snapshot, and your providers' weekly report. It keeps your Monday-vs-weekday view, presents your QuickBooks numbers without the visual clutter, and shows the weekly spreadsheet as a live snapshot. This first version runs on realistic sample data so you can click through the real experience; the live connections to Outlook, QuickBooks and your spreadsheets are the next step we'd wire up together.
 
-## Lead context (anchored)
-- Customer: Madison Medical and Sports Rehabilitation Center, Healthcare
-- Key pain points (with primary-source citations):
-  - "Dr. Carmen described as having strong financial capacity — "He is rich and has money to invest, it seems." High investment appetite signal." — buying_trigger, 2026-06-04
-  - "Verbal commitment to start work before contract signing; sign-off expected next week" — buying_trigger, 2026-06-03
-  - "Current EHR (CureMD) is antiquated and cannot accommodate 15 subspecialties with complex cash/self-pay/insurance billing workflows" — pain_point, 2026-06-03
-  - "Vizenda reporting tool creates data duplicates and cannot join appointment + provider note datasets; reports exported to Excel for manual cleanup" — pain_point, 2026-06-03
-  - "Staff manually bridging data gaps between systems (copy-paste, print/re-enter); technology should automate what humans are doing today" — pain_point, 2026-06-03
-  - "EHR replacement or custom EHR build (Phase 2) — evaluating KRMD and open-EHR options like MedPlum; configurable to fit non-standard multi-specialty workflows" — use_case, 2026-06-03
-  - "Shawn initiated formal kickoff meeting to 'officially kick off the project, review pricing, discuss the anticipated project timeline and next steps'" — buying_trigger, 2026-05-29
-  - "Dr. Carmen initiated the call to discuss 'building a dashboard' — active intent to move forward with a consolidation solution for her practice." — buying_trigger, 2026-05-29
-  - "Dr. Carmen articulated dashboard consolidation/integration needs, current workflow challenges, and vision for a streamlined centralized platform" — pain_point, 2026-05-29
-  - "Business operations fragmented across multiple disconnected systems (email, calendar, banking, spreadsheets); no single view of practice data." — pain_point, 2026-05-29
-  - "Dashboard to consolidate Outlook (email+calendar), PNC banking, and spreadsheets with weekly reporting data into one centralized platform for medical practice ops." — use_case, 2026-05-29
-  - "May 28 kickoff call cancelled due to a conflicting meeting on Shawn's side; deal momentum paused pending reschedule to early next week." — blocker, 2026-05-28
-  - "Dr. Romano explicitly stated she wanted this done 2 months ago and is ready to move — high urgency, not interested in slow month-by-month retainer" — buying_trigger, 2026-05-28
-  - "Requested scope document and cost estimate by next day; receptive to in-person meeting in NJ" — buying_trigger, 2026-05-28
-  - "Customer explicitly requested kickoff to 'officially kick off the project, review pricing, discuss anticipated project timeline' — clear intent to proceed." — buying_trigger, 2026-05-28
-- Stakeholders: _(none captured)_
+## Customer & problem context (engineering-relevant only)
+> Commercial/deal intel (pricing, buying signals, negotiation notes) is intentionally kept OUT of this
+> repo — it lives in the CRM/Jira, not in dev-facing docs. Only the product problem context is below.
+- Customer: Madison Medical and Sports Rehabilitation Center, Healthcare (multi-specialty practice, NJ).
+- Problems the product addresses:
+  - Business operations fragmented across disconnected systems (email, calendar, banking, spreadsheets); no single view of practice data.
+  - Need to consolidate Outlook (email + calendar), financials, and spreadsheet reporting into one centralized command center for practice ops.
+  - Current EHR (CureMD) is antiquated and cannot accommodate 15 subspecialties with complex cash/self-pay/insurance billing workflows. (EHR replacement is a separate future phase — out of scope here.)
+  - Vizenda reporting tool creates data duplicates and cannot join appointment + provider-note datasets; reports are exported to Excel for manual cleanup.
+  - Staff manually bridge data gaps between systems (copy-paste, print/re-enter); the goal is to automate what humans do today.
 
 ## Kind & tech
 - Kind: prototype
@@ -74,3 +65,60 @@ Madison Command Center is a working, clickable version of the dashboard you desi
 
 ## How to resume
 Read this file. Read `docs/spec.json` for the current spec. Read the latest `docs/iterations/*.md` for recent thinking. Then ask the SDR what they want to do.
+
+---
+
+# Engineering — harness onboarding (added 2026-06-25)
+
+> The sections above are the SDR/sales prototype record and are partly stale (e.g. "Backend:
+> deferred" — a read-only backend now exists). The notes below reflect the **current code at HEAD**.
+> Authoritative engineer handover: `handover.md`.
+
+## Stack & layout (monorepo, single-port deploy)
+- **frontend/** — React 19 + TypeScript + Vite 6 + Tailwind v4, `react-router-dom` v7 (HashRouter), **pnpm**.
+- **backend/** — Node ≥20 ESM, Express 4. A **read-only backend-for-frontend (BFF)**: holds OAuth tokens
+  in-memory per visitor, calls Microsoft Graph + QuickBooks read-only, transforms upstream payloads to the
+  frontend DTOs. **No database; no PHI at rest.** In production it also serves the built SPA (one port).
+
+## Run
+- `npm run dev:frontend` — Vite dev server (mock data; no backend needed).
+- `npm run dev:backend` — Express BFF on :8787. `DEMO_MODE=1` serves deterministic sample data (no creds).
+- `npm run serve` — production-style: build frontend, then backend serves SPA + `/api` on one port.
+
+## Test gate (one command) — **established during onboarding**
+- `npm test` (repo root) = `test:backend` + `test:frontend`.
+  - **backend** — `node --test` characterization suite (`backend/test/characterization.test.js`): spawns the
+    real server in `DEMO_MODE` on a free port and pins the `/api/*` contract (email importance/unread flags,
+    Daily vs Monday dashboard, 12 report metrics, source-status modes, JSON-404). No network, no creds.
+  - **frontend** — `tsc -b --noEmit` typecheck (pins the type-level DTO contract).
+- This was added by onboarding (the repo shipped with **no tests**). **Extend this suite before/with any
+  behavior change** — it is the AFK-build safety net.
+
+## Compliance & logging posture (profile: `hipaa`)
+- `.health-harness/compliance.json` = `hipaa`. In-scope sources (mail, calendar, tasks, QBO, ops spreadsheets)
+  are intended to avoid clinical PHI, but the backend is treated as in-scope for the HIPAA Security Rule.
+- **Audit trail — present.** Central middleware (`backend/src/server.js:40-48`) logs `method path → status (ms)`
+  for every request — the "which source was read, when" trail. **Never logs request/response bodies.**
+- **PHI-safe logging — present.** Only the audit line + a startup line use `console.*`; no PHI values are
+  logged. Keep it that way: log ids/paths, never patient/content values.
+- **No PHI at rest** is an architectural assumption (in-memory sessions, 90s cache, no DB) — preserve it.
+
+## Seams (where to make changes safely)
+- **Frontend data-access seam:** `frontend/src/lib/api.ts` — every page reads through async getters
+  (`getDashboard`, `getEmails`, …). The fetch-from-backend branch is gated on `VITE_API_URL` /
+  `VITE_LIVE_*`. Pages don't change to go live.
+- **Backend contract seam:** `backend/src/transforms.js` maps Graph/QBO → the exact frontend DTOs;
+  `backend/src/demo.js` is the sample-data mirror. `routes.js` wires sources → producers.
+
+## Conventions (theirs — follow, don't reformat)
+- **Commits:** Conventional Commits (`type(scope): subject`, e.g. `ui(theme):`, `chore:`) — keep it.
+- **Branches:** feature branches off `main`, PRs target `main` (an `IN REVIEW` Jira status exists).
+- ESLint + Prettier + lint-staged/husky on the frontend. Match existing code style; no mass reformat.
+
+## Known gaps / cleanup (candidate first tasks — pin with characterization tests before changing)
+- **Microsoft Teams** source is hardcoded `mock` (`server.js:223`) — never wired (out of scope per SOW).
+- **Dead scaffolding (frontend):** Redux + redux-persist + `crypto-js` (hardcoded key — *not* a real
+  security control), orphaned `pages/Overview.tsx` & `pages/Connections.tsx`, and an unreachable `isMonday`
+  branch in `Financials.tsx` (Monday/Weekday toggle UI was removed). Remove or revive deliberately.
+- **Day-over-day deltas** would need a minimal daily financial snapshot persisted — reconcile with the
+  owner's no-storage preference before building.
