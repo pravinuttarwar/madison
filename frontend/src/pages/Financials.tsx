@@ -1,12 +1,11 @@
 import { Wallet, TrendingUp, Landmark } from 'lucide-react';
 import { useViewMode } from '@/context/view-mode';
 import { Panel, Trend, KpiTile } from '@/components/primitives';
-import { Loading, ErrorState } from '@/components/AsyncState';
+import { Loading } from '@/components/AsyncState';
 import { useApi } from '@/hooks/useApi';
 import { getFinancials, sourceModeFor } from '@/lib/api';
 import { config } from '@/config/environment';
 const qboMode = sourceModeFor('quickbooks');
-const qboLive = qboMode !== 'mock';
 import { usd, pctChange } from '@/lib/format';
 
 const CAT_COLORS = ['var(--color-chart-1)', 'var(--color-chart-2)', 'var(--color-chart-3)'];
@@ -57,8 +56,8 @@ export default function Financials() {
   const { data, loading, error } = useApi(getFinancials, []);
 
   if (loading) return <Loading label="Loading financials…" />;
-  // In live mode a financials error means QuickBooks needs (re)connecting → offer Connect.
-  if (error || !data) return qboLive ? <ConnectQuickBooks /> : <ErrorState message={error?.message} />;
+  // A financials error means QuickBooks needs (re)connecting → offer Connect.
+  if (error || !data) return <ConnectQuickBooks />;
 
   const { weekly: WEEKLY_FINANCIAL, daily: DAILY_FINANCIAL } = data;
   const dep = WEEKLY_FINANCIAL.totalDeposits;
@@ -75,7 +74,7 @@ export default function Financials() {
         <h1 className="text-xl font-semibold text-foreground">Financial snapshot</h1>
         <p className="text-sm text-muted-foreground">
           The QuickBooks numbers that matter — deposits, variable spend and net contribution — without
-          opening QuickBooks.{qboLive ? '' : ' Sample figures shown.'}
+          opening QuickBooks.
         </p>
       </div>
 

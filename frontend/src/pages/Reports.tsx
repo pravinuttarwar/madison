@@ -1,6 +1,6 @@
 import { RefreshCw, FileSpreadsheet, Clock } from 'lucide-react';
 import { Panel, Trend, Bar } from '@/components/primitives';
-import { Loading, ErrorState } from '@/components/AsyncState';
+import { Loading } from '@/components/AsyncState';
 import { useApi } from '@/hooks/useApi';
 import { getReports, sourceModeFor } from '@/lib/api';
 import { pctChange } from '@/lib/format';
@@ -54,11 +54,10 @@ const CHART_COLORS = [
 export default function Reports() {
   const { data, loading, error } = useApi(getReports, []);
 
-  // Spreadsheet ingestion not wired → show the pending beat instead of mock numbers.
-  if (spreadsheetMode === 'mock') return <ReportsPending />;
-
   if (loading) return <Loading label="Loading the weekly report…" />;
-  if (error || !data) return <ErrorState message={error?.message} />;
+  // The providers' spreadsheet isn't wired yet (workbook connection is a separate step),
+  // so a failed/empty read shows the pending beat rather than a raw error.
+  if (error || !data) return <ReportsPending />;
 
   const {
     weekNumber: WEEK_NUMBER,

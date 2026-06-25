@@ -12,7 +12,7 @@ import {
 import { cn } from '@/lib/utils';
 
 // ── Source chip — names which system a section reads from ─────────────────────
-export function SourceChip({ children, mode }: { children: ReactNode; mode?: 'mock' | 'sandbox' | 'live' }) {
+export function SourceChip({ children, mode }: { children: ReactNode; mode?: 'sandbox' | 'live' }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
       {children}
@@ -31,12 +31,12 @@ export function SourceChip({ children, mode }: { children: ReactNode; mode?: 'mo
   );
 }
 
-// ── Mode banner — global sandbox/test indicator ───────────────────────────────
-export function ModeBanner({ mode }: { mode: 'mock' | 'sandbox' | 'live' }) {
-  if (mode === 'live' || mode === 'mock') return null;
+// ── Mode banner — global sandbox indicator (hidden on the production apps) ─────
+export function ModeBanner({ mode }: { mode: 'sandbox' | 'live' }) {
+  if (mode !== 'sandbox') return null;
   return (
     <div className="border-b border-warning/30 bg-warning/10 px-4 py-1.5 text-center text-[11px] font-medium text-warning sm:px-6">
-      Test mode — connected to a test Microsoft 365 account set up for this demo.
+      Sandbox — connected to a test Microsoft 365 account, read-only.
     </div>
   );
 }
@@ -54,7 +54,7 @@ export function Panel({
   title?: string;
   subtitle?: string;
   source?: string;
-  sourceMode?: 'mock' | 'sandbox' | 'live';
+  sourceMode?: 'sandbox' | 'live';
   action?: ReactNode;
   children: ReactNode;
   className?: string;

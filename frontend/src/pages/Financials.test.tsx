@@ -29,15 +29,15 @@ describe('Financials — reflects the global view mode', () => {
   });
 });
 
-// MBI-35 (AC3): with the sample fallback gone, an unreachable backend must surface a
-// not-connected/error state through useApi — never sample numbers, never a crash.
+// MBI-35/38 (AC3): with the sample fallback gone and QuickBooks a real (sandbox) source,
+// an unreachable backend surfaces the not-connected/Connect state — never sample numbers.
 describe('Financials — graceful when the backend is unreachable (live-only)', () => {
-  it('shows the error state and no sample figures on a failed fetch', async () => {
+  it('shows the QuickBooks connect prompt and no sample figures on a failed fetch', async () => {
     vi.stubGlobal('fetch', () =>
       Promise.resolve({ ok: false, status: 503, statusText: 'Service Unavailable', json: async () => ({}) }),
     );
     renderFinancials('monday');
-    expect(await screen.findByText("Couldn't load this view")).toBeTruthy();
+    expect(await screen.findByText("QuickBooks isn't connected")).toBeTruthy();
     // The old sample layout must NOT appear (no silent fallback to mock numbers).
     expect(screen.queryByText('Deposits (last week)')).toBeNull();
   });
