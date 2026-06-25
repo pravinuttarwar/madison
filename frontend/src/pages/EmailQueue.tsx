@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Star, Mail as MailIcon, Video } from 'lucide-react';
+import { Star, Mail as MailIcon, Video, Inbox } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Panel } from '@/components/primitives';
-import { Loading, ErrorState } from '@/components/AsyncState';
+import { Loading, ErrorState, EmptyState } from '@/components/AsyncState';
 import { useApi } from '@/hooks/useApi';
 import { getEmails, getAwaiting, getSettings, sourceModeFor } from '@/lib/api';
 const outlookMode = sourceModeFor('outlook');
@@ -15,9 +15,12 @@ export default function EmailQueue() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   if (loading) return <Loading label="Loading your email…" />;
-  if (error || !emails || emails.length === 0) return <ErrorState message={error?.message} />;
+  // A real fetch failure → error view. An empty inbox is NOT an error (MBI-37) — it's a
+  // friendly empty state below, with the follow-up engine still shown.
+  if (error || !emails) return <ErrorState message={error?.message} />;
 
-  const selected = emails.find((e) => e.id === selectedId) ?? emails[0];
+  const isEmpty = emails.length === 0;
+  const selected = isEmpty ? null : emails.find((e) => e.id === selectedId) ?? emails[0];
   const unread = emails.filter((e) => e.unread).length;
 
   return (
@@ -34,9 +37,16 @@ export default function EmailQueue() {
         {/* List + detail */}
         <div className="space-y-5 lg:col-span-3">
           <Panel title="Important emails" source="Outlook" sourceMode={outlookMode}>
+            {isEmpty ? (
+              <EmptyState
+                icon={Inbox}
+                title="Inbox is clear"
+                hint="No important emails right now — we'll surface them here as they arrive."
+              />
+            ) : (
             <ul className="-mx-2 divide-y divide-border">
               {emails.map((e) => {
-                const active = e.id === selected.id;
+                const active = e.id === selected?.id;
                 return (
                   <li key={e.id}>
                     <button
@@ -68,11 +78,13 @@ export default function EmailQueue() {
                 );
               })}
             </ul>
+            )}
           </Panel>
         </div>
 
         {/* Detail + follow-up engine */}
         <div className="space-y-5 lg:col-span-2">
+          {selected && (
           <Panel title="Message" source="Outlook" sourceMode={outlookMode}>
             <div className="flex items-center gap-1.5">
               {selected.important && <Star className="h-3.5 w-3.5 fill-warning text-warning" aria-hidden />}
@@ -104,6 +116,7 @@ export default function EmailQueue() {
               Read-only view — surfaced here so nothing important slips. You reply in Outlook as usual.
             </p>
           </Panel>
+          )}
 
           <Panel title="Awaiting response" source="Follow-up engine" sourceMode={outlookMode}>
             <p className="mb-3 flex items-center gap-1.5 text-xs text-muted-foreground">
