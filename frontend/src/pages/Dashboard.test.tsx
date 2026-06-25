@@ -40,6 +40,40 @@ describe('Dashboard — Daily vs Monday composition', () => {
     // It is NOT the Daily view.
     expect(screen.queryByText('Yesterday deposit')).toBeNull();
   });
+
+  it('Monday view renders QuickBooks + spreadsheet figures with correct week-over-week deltas', async () => {
+    const data = await getDashboard('monday'); // full sample: financialWeek + metrics + totalEncounters
+    render(
+      <MemoryRouter>
+        <UserProvider>
+          <MondayView data={data} />
+        </UserProvider>
+      </MemoryRouter>,
+    );
+    // Total encounters (spreadsheet) — locale-formatted value…
+    expect(screen.getByText('1,547')).toBeTruthy();
+    // Deposits last week + net contribution (QuickBooks) — usd()-formatted…
+    expect(screen.getByText('312.4K USD')).toBeTruthy();
+    expect(screen.getAllByText('224.9K USD').length).toBeGreaterThan(0);
+    // …and the week-over-week % is actually wired into the trend badge (pctChange(312380,298640)=5).
+    expect(screen.getByText((_, el) => el?.textContent === '+5%')).toBeTruthy();
+    // The full week-over-week metrics table renders real spreadsheet rows.
+    expect(screen.getByText('Chiropractic seen')).toBeTruthy();
+    expect(screen.getByText('612')).toBeTruthy();
+    expect(screen.getByText('598')).toBeTruthy();
+    // Outlook schedule + Microsoft To Do priority (the live-present sources) render.
+    expect(screen.getByText('Clinic open / staff huddle')).toBeTruthy();
+    expect(screen.getByText('Sign off peptide handout v3')).toBeTruthy();
+  });
+
+  it('Daily view renders the QuickBooks yesterday-deposit value/delta and an Outlook email', async () => {
+    renderDashboard('weekday');
+    // QuickBooks yesterday deposit — usd(58420) + WoW % (pctChange(58420,54180)=8).
+    expect(await screen.findByText('58.4K USD')).toBeTruthy();
+    expect(screen.getByText((_, el) => el?.textContent === '+8%')).toBeTruthy();
+    // Outlook email triage shows a real sender.
+    expect(screen.getByText('Practice manager')).toBeTruthy();
+  });
 });
 
 describe('Dashboard — view toggle', () => {
