@@ -96,9 +96,11 @@ export type DashboardData = {
   view: ViewMode;
   owner: string;
   dates: { monday: string; weekday: string };
-  weekNumber: number;
-  metrics: WeeklyMetric[];
-  totalEncounters: { last: number; prior: number };
+  // Spreadsheet-sourced fields: present in mock/demo, but the live BFF omits them when
+  // the providers' weekly spreadsheet isn't wired — so treat them as optional/absent.
+  weekNumber?: number;
+  metrics?: WeeklyMetric[];
+  totalEncounters?: { last: number; prior: number };
   financialWeek: WeeklyFinancial | null;
   financialDay: DailyFinancial | null;
   schedule: ScheduleItem[];

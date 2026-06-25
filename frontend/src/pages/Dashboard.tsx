@@ -268,8 +268,12 @@ export function MondayView({ data }: { data: DashboardData }) {
   const { user } = useUser();
   const ownerName = user?.displayName || data.owner;
   const fin = data.financialWeek; // null when QuickBooks isn't connected
-  const enc = data.totalEncounters;
-  const newPatients = data.metrics.find((m) => m.key === 'new_patients');
+  // Spreadsheet-sourced fields are absent in live mode until the weekly spreadsheet is
+  // wired — default safely so the view degrades instead of crashing.
+  const metrics = data.metrics ?? [];
+  const enc = data.totalEncounters ?? null;
+  const hasWeeklyReport = metrics.length > 0;
+  const newPatients = metrics.find((m) => m.key === 'new_patients');
   const maxDep = fin ? Math.max(...fin.depositsByDay.map((d) => d.amount)) : 0;
 
   const toDoMode = sourceModeFor('microsoftToDo');
@@ -291,10 +295,10 @@ export function MondayView({ data }: { data: DashboardData }) {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <KpiTile
           label="Total encounters"
-          value={enc.last.toLocaleString()}
-          sub="Last week · all specialties"
+          value={enc ? enc.last.toLocaleString() : '—'}
+          sub={enc ? 'Last week · all specialties' : 'Weekly report not connected'}
           icon={Activity}
-          trend={<Trend delta={pctChange(enc.last, enc.prior)} unit="%" />}
+          trend={enc ? <Trend delta={pctChange(enc.last, enc.prior)} unit="%" /> : undefined}
         />
         {newPatients && (
           <KpiTile
@@ -325,35 +329,44 @@ export function MondayView({ data }: { data: DashboardData }) {
         {/* Full week-over-week metrics table */}
         <Panel
           title="Weekly metrics"
-          subtitle={`Week ${data.weekNumber} vs the prior week · week-over-week`}
+          subtitle={hasWeeklyReport
+            ? `Week ${data.weekNumber ?? '—'} vs the prior week · week-over-week`
+            : "The providers' weekly spreadsheet isn't connected yet"}
           source="Weekly spreadsheet" sourceMode={spreadsheetMode}
           action={<SectionLink to="/reports" label="Open report" />}
           className="lg:col-span-2"
         >
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="py-2 pr-3 font-medium">Metric</th>
-                  <th className="py-2 px-3 text-right font-medium">Last week</th>
-                  <th className="py-2 px-3 text-right font-medium">Prior</th>
-                  <th className="py-2 pl-3 text-right font-medium">Change</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {data.metrics.map((m) => (
-                  <tr key={m.key} className="transition-colors hover:bg-muted/50">
-                    <td className="py-2 pr-3 font-medium text-foreground">{m.label}</td>
-                    <td className="py-2 px-3 text-right tabular-nums text-foreground">{m.last}</td>
-                    <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">{m.prior}</td>
-                    <td className="py-2 pl-3 text-right">
-                      <Trend delta={m.last - m.prior} />
-                    </td>
+          {!hasWeeklyReport ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Weekly report not connected — wire the providers' spreadsheet to populate
+              new patients, encounters by specialty and the week-over-week metrics.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <th className="py-2 pr-3 font-medium">Metric</th>
+                    <th className="py-2 px-3 text-right font-medium">Last week</th>
+                    <th className="py-2 px-3 text-right font-medium">Prior</th>
+                    <th className="py-2 pl-3 text-right font-medium">Change</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {metrics.map((m) => (
+                    <tr key={m.key} className="transition-colors hover:bg-muted/50">
+                      <td className="py-2 pr-3 font-medium text-foreground">{m.label}</td>
+                      <td className="py-2 px-3 text-right tabular-nums text-foreground">{m.last}</td>
+                      <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">{m.prior}</td>
+                      <td className="py-2 pl-3 text-right">
+                        <Trend delta={m.last - m.prior} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Panel>
 
         {/* This week's priorities — same backend-derived list as the daily view */}

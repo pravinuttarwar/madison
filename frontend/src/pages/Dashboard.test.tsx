@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { ViewModeProvider, type ViewMode } from '@/context/view-mode';
 import { UserProvider } from '@/context/UserContext';
 import Dashboard, { MondayView } from '@/pages/Dashboard';
-import { getDashboard } from '@/lib/api';
+import { getDashboard, type DashboardData } from '@/lib/api';
 
 afterEach(cleanup);
 
@@ -79,5 +79,27 @@ describe('Dashboard — null-safety when QuickBooks is not connected', () => {
     expect(screen.getByText('Total encounters')).toBeTruthy();
     // …and the financial tiles/panel degrade to a not-connected state.
     expect(screen.getAllByText('QuickBooks not connected').length).toBeGreaterThan(0);
+  });
+
+  it('Monday view survives live data missing the spreadsheet fields (metrics/totalEncounters undefined)', async () => {
+    const data = await getDashboard('monday');
+    // Mirror the live BFF shape when the providers' spreadsheet isn't wired.
+    const noSpreadsheet: DashboardData = {
+      ...data,
+      metrics: undefined,
+      totalEncounters: undefined,
+      weekNumber: undefined,
+    };
+    render(
+      <MemoryRouter>
+        <UserProvider>
+          <MondayView data={noSpreadsheet} />
+        </UserProvider>
+      </MemoryRouter>,
+    );
+    // No crash: the live-present sections still render…
+    expect(screen.getByText("This week's priorities")).toBeTruthy();
+    // …and the weekly-report section degrades to a not-connected state.
+    expect(screen.getAllByText(/weekly report not connected/i).length).toBeGreaterThan(0);
   });
 });
