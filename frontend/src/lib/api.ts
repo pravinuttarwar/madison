@@ -39,7 +39,6 @@ import type {
 export type SourceId =
   | 'outlook' // Outlook mail + calendar (Microsoft Graph)
   | 'microsoftToDo' // Tasks by owner (Microsoft Graph / To Do or Planner)
-  | 'microsoftTeams' // Mentions + DMs (Microsoft Graph)
   | 'quickbooks' // Deposits + spend (QuickBooks Online)
   | 'spreadsheet'; // Providers' weekly report (Excel via Graph Workbook)
 
@@ -63,7 +62,6 @@ function modeFor(id: SourceId): SourceMode {
 export const SOURCE_MODES: Record<SourceId, SourceMode> = {
   outlook: modeFor('outlook'),
   microsoftToDo: modeFor('microsoftToDo'),
-  microsoftTeams: modeFor('microsoftTeams'),
   quickbooks: modeFor('quickbooks'),
   spreadsheet: modeFor('spreadsheet'),
 };
@@ -71,7 +69,6 @@ export const SOURCE_MODES: Record<SourceId, SourceMode> = {
 export const SOURCE_LABELS: Record<SourceId, string> = {
   outlook: 'Outlook',
   microsoftToDo: 'Microsoft To Do',
-  microsoftTeams: 'Microsoft Teams',
   quickbooks: 'QuickBooks',
   spreadsheet: 'Weekly spreadsheet',
 };

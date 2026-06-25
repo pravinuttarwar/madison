@@ -171,17 +171,17 @@ test('GET /api/dashboard?view=monday — Monday (weekly recap) view', async () =
   assert.equal(body.priorityToday.length, 5);
 });
 
-test('GET /api/sources/status — five sources; sandbox in demo except hardcoded-mock Teams', async () => {
+test('GET /api/sources/status — four in-scope sources; all sandbox in demo (no Teams)', async () => {
   const { status, body } = await getJson('/api/sources/status');
   assert.equal(status, 200);
-  assert.equal(body.length, 5);
+  assert.equal(body.length, 4);
   const byId = Object.fromEntries(body.map((s) => [s.id, s.mode]));
-  // In demo mode every connectable source reports 'sandbox' — except Microsoft Teams,
-  // which is hardcoded 'mock' (never wired). Pins that known gap.
+  // In demo mode every in-scope source reports 'sandbox'. Microsoft Teams was removed —
+  // it was never wired and is out of scope per the SOW, so it must not appear at all.
   for (const id of ['outlook', 'microsoftToDo', 'quickbooks', 'spreadsheet']) {
     assert.equal(byId[id], 'sandbox', `${id} should be sandbox in demo`);
   }
-  assert.equal(byId.microsoftTeams, 'mock');
+  assert.equal(byId.microsoftTeams, undefined);
 });
 
 test('GET /api/unknown — JSON 404, never SPA fallthrough', async () => {

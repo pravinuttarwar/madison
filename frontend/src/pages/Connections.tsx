@@ -88,7 +88,7 @@ export default function Connections() {
 
   const byId = Object.fromEntries(sources.map((s) => [s.id, s.mode])) as Record<string, SourceMode>;
   // One Microsoft sign-in covers every Microsoft source at once; show the "least live" state.
-  const msIds = ['outlook', 'microsoftToDo', 'microsoftTeams', 'spreadsheet'] as const;
+  const msIds = ['outlook', 'microsoftToDo', 'spreadsheet'] as const;
   const msMode: SourceMode = msIds.every((id) => byId[id] === 'live')
     ? 'live'
     : msIds.some((id) => byId[id] !== 'mock')

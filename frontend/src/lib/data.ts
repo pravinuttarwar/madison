@@ -17,14 +17,12 @@ export const PRACTICE = 'Madison Medical & Sports Rehabilitation Center';
 export type Source =
   | 'Outlook'
   | 'Microsoft To Do'
-  | 'Microsoft Teams'
   | 'QuickBooks'
   | 'Weekly spreadsheet';
 
 export const DATA_SOURCES: { name: Source; detail: string }[] = [
   { name: 'Outlook', detail: 'Email + calendar' },
   { name: 'Microsoft To Do', detail: 'Tasks by owner' },
-  { name: 'Microsoft Teams', detail: 'Mentions + DMs' },
   { name: 'QuickBooks', detail: 'Deposits + spend' },
   { name: 'Weekly spreadsheet', detail: "Providers' weekly report" },
 ];
