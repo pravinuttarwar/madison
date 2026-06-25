@@ -17,6 +17,9 @@ export default defineConfig({
     // wire live sources). The render checks exercise composition over sample data — no
     // backend, deterministic — which is exactly the no-backend build the app must support.
     env: { VITE_LIVE_SOURCES: '', VITE_API_URL: '' },
+    // Installs an offline fetch stub serving the synthetic fixtures for `/api/*`, so the
+    // render tests pass against the live-only getters with no backend (MBI-35).
+    setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
   },
 });

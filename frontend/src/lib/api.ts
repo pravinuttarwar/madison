@@ -18,7 +18,6 @@
 
 import { config } from '@/config/environment';
 import type { ViewMode } from '@/context/view-mode';
-import * as mock from '@/lib/data';
 import type {
   Email,
   AwaitingResponse,
@@ -127,18 +126,6 @@ export class ApiError extends Error {
 let _onAuthError: (() => void) | null = null;
 export function setAuthErrorHandler(fn: () => void) { _onAuthError = fn; }
 
-// A source is "live" purely from VITE_LIVE_SOURCES — NOT from the API URL, because
-// in the single-port deploy the backend is same-origin (apiUrl is empty / relative).
-// The static (no-backend) build must omit VITE_LIVE_SOURCES so everything stays mock.
-function isLive(source: SourceId): boolean {
-  return SOURCE_MODES[source] !== 'mock';
-}
-
-// True when the composed dashboard should be fetched from the backend BFF.
-function dashboardLive(): boolean {
-  return Object.values(SOURCE_MODES).some((m) => m !== 'mock');
-}
-
 async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${config.apiUrl}${path}`, {
     headers: { Accept: 'application/json' },
@@ -154,78 +141,40 @@ async function fetchJson<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-// Read a source: return sample data unless that source is wired, in which case
-// hit the backend route. This is the only branch a dev touches to go live.
-async function read<T>(source: SourceId, path: string, sample: T): Promise<T> {
-  if (!isLive(source)) return sample;
-  return fetchJson<T>(path);
-}
-
 // ── Getters (what the UI calls) ──────────────────────────────────────────────
+// Live-only (MBI-35): every getter fetches its backend route. The runtime sample
+// fallback is gone — with no backend/session the call rejects and the UI shows a
+// loading/empty/not-connected state (via useApi), never sample numbers.
 export function getEmails(): Promise<Email[]> {
-  return read('outlook', '/api/email', mock.EMAILS);
+  return fetchJson<Email[]>('/api/email');
 }
 
 export function getEmail(id: string): Promise<Email | undefined> {
-  if (!isLive('outlook')) return Promise.resolve(mock.EMAILS.find((e) => e.id === id));
   return fetchJson<Email>(`/api/email/${id}`);
 }
 
 // Derived "follow-up engine" — not a raw mailbox field (see ARCHITECTURE.md).
 export function getAwaiting(): Promise<AwaitingResponse[]> {
-  return read('outlook', '/api/email/awaiting', mock.AWAITING_RESPONSE);
+  return fetchJson<AwaitingResponse[]>('/api/email/awaiting');
 }
 
 export function getCalendar(): Promise<CalendarData> {
-  return read('outlook', '/api/calendar', {
-    today: mock.TODAY_SCHEDULE,
-    week: mock.WEEK_CALENDAR,
-  });
+  return fetchJson<CalendarData>('/api/calendar');
 }
 
 export function getTasks(): Promise<Task[]> {
-  return read('microsoftToDo', '/api/tasks', mock.TASKS);
+  return fetchJson<Task[]>('/api/tasks');
 }
 
 export function getFinancials(): Promise<FinancialsData> {
-  return read('quickbooks', '/api/financials', {
-    weekly: mock.WEEKLY_FINANCIAL,
-    daily: mock.DAILY_FINANCIAL,
-  });
+  return fetchJson<FinancialsData>('/api/financials');
 }
 
 export function getReports(): Promise<ReportsData> {
-  return read('spreadsheet', '/api/reports', {
-    weekNumber: mock.WEEK_NUMBER,
-    metrics: mock.WEEKLY_METRICS,
-    encountersBySpecialty: mock.ENCOUNTERS_BY_SPECIALTY,
-    totalEncounters: mock.TOTAL_ENCOUNTERS,
-  });
+  return fetchJson<ReportsData>('/api/reports');
 }
 
 export function getDashboard(view: ViewMode): Promise<DashboardData> {
-  const sample: DashboardData = {
-    view,
-    owner: mock.OWNER,
-    dates: mock.DATES,
-    weekNumber: mock.WEEK_NUMBER,
-    metrics: mock.WEEKLY_METRICS,
-    totalEncounters: mock.TOTAL_ENCOUNTERS,
-    financialWeek: mock.WEEKLY_FINANCIAL,
-    financialDay: mock.DAILY_FINANCIAL,
-    schedule: mock.TODAY_SCHEDULE,
-    weekCalendar: mock.WEEK_CALENDAR,
-    emails: mock.EMAILS,
-    awaiting: mock.AWAITING_RESPONSE,
-    tasks: mock.TASKS,
-    // Sample priority derived from sample tasks — same logic as the live backend
-    priorityToday: [
-      ...mock.TASKS.filter((t) => t.status === 'overdue'),
-      ...mock.TASKS.filter((t) => t.status === 'due-today'),
-    ].slice(0, 5),
-    awaitingThresholdHours: 48, // sample default; live value comes from the backend
-  };
-  if (!dashboardLive()) return Promise.resolve(sample);
   return fetchJson<DashboardData>(`/api/dashboard?view=${view}`);
 }
 
@@ -236,7 +185,6 @@ export type MeData = { displayName: string; mail: string };
 // handler (which would wrongly flash "session expired" on a clean first load). The
 // caller treats a thrown/rejected probe as unauthenticated.
 export async function getMe(): Promise<MeData> {
-  if (!isLive('outlook')) return { displayName: mock.OWNER, mail: '' };
   const res = await fetch(`${config.apiUrl}/api/me`, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
@@ -245,10 +193,9 @@ export async function getMe(): Promise<MeData> {
   return (await res.json()) as MeData;
 }
 
-// Runtime settings (e.g. the awaiting-response threshold) from backend/.env. In
-// mock mode there's no backend, so the documented 48h default is returned.
+// Runtime settings (e.g. the awaiting-response threshold) from backend/.env.
 export function getSettings(): Promise<AppSettings> {
-  return read('outlook', '/api/settings', { awaitingThresholdHours: 48 });
+  return fetchJson<AppSettings>('/api/settings');
 }
 
 // Drop the backend session so a page refresh stays signed out. No-op in mock mode
