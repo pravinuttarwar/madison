@@ -18,6 +18,38 @@ function relativeTime(iso) {
 const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 const LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+// QuickBooks TxnDate (and other date-only "YYYY-MM-DD" values) are calendar dates in
+// the company's local zone, NOT instants. `new Date("2026-06-24")` parses as UTC
+// midnight, which rolls back a day once read with local getters in a negative-offset
+// zone (ET). Parse the parts into a local Date so the weekday/day bucket is correct.
+// The process runs in the practice zone (TZ=America/New_York), so "local" = practice.
+function parseLocalDate(ymd) {
+  const [y, m, d] = String(ymd).split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+// Format a Date as "YYYY-MM-DD" in the process-local (practice) zone — the local-zone
+// counterpart to toISOString().slice(0,10), which would give the UTC date instead.
+function localYmd(date) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
+}
+// Microsoft Graph returns event times as a ZONELESS dateTime + a separate timeZone
+// field (UTC by default — no trailing Z). Plain `new Date(dateTime)` on a zoneless
+// string assumes the process-local zone, which is wrong. Combine the two into the
+// correct instant: honour an explicit Z/offset, else read the stated zone (UTC).
+function graphInstant(slot) {
+  if (slot == null) return new Date(NaN);
+  if (typeof slot === 'string') return new Date(slot);
+  const dt = slot.dateTime;
+  if (!dt) return new Date(slot);
+  // Already an unambiguous instant (trailing Z or ±HH:MM offset) → use as-is.
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(dt)) return new Date(dt);
+  // Zoneless: Graph's default zone is UTC (we also request Prefer: outlook.timezone=UTC),
+  // so read it as UTC. A named zone is best-effort as-is (we force UTC upstream).
+  if (!slot.timeZone || slot.timeZone === 'UTC') return new Date(dt + 'Z');
+  return new Date(dt);
+}
+
 function decodeHtmlBody(html) {
   if (!html) return '';
   return html
@@ -108,8 +140,8 @@ function cleanDescription(text) {
 // Map a Graph event into the rich ScheduleItem the UI renders (description, join
 // link, attendees + responses, organizer, location, end time).
 function scheduleItemFromEvent(e) {
-  const start = new Date(e.start?.dateTime || e.start);
-  const end = e.end?.dateTime || e.end ? new Date(e.end?.dateTime || e.end) : null;
+  const start = graphInstant(e.start);
+  const end = e.end?.dateTime || e.end ? graphInstant(e.end) : null;
   const attendees = (e.attendees || []).map((a) => ({
     name: a.emailAddress?.name || a.emailAddress?.address || 'Guest',
     email: a.emailAddress?.address || undefined,
@@ -137,13 +169,13 @@ export function calendarFromGraph(events) {
   const todayStr = now.toDateString();
 
   const today = events
-    .filter((e) => new Date(e.start?.dateTime || e.start).toDateString() === todayStr)
+    .filter((e) => graphInstant(e.start).toDateString() === todayStr)
     .map(scheduleItemFromEvent);
 
   // Group the week (next 5 days with events) — keep EVERY meeting, not just two.
   const byDay = new Map();
   for (const e of events) {
-    const d = new Date(e.start?.dateTime || e.start);
+    const d = graphInstant(e.start);
     const key = d.toDateString();
     if (!byDay.has(key)) byDay.set(key, { date: d, events: [] });
     byDay.get(key).events.push(scheduleItemFromEvent(e));
@@ -154,7 +186,7 @@ export function calendarFromGraph(events) {
     .map(({ date, events: evs }) => ({
       day: DAYS[date.getDay()],
       long: LONG[date.getDay()],
-      date: date.toISOString().slice(0, 10),
+      date: localYmd(date),
       count: evs.length,
       events: evs,
       today: date.toDateString() === todayStr,
@@ -192,10 +224,10 @@ export function financialsFromQbo(deposits, purchases, fixedAccountIds, now = ne
 
   // "This" = all fetched transactions (last 60 days); "prior" = oldest half for delta.
   const midpoint = new Date(now.getTime() - 30 * 86_400_000);
-  const depThis = deposits.filter((d) => new Date(d.TxnDate) >= midpoint);
-  const depPrior = deposits.filter((d) => new Date(d.TxnDate) < midpoint);
-  const purThis = purchases.filter((p) => isVariable(p) && new Date(p.TxnDate) >= midpoint);
-  const purPrior = purchases.filter((p) => isVariable(p) && new Date(p.TxnDate) < midpoint);
+  const depThis = deposits.filter((d) => parseLocalDate(d.TxnDate) >= midpoint);
+  const depPrior = deposits.filter((d) => parseLocalDate(d.TxnDate) < midpoint);
+  const purThis = purchases.filter((p) => isVariable(p) && parseLocalDate(p.TxnDate) >= midpoint);
+  const purPrior = purchases.filter((p) => isVariable(p) && parseLocalDate(p.TxnDate) < midpoint);
 
   // If nothing in "this" half, promote everything so numbers always show.
   const effectiveDepThis = depThis.length ? depThis : deposits;
@@ -209,13 +241,14 @@ export function financialsFromQbo(deposits, purchases, fixedAccountIds, now = ne
   // Build per-day deposits for the bar chart (last 7 days, any with data).
   const byDay = {};
   for (const d of effectiveDepThis) {
-    const day = DAYS[new Date(d.TxnDate).getDay()];
+    const day = DAYS[parseLocalDate(d.TxnDate).getDay()];
     byDay[day] = (byDay[day] || 0) + Number(d.TotalAmt);
   }
   const depositsByDay = Object.entries(byDay).map(([day, amount]) => ({ day, amount }));
 
-  // Yesterday deposits for the daily KPI tile.
-  const yest = new Date(now.getTime() - 86_400_000).toISOString().slice(0, 10);
+  // Yesterday deposits for the daily KPI tile. Compute the date in the practice zone
+  // (matching QBO's company-local TxnDate), not the UTC date, to avoid an off-by-one.
+  const yest = localYmd(new Date(now.getTime() - 86_400_000));
   const depYest = deposits.filter((d) => d.TxnDate === yest);
   const depYestTotal = sum(depYest, (d) => Number(d.TotalAmt));
 
