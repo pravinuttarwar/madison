@@ -2,9 +2,6 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import madisonLogo from '@/assets/madison-logo.webp';
 import { useUser } from '@/context/UserContext';
-import { SOURCE_MODES } from '@/lib/api';
-
-const isMockMode = !SOURCE_MODES.outlook || SOURCE_MODES.outlook === 'mock';
 
 function MicrosoftIcon() {
   return (
@@ -64,35 +61,21 @@ export default function Login() {
             )}
 
             {/* Sign-in */}
-            {isMockMode ? (
-              <div className="space-y-4">
-                <div className="rounded-lg border border-dashed border-border bg-muted/40 px-4 py-3 text-center text-xs text-muted-foreground">
-                  Demo mode — using sample data
-                </div>
-                <button
-                  onClick={() => navigate('/')}
-                  className="inline-flex w-full items-center justify-center gap-2.5 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
-                >
-                  Enter Command Center
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <p className="text-center text-sm text-muted-foreground">
-                  Sign in with your Microsoft 365 account to access your practice data.
-                </p>
-                <button
-                  onClick={login}
-                  className="inline-flex w-full items-center justify-center gap-2.5 rounded-xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-muted"
-                >
-                  <MicrosoftIcon />
-                  Continue with Microsoft 365
-                </button>
-                <p className="text-center text-[11px] text-muted-foreground">
-                  Read-only access · your data never leaves your tenant
-                </p>
-              </div>
-            )}
+            <div className="space-y-4">
+              <p className="text-center text-sm text-muted-foreground">
+                Sign in with your Microsoft 365 account to access your practice data.
+              </p>
+              <button
+                onClick={login}
+                className="inline-flex w-full items-center justify-center gap-2.5 rounded-xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground shadow-sm transition-colors hover:bg-muted"
+              >
+                <MicrosoftIcon />
+                Continue with Microsoft 365
+              </button>
+              <p className="text-center text-[11px] text-muted-foreground">
+                Read-only access · your data never leaves your tenant
+              </p>
+            </div>
           </div>
 
           {/* Footer note */}

@@ -112,7 +112,7 @@ export default function EmailQueue() {
             </p>
             {(awaiting ?? []).length === 0 ? (
               <p className="py-4 text-center text-sm text-muted-foreground">
-                {outlookMode !== 'mock' ? 'No unanswered emails right now — all caught up.' : 'No follow-ups in sample data.'}
+                No unanswered emails right now — all caught up.
               </p>
             ) : (
             <ul className="space-y-3">

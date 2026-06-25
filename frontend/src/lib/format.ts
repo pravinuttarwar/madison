@@ -1,6 +1,6 @@
-// Money formatting for the prototype.
+// Money formatting.
 // Governance: NEVER emit a "$"-prefixed number. Lead with a trend; show magnitude
-// only in a non-"$" form ("58.4K USD"), and make clear it is sample data.
+// only in a non-"$" form ("58.4K USD").
 export function usd(n: number): string {
   const abs = Math.abs(n);
   let val: string;

@@ -4,12 +4,9 @@ import { cn } from '@/lib/utils';
 import { Panel, StatusPill, OwnerChip } from '@/components/primitives';
 import { Loading, ErrorState } from '@/components/AsyncState';
 import { useApi } from '@/hooks/useApi';
-import { getTasks, sourceModeFor } from '@/lib/api';
+import { getTasks } from '@/lib/api';
 import { type Task } from '@/lib/data';
 import { useUser } from '@/context/UserContext';
-
-const todoMode = sourceModeFor('microsoftToDo');
-const isLive = todoMode !== 'mock';
 
 const ORDER: Record<Task['status'], number> = { overdue: 0, 'due-today': 1, upcoming: 2, done: 3 };
 
@@ -35,10 +32,9 @@ export default function Tasks() {
   if (loading) return <Loading label="Loading tasks…" />;
   if (error || !tasks) return <ErrorState message={error?.message} />;
 
-  // Microsoft To Do only exposes the signed-in person's own lists. Live already
-  // returns just their tasks; for the sample we scope to the owner ('DCR') so the
-  // screen shows one person's list — never a multi-owner board we can't power yet.
-  const myTasks = isLive ? tasks : tasks.filter((t) => t.owner === 'DCR');
+  // Microsoft To Do only exposes the signed-in person's own lists, so the backend
+  // already returns just their tasks.
+  const myTasks = tasks;
   const myName = user?.displayName || 'You';
 
   if (myTasks.length === 0)
@@ -50,9 +46,7 @@ export default function Tasks() {
         <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center">
           <p className="text-sm font-medium text-foreground">No tasks found</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {isLive
-              ? "Your Microsoft To Do has no tasks yet — add some and they'll appear here."
-              : 'No tasks in the sample data.'}
+            Your Microsoft To Do has no tasks yet — add some and they'll appear here.
           </p>
         </div>
       </div>

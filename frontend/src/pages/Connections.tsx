@@ -17,9 +17,8 @@ import { useApi } from '@/hooks/useApi';
 import { getSourceStatus, type SourceMode } from '@/lib/api';
 
 const MODE_COPY: Record<SourceMode, { label: string; cls: string }> = {
-  mock: { label: 'Sample data', cls: 'border-border bg-muted text-muted-foreground' },
   sandbox: { label: 'Sandbox', cls: 'border-warning/30 bg-warning/10 text-warning' },
-  live: { label: 'Connected', cls: 'border-success/30 bg-success/10 text-success' },
+  live: { label: 'Live', cls: 'border-success/30 bg-success/10 text-success' },
 };
 
 function ModeBadge({ mode }: { mode: SourceMode }) {
@@ -87,22 +86,18 @@ export default function Connections() {
   if (error || !sources) return <ErrorState message={error?.message} />;
 
   const byId = Object.fromEntries(sources.map((s) => [s.id, s.mode])) as Record<string, SourceMode>;
-  // One Microsoft sign-in covers every Microsoft source at once; show the "least live" state.
+  // One Microsoft sign-in covers every Microsoft source at once; live only when all are.
   const msIds = ['outlook', 'microsoftToDo', 'spreadsheet'] as const;
-  const msMode: SourceMode = msIds.every((id) => byId[id] === 'live')
-    ? 'live'
-    : msIds.some((id) => byId[id] !== 'mock')
-      ? 'sandbox'
-      : 'mock';
+  const msMode: SourceMode = msIds.every((id) => byId[id] === 'live') ? 'live' : 'sandbox';
 
   return (
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-semibold text-foreground">Connections</h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          One place to grant the read-only access that flips this dashboard from sample data to your
-          live numbers. Two steps — sign in with Microsoft once, and connect QuickBooks. We never see
-          a password, never write anything back, and store no data.
+          One place to grant the read-only access that connects this dashboard to your live numbers.
+          Two steps — sign in with Microsoft once, and connect QuickBooks. We never see a password,
+          never write anything back, and store no data.
         </p>
       </div>
 
@@ -159,7 +154,7 @@ export default function Connections() {
       </Panel>
 
       {/* QuickBooks */}
-      <Panel title="QuickBooks Online" action={<ModeBadge mode={byId.quickbooks ?? 'mock'} />}>
+      <Panel title="QuickBooks Online" action={<ModeBadge mode={byId.quickbooks ?? 'sandbox'} />}>
         <p className="text-sm text-muted-foreground">
           Connect QuickBooks to pull deposits, variable spend and net contribution into the Financials
           tab — without opening QuickBooks. We only read your accounting data and never post changes
@@ -187,8 +182,8 @@ export default function Connections() {
       </Panel>
 
       <p className="text-xs text-muted-foreground">
-        Connecting live systems is the next-phase step. Today every tab runs on realistic sample data
-        so you can click through the full experience first.
+        These read-only connections power every tab. We never write anything back, and no data is
+        stored.
       </p>
     </div>
   );

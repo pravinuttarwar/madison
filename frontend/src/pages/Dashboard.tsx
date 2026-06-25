@@ -158,7 +158,7 @@ export function TodayView({ data }: { data: DashboardData }) {
         <Panel title="Today's schedule" source="Outlook" sourceMode={outlookMode} className="lg:col-span-2">
           {data.schedule.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              {outlookMode !== 'mock' ? 'No meetings on your calendar today.' : 'No events in sample data.'}
+              No meetings on your calendar today.
             </p>
           ) : (
           <ul className="divide-y divide-border">
@@ -201,7 +201,7 @@ export function TodayView({ data }: { data: DashboardData }) {
         >
           {data.priorityToday.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              {toDoMode !== 'mock' ? 'No urgent tasks — you\'re all caught up.' : 'No urgent tasks in sample data.'}
+              No urgent tasks — you're all caught up.
             </p>
           ) : (
             <ul className="divide-y divide-border">
@@ -229,7 +229,7 @@ export function TodayView({ data }: { data: DashboardData }) {
         >
           {data.emails.filter((e) => e.important).length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              {outlookMode !== 'mock' ? 'No flagged emails right now.' : 'No important emails in sample data.'}
+              No flagged emails right now.
             </p>
           ) : (
           <ul className="divide-y divide-border">
@@ -264,7 +264,7 @@ export function TodayView({ data }: { data: DashboardData }) {
         >
           {data.awaiting.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              {outlookMode !== 'mock' ? 'No unanswered emails — all caught up.' : 'No follow-ups in sample data.'}
+              No unanswered emails — all caught up.
             </p>
           ) : (
           <ul className="divide-y divide-border">
@@ -405,7 +405,7 @@ export function MondayView({ data }: { data: DashboardData }) {
         >
           {data.priorityToday.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              {toDoMode !== 'mock' ? "No urgent tasks — you're all caught up." : 'No urgent tasks in sample data.'}
+              No urgent tasks — you're all caught up.
             </p>
           ) : (
             <ul className="divide-y divide-border">
@@ -428,7 +428,7 @@ export function MondayView({ data }: { data: DashboardData }) {
         <Panel title="Today's schedule" source="Outlook" sourceMode={outlookMode} className="lg:col-span-2">
           {data.schedule.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              {outlookMode !== 'mock' ? 'No meetings on your calendar today.' : 'No events in sample data.'}
+              No meetings on your calendar today.
             </p>
           ) : (
             <ul className="divide-y divide-border">

@@ -16,7 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import { OWNER, DATES } from '@/lib/data';
 import madisonLogo from '@/assets/madison-logo.webp';
-import { LIVE_MODE, SOURCE_MODES } from '@/lib/api';
+import { LIVE_MODE } from '@/lib/api';
 import { ModeBanner } from '@/components/primitives';
 import { useUser } from '@/context/UserContext';
 
@@ -216,7 +216,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const loc = useLocation();
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <ModeBanner mode={Object.values(SOURCE_MODES).some(m => m !== 'mock') ? LIVE_MODE : 'mock'} />
+      <ModeBanner mode={LIVE_MODE} />
       <header className="sticky top-0 z-30 border-b border-border bg-card/85 backdrop-blur supports-[backdrop-filter]:bg-card/70">
         <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <Wordmark />
@@ -262,11 +262,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <footer className="mx-auto max-w-[1240px] px-4 pb-16 pt-2 sm:px-6">
         <p className="text-center text-[11px] text-muted-foreground">
-          {Object.values(SOURCE_MODES).every(m => m === 'mock')
-            ? 'Sample data shown for this walkthrough · live read-only connections are the next-phase step.'
-            : LIVE_MODE === 'sandbox'
-              ? 'Connected to a test Microsoft 365 account set up for this demo · read-only · no data is stored.'
-              : 'Live read-only connections active · no data is stored.'}
+          {LIVE_MODE === 'sandbox'
+            ? 'Connected to a test Microsoft 365 account · read-only · no data is stored.'
+            : 'Live read-only connections active · no data is stored.'}
         </p>
       </footer>
     </div>

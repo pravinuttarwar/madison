@@ -10,6 +10,8 @@ import {
   getDashboard,
   getMe,
   getSettings,
+  getSourceStatus,
+  sourceModeFor,
 } from '@/lib/api';
 
 // MBI-35: the getters are LIVE-ONLY — every one hits the backend route, with no
@@ -56,4 +58,24 @@ describe('lib/api — live-only getters always fetch the backend (MBI-35)', () =
       expect(result).toEqual(SENTINEL);
     });
   }
+});
+
+// MBI-38: the runtime sample path is gone, so the source-status model has only two real
+// states — sandbox | live. 'mock' is removed. Under the default env (no VITE_LIVE_MODE)
+// the deployment is on the sandbox apps, so every source reports 'sandbox'.
+describe('lib/api — source modes are sandbox|live, never mock (MBI-38)', () => {
+  it('getSourceStatus reports only sandbox/live and defaults to sandbox', async () => {
+    const statuses = await getSourceStatus();
+    expect(statuses.length).toBe(4);
+    for (const s of statuses) {
+      expect(['sandbox', 'live']).toContain(s.mode);
+      expect(s.mode).toBe('sandbox'); // default env (VITE_LIVE_MODE unset)
+    }
+  });
+
+  it('sourceModeFor never returns mock', () => {
+    for (const id of ['outlook', 'microsoftToDo', 'quickbooks', 'spreadsheet'] as const) {
+      expect(sourceModeFor(id)).not.toBe('mock');
+    }
+  });
 });

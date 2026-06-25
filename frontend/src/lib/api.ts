@@ -31,38 +31,28 @@ import type {
 } from '@/lib/data';
 
 // ── Sources & their wiring ───────────────────────────────────────────────────
-// One entry per upstream system. 'mock' = sample data (default, ships today).
-// 'sandbox' = wired to a vendor sandbox / dev tenant (Phase-1 trial). 'live' =
-// the customer's real, admin-consented tenant (Phase 2). Flip an entry to start
-// reading that source from the backend; everything else keeps using sample data.
+// One entry per upstream system. The app is live-only (MBI-35/36) — the mode only
+// describes WHICH environment the deployment points at: 'sandbox' (dev/sandbox apps —
+// the default today) or 'live' (the customer's production apps). It drives the
+// source-status badge, not whether data is fetched.
 export type SourceId =
   | 'outlook' // Outlook mail + calendar (Microsoft Graph)
   | 'microsoftToDo' // Tasks by owner (Microsoft Graph / To Do or Planner)
   | 'quickbooks' // Deposits + spend (QuickBooks Online)
   | 'spreadsheet'; // Providers' weekly report (Excel via Graph Workbook)
 
-export type SourceMode = 'mock' | 'sandbox' | 'live';
+export type SourceMode = 'sandbox' | 'live';
 
-// Which sources are wired to the backend is driven by env, so going live needs NO code edit:
-//   VITE_API_URL=http://localhost:8787   VITE_LIVE_SOURCES=outlook,quickbooks   VITE_LIVE_MODE=sandbox
-// Any source not listed stays on sample data. Default (no env) = everything mock, so the
-// standalone prototype keeps working with no backend.
-export const LIVE_MODE = (import.meta.env.VITE_LIVE_MODE as SourceMode) || 'sandbox';
-const LIVE_SOURCES = new Set(
-  (import.meta.env.VITE_LIVE_SOURCES || '')
-    .split(',')
-    .map((s: string) => s.trim())
-    .filter(Boolean),
-);
-function modeFor(id: SourceId): SourceMode {
-  return LIVE_SOURCES.has(id) ? LIVE_MODE : 'mock';
-}
+// The deployment environment, from VITE_LIVE_MODE: 'live' on the production apps;
+// anything else (including unset) is the sandbox/dev apps.
+export const LIVE_MODE: SourceMode =
+  import.meta.env.VITE_LIVE_MODE === 'live' ? 'live' : 'sandbox';
 
 export const SOURCE_MODES: Record<SourceId, SourceMode> = {
-  outlook: modeFor('outlook'),
-  microsoftToDo: modeFor('microsoftToDo'),
-  quickbooks: modeFor('quickbooks'),
-  spreadsheet: modeFor('spreadsheet'),
+  outlook: LIVE_MODE,
+  microsoftToDo: LIVE_MODE,
+  quickbooks: LIVE_MODE,
+  spreadsheet: LIVE_MODE,
 };
 
 export const SOURCE_LABELS: Record<SourceId, string> = {

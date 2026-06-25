@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { getMe, logoutBackend, setAuthErrorHandler, SOURCE_MODES, type MeData } from '@/lib/api';
-import { OWNER } from '@/lib/data';
+import { getMe, logoutBackend, setAuthErrorHandler, type MeData } from '@/lib/api';
 import { config } from '@/config/environment';
 import { secureSessionStorage } from '@/utils/secureStorage';
 
@@ -32,9 +31,6 @@ const Ctx = createContext<UserCtx>({
   logout: () => {},
 });
 
-// In mock mode there's no real auth — auto-authenticate as the sample user.
-const isMockMode = !SOURCE_MODES.outlook || SOURCE_MODES.outlook === 'mock';
-
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<MeData | null>(null);
   const [status, setStatus] = useState<AuthStatus>('loading');
@@ -43,12 +39,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     mounted.current = true;
-
-    if (isMockMode) {
-      setUser({ displayName: OWNER, mail: '' });
-      setStatus('authenticated');
-      return () => { mounted.current = false; };
-    }
 
     setAuthErrorHandler(() => {
       secureSessionStorage.removeItem(CACHE_KEY);
