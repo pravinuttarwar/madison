@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { config } from './config.js';
 import { cached } from './cache.js';
-import { demo } from './demo.js';
 import { currentSession } from './session.js';
 import * as graph from './graph.js';
 import * as qbo from './qbo.js';
@@ -26,18 +25,17 @@ function qboConnected() {
   return Boolean(q?.refreshToken && q?.realmId);
 }
 function sourceReady(id) {
-  if (config.demoMode) return true;
   if (id === 'quickbooks') return qboConnected();
   return graphConnected(); // outlook, microsoftToDo, spreadsheet
 }
 
-// Wrap a route: demo → sample; configured → live producer; else → signal "not connected".
+// Wrap a route: configured → live producer; else → signal "not connected".
 // Graph (the Microsoft identity/session) → 401 so the UI returns to login. QuickBooks is a
 // secondary connection → 503 so the UI shows a "Connect" button instead of logging out.
-function route(sourceId, liveProducer, demoProducer) {
+// (MBI-36: the runtime sample path is gone — routes are always live.)
+function route(sourceId, liveProducer) {
   return async (req, res) => {
     try {
-      if (config.demoMode) return res.json(await demoProducer(req));
       if (!sourceReady(sourceId)) {
         if (sourceId === 'quickbooks') {
           return res.status(503).json({ error: 'source_not_connected', source: sourceId });
@@ -85,7 +83,6 @@ router.get('/me', route('outlook',
     try { return await graph.me(); } catch { /* User.Read not granted — that's OK */ }
     return { displayName: '', mail: '' };
   },
-  async () => ({ displayName: 'Dr. Romano', mail: '' }),
 ));
 
 // ── runtime settings the UI needs (e.g. the awaiting-response threshold) ──────
@@ -96,14 +93,13 @@ router.get('/settings', (_req, res) => {
 });
 
 // ── email ──────────────────────────────────────────────────────────────────��─
-router.get('/email', route('outlook', async () => T.emailsFromGraph(await cached(sk('msgs'), TTL, () => graph.listMessages(25))), async () => demo.emails()));
-router.get('/email/awaiting', route('outlook', async () => cached(sk('await'), TTL, computeAwaiting), async () => demo.awaiting()));
+router.get('/email', route('outlook', async () => T.emailsFromGraph(await cached(sk('msgs'), TTL, () => graph.listMessages(25)))));
+router.get('/email/awaiting', route('outlook', async () => cached(sk('await'), TTL, computeAwaiting)));
 router.get('/email/:id', route('outlook',
   async (req) => {
     const all = T.emailsFromGraph(await cached(sk('msgs50'), TTL, () => graph.listMessages(50)));
     return all.find((e) => e.id === req.params.id) || {};
   },
-  async (req) => demo.email(req.params.id) || {},
 ));
 
 // ── calendar ───────────────────────────────────────────────────────────────��─
@@ -114,11 +110,10 @@ router.get('/calendar', route('outlook',
     const end = new Date(start); end.setDate(end.getDate() + 7);
     return T.calendarFromGraph(await cached(sk('cal'), TTL, () => graph.calendarView(start.toISOString(), end.toISOString())));
   },
-  async () => demo.calendar(),
 ));
 
 // ── tasks ──────────────────────────────────────────────────────────────────��─
-router.get('/tasks', route('microsoftToDo', async () => T.tasksFromGraph(await cached(sk('tasks'), TTL, () => graph.listTodoTasks())), async () => demo.tasks()));
+router.get('/tasks', route('microsoftToDo', async () => T.tasksFromGraph(await cached(sk('tasks'), TTL, () => graph.listTodoTasks()))));
 
 // ── financials ─────────────────────────────────────────────────────────────��─
 router.get('/financials', route('quickbooks',
@@ -132,7 +127,6 @@ router.get('/financials', route('quickbooks',
     ]);
     return T.financialsFromQbo(dep, pur, config.qbo.fixedAccountIds, now);
   },
-  async () => demo.financials(),
 ));
 
 // ── weekly report (spreadsheet) ───────────────────────────────────────────────
@@ -146,20 +140,17 @@ router.get('/reports', route('spreadsheet',
     }
     return T.reportsFromRanges(values, labels);
   },
-  async () => demo.reports(),
 ));
 
 // ── dashboard aggregate (BFF) ─────────────────────────────────────────────────
 router.get('/dashboard', async (req, res) => {
   const view = req.query.view === 'monday' ? 'monday' : 'weekday';
   try {
-    if (config.demoMode) return res.json(demo.dashboard(view));
-
     // Microsoft is the session identity — if THIS visitor isn't connected, send them to
     // login (401) rather than returning a blank dashboard (looked like "all data gone").
     if (!graphConnected()) return res.status(401).json({ error: 'not_authenticated' });
 
-    // Live mode: build from this visitor's live sources only — never fall back to demo.
+    // Build from this visitor's live sources only.
     const d = {
       view,
       owner: currentSession()?.graph.displayName || '',
@@ -217,13 +208,17 @@ router.get('/dashboard', async (req, res) => {
 });
 
 // ── source status (drives the Connections badges) ─────────────────────────────
+// Env-driven (MBI-36): each source reports the environment its app/creds point at —
+// 'live' for production, else 'sandbox'. The runtime never serves sample data, so there
+// is no 'mock' mode. Per-visitor connection state is signalled separately by the data
+// routes (401 Microsoft / 503 QuickBooks when not connected).
 router.get('/sources/status', (_req, res) => {
-  const g = graphConnected();
-  const mode = (ready) => (config.demoMode ? 'sandbox' : ready ? 'live' : 'mock');
+  const modeFor = (environment) => (environment === 'production' ? 'live' : 'sandbox');
+  const ms = modeFor(config.graph.environment);
   res.json([
-    { id: 'outlook', label: 'Outlook', mode: mode(g) },
-    { id: 'microsoftToDo', label: 'Microsoft To Do', mode: mode(g) },
-    { id: 'quickbooks', label: 'QuickBooks', mode: mode(qboConnected()) },
-    { id: 'spreadsheet', label: 'Weekly spreadsheet', mode: mode(g) },
+    { id: 'outlook', label: 'Outlook', mode: ms },
+    { id: 'microsoftToDo', label: 'Microsoft To Do', mode: ms },
+    { id: 'quickbooks', label: 'QuickBooks', mode: modeFor(config.qbo.environment) },
+    { id: 'spreadsheet', label: 'Weekly spreadsheet', mode: ms },
   ]);
 });

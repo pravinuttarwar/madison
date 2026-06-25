@@ -10,21 +10,18 @@
 Page component (e.g. Dashboard.tsx)
    │  useApi(getDashboard)                         ← hooks/useApi.ts gives {data, loading, error}
    ▼
-lib/api.ts  getDashboard() → read('outlook', '/api/dashboard', sample)
-   │   read() decides per SOURCE_MODES + VITE_API_URL:
-   │     • source live  → fetch `${VITE_API_URL}/api/...`            (real backend)
-   │     • otherwise    → return bundled sample data from lib/data.ts (standalone, no backend)
+lib/api.ts  getDashboard() → fetch `${VITE_API_URL}/api/dashboard`  (live-only, no fallback)
    ▼
-backend routes.js  route('outlook', liveProducer, demoProducer)
-   │     • DEMO_MODE=1 → demoProducer()  → demo.js   (deterministic sample)
+backend routes.js  route('outlook', liveProducer)
    │     • live + token → liveProducer() → graph.js / qbo.js  → transforms.js → DTO
-   │     • live, no token → 401 ;  upstream error → 502
+   │     • live, no token → 401 (Microsoft) / 503 (QuickBooks) ;  upstream error → 502
+   │     • in tests: graph.js/qbo.js resolve from synthetic fixtures (FIXTURES_DIR)
    ▼
 JSON matching the DTO in lib/api.ts  → rendered by the page
 ```
 
 **The contract is the DTO.** The TypeScript types in `frontend/src/lib/api.ts` + `lib/data.ts`
-*are* the v1 API. Backend producers (`transforms.js`, `demo.js`) must return JSON matching them.
+*are* the v1 API. The backend producer (`transforms.js`) must return JSON matching them.
 Match the shape and no page changes are needed to go live.
 
 ---
@@ -79,20 +76,20 @@ Match the shape and no page changes are needed to go live.
 | Module | Responsibility |
 |---|---|
 | **`server.js`** | Express app: CORS, JSON, session middleware, the **audit-log middleware** (`method path → status (ms)`, never bodies), `/health`, mounts the router, serves the built SPA in production, `listen`. |
-| **`routes.js`** | The API surface + **source → producer wiring**. The `route(source, live, demo)` wrapper picks demo vs live vs `401`/`502`; `cached()` applies the short TTL. One endpoint per source + the `/api/dashboard` aggregate (parallel fan-out). |
+| **`routes.js`** | The API surface + **source → producer wiring**. The `route(source, live)` wrapper runs the live producer or signals not-connected (`401` Microsoft / `503` QuickBooks; upstream error `502`); `cached()` applies the short TTL. One endpoint per source + the `/api/dashboard` aggregate (parallel fan-out). |
 | **`transforms.js`** | **Upstream → frontend DTO** mappers: `emailsFromGraph` (+ `classifyCategory`), `calendarFromGraph`, `tasksFromGraph`, `financialsFromQbo`, `reportsFromRanges`, `awaitingItem`. Pure functions — easy to unit-test, no logging of content. |
-| **`demo.js`** | The **sample-data mirror** of every DTO, served when `DEMO_MODE=1`. Keep it in lockstep with `transforms.js` output and the frontend mock. |
+| **`fixtures.js`** | **Test-only** loader: when `FIXTURES_DIR` is set, `graph.js`/`qbo.js` resolve from synthetic upstream payloads so the gate runs the real route + transforms path offline. Never active in production. |
 | **`graph.js`** | Microsoft Graph client (mail / calendar / To Do / Excel reads). |
 | **`qbo.js`** | QuickBooks Online client (deposits / purchases / reports). |
 | **`auth.js`** | OAuth flows for the upstream sources. |
 | **`session.js`** | Per-visitor session — in-memory token store keyed by an HttpOnly cookie. **No DB.** |
 | **`cache.js`** | Short-TTL (~90s) in-memory cache — *caching, not storage*, never touches disk. |
-| **`config.js`** | Env/config (`demoMode`, `port`, source flags). |
+| **`config.js`** | Env/config (`port`, source flags, `MS_ENV`/`QBO_ENV`). |
 
 ### The two backend seams to change safely
 - **Contract seam — `transforms.js`:** map a real upstream payload to the exact DTO. Mirror any new
-  field into `demo.js` and the frontend `data.ts` type/mock (additive-first — don't break the DTO).
-- **Wiring seam — `routes.js`:** wire a source's live + demo producers behind `route(...)`.
+  field into the frontend `data.ts` type (additive-first — don't break the DTO).
+- **Wiring seam — `routes.js`:** wire a source's live producer behind `route(...)`.
 
 ---
 
@@ -100,7 +97,7 @@ Match the shape and no page changes are needed to go live.
 
 | Command | Mode |
 |---|---|
-| `npm run dev:frontend` | Frontend standalone — sample data from `lib/data.ts`, no backend. |
-| `npm run dev:backend` (`DEMO_MODE=1`) | BFF serving `demo.js` sample data — exercises the full FE↔BE wiring with no credentials. |
+| `npm run dev:frontend` | Vite dev server; set `VITE_API_URL` to the backend (live-only — no standalone sample data). |
+| `npm run dev:backend` | Live BFF — each route serves real data once connected, else 401/503. |
 | `npm run serve` | Production-style: build the SPA, backend serves it + `/api` on one port. |
-| live | Set `VITE_API_URL` + flip `SOURCE_MODES`; backend producers call `graph.js`/`qbo.js`. |
+| tests | `FIXTURES_DIR` makes `graph.js`/`qbo.js` resolve from synthetic fixtures — the live path, offline. |

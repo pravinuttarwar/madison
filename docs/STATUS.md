@@ -56,15 +56,26 @@ Legend: ✅ done · 🟡 prototype/partial (UI real, live data pending) · ⛔ o
 - **[MBI-40](https://connecthealth.atlassian.net/browse/MBI-40) — Removed dead frontend scaffolding** (Redux
   store + redux-persist + orphaned `pages/Overview.tsx`); bundle −18 kB. (`crypto-js` kept — it backs the live
   `secureStorage`.)
+- **[MBI-34](https://connecthealth.atlassian.net/browse/MBI-34) — Replacement test fixtures for the gate** (go-live
+  blocker). Synthetic **upstream** Graph/QBO payloads + a `FIXTURES_DIR` seam so `characterization-fixtures.test.js`
+  pins the `/api/*` contract through the **live** route + transforms path — no `DEMO_MODE`. Frontend render fixtures
+  in `src/test/fixtures.ts`.
+- **[MBI-35](https://connecthealth.atlassian.net/browse/MBI-35) — Frontend live-only getters.** `lib/api.ts` getters
+  always fetch the backend (sample fallback removed); the runtime sample arrays are gone from `lib/data.ts` and the
+  bundle. Render tests run offline via a `fetch` stub serving the fixtures.
+- **[MBI-36](https://connecthealth.atlassian.net/browse/MBI-36) — Backend retired `DEMO_MODE` + `demo.js`.** Routes are
+  always live (401 Microsoft / 503 QuickBooks when disconnected); `/api/sources/status` reports env-driven
+  `sandbox`/`live` (no `mock`). HIPAA audit + PHI-safe logging re-proven on the live path.
 
 ### 🟡 Remaining (open in Jira)
 
 - **[MBI-33](https://connecthealth.atlassian.net/browse/MBI-33) — Remove sample data, go live-only (Phase-2 epic).**
-  Graduate from the sample-data prototype to a **live-only product**. Live integration is already wired to
-  **sandbox** apps (badges read `sandbox`; `live` on the production apps). Stories **MBI-34→39**; the key
-  sequencing constraint is **MBI-34 (relocate sample payloads into `test/fixtures`) must land first** — the
-  test gate depends on the sample paths (frontend render tests in mock mode; backend characterization in
-  `DEMO_MODE`), so removing them before fixtures exist breaks `npm test`.
+  Graduate from the sample-data prototype to a **live-only product**. Live integration is wired to **sandbox**
+  apps (badges read `sandbox`; `live` on the production apps). **MBI-34 (fixtures), MBI-35 (frontend live-only),
+  and MBI-36 (backend `DEMO_MODE`/`demo.js` retired) are done** — the runtime sample path is gone end-to-end and
+  the gate runs the live path offline against fixtures. **Remaining:** MBI-37 (harden empty/error + auth states),
+  MBI-38 (Connections badges consume live `/api/sources/status` + `SourceMode` cleanup), MBI-39 (standalone
+  demo's fate).
 - **[MBI-22](https://connecthealth.atlassian.net/browse/MBI-22) — Operational reporting from SharePoint/OneDrive spreadsheets.**
   Reports must read the practice's departmental spreadsheets via Microsoft Graph Excel (not CureMD/
   PNC). **Build-prep (2026-06-25) split this into "connect the workbook now, map the metrics later":**

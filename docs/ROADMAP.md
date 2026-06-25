@@ -21,8 +21,9 @@ the machinery.
 
 - ✅ All six tabs built and navigable on bundled sample data.
 - ✅ Read-only BFF in place: holds tokens server-side, transforms upstream payloads to the exact
-  frontend DTOs, in-memory sessions, no database. `DEMO_MODE=1` serves deterministic sample data.
-- ✅ Data-access seam (`frontend/src/lib/api.ts`) so any source flips live with no page changes.
+  frontend DTOs, in-memory sessions, no database. Live-only — the test gate runs the same route +
+  transforms path offline against synthetic fixtures (`FIXTURES_DIR`).
+- ✅ Data-access seam (`frontend/src/lib/api.ts`) so the frontend reads every source through the backend.
 - ✅ Feature refinements from customer feedback: Daily/Monday views (MBI-20), important-email
   categorization (MBI-19), timezone-correct dates (MBI-26/27/28).
 - ✅ Color-blind-safe rendering pattern (icon + shape + text) throughout.
@@ -74,8 +75,8 @@ scope for Phases 1–2):
 
 The architecture was built so phase transitions are **configuration, not rewrites**:
 
-- The frontend reads everything through `getDashboard`/`getEmails`/… in `lib/api.ts`. Flipping a
-  source from sample to live is `SOURCE_MODES` + `VITE_API_URL` — no component edits.
-- The backend keeps `transforms.js` (upstream → DTO) and `demo.js` (sample mirror) as parallel
-  producers wired in `routes.js`. Going live = implement the real client call; the DTO contract and
-  the demo path stay intact. See [MODULES.md](MODULES.md).
+- The frontend reads everything through `getDashboard`/`getEmails`/… in `lib/api.ts`, which fetch the
+  backend (`VITE_API_URL`) — live-only, no component edits to wire a source.
+- The backend maps upstream payloads to the DTOs in `transforms.js`, wired per source in `routes.js`.
+  In tests, `graph.js`/`qbo.js` resolve from synthetic fixtures (`FIXTURES_DIR`) so the live path runs
+  offline. See [MODULES.md](MODULES.md).

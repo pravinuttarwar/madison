@@ -7,9 +7,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classifyCategory, emailsFromGraph } from '../src/transforms.js';
+import { writeFixtures, FIXTURE_ENV } from './fixtures/generate.js';
 
 const VALID = ['management', 'operational', 'action-needed'];
 const SERVER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/server.js');
@@ -59,15 +62,26 @@ test('emailsFromGraph — every email carries a valid category; defaults to acti
 });
 
 // HIPAA (MBI-19): reading mail to classify it must leave an audit trail (who/what via
-// method+path, when, outcome) but NEVER log message content. The classifier added here
-// must not change that. Spawn a real server, capture its stdout, hit /api/email, and
-// assert: the audit line is present AND no subject/sender/body string leaked.
+// method+path, when, outcome) but NEVER log message content. The classifier must not
+// change that. Runs on the LIVE path against synthetic upstream fixtures (FIXTURES_DIR,
+// MBI-36 — DEMO_MODE is gone): spawn a real server, capture its stdout, hit /api/email,
+// and assert the audit line is present AND no subject/sender/body string leaked.
 test('GET /api/email — audit-logged read with no PHI/content in logs (safe-logging)', async () => {
+  const fixturesDir = mkdtempSync(path.join(tmpdir(), 'madison-emailcat-'));
+  writeFixtures(fixturesDir, new Date());
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
   let logs = '';
   const child = spawn(process.execPath, [SERVER], {
-    env: { ...process.env, DEMO_MODE: '1', PORT: String(port), FRONTEND_DIST: '/nonexistent' },
+    // Live route + transforms against fixtures; DEMO_MODE OFF (retired in MBI-36).
+    env: {
+      ...process.env,
+      ...FIXTURE_ENV,
+      DEMO_MODE: '',
+      FIXTURES_DIR: fixturesDir,
+      PORT: String(port),
+      FRONTEND_DIST: '/nonexistent',
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stdout.on('data', (d) => (logs += d.toString()));
@@ -91,12 +105,17 @@ test('GET /api/email — audit-logged read with no PHI/content in logs (safe-log
     // audit-logging: the read is recorded with method + path + outcome.
     assert.match(logs, /GET \/api\/email → 200/);
 
-    // safe-logging: NONE of the email content (subjects, senders, body fragments) is logged.
-    const forbidden = ['UB-04', 'Hetal', 'wearable', 'transition model', 'Dr. Romano', 'storage quota'];
+    // safe-logging: NONE of the email content (subjects, senders, body fragments) from
+    // the synthetic fixtures is logged.
+    const forbidden = [
+      'UB-04 analysis ready', 'Billing Partner', 'transition model',
+      'Research Lab', 'rollout SOP', 'schedule a call',
+    ];
     for (const s of forbidden) {
       assert.ok(!logs.includes(s), `log must not contain email content: "${s}"`);
     }
   } finally {
     child.kill();
+    rmSync(fixturesDir, { recursive: true, force: true });
   }
 });
