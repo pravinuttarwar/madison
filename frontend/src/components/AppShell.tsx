@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { getFriendlyPref, setFriendlyPref } from '@/utils/theme';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -8,8 +7,6 @@ import {
   Mail,
   CalendarDays,
   ListChecks,
-  Eye,
-  SlidersHorizontal,
   LogOut,
   type LucideIcon,
 } from 'lucide-react';
@@ -52,110 +49,8 @@ function Wordmark() {
 }
 
 
-// ── Display & Accessibility ───────────────────────────────────────────────────
-// One "Display" control grouping theme + color-vision (and, later, contrast / text
-// scaling). Named "Display" so physician users don't read it as "not for me".
-// The theme/palette logic lives in @/utils/theme (applied at boot in main.tsx so the
-// login screen respects it too); this menu just toggles the persisted preference.
-
-function Seg<T extends string>({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: T;
-  onChange: (v: T) => void;
-  options: { id: T; label: string; icon?: LucideIcon }[];
-}) {
-  return (
-    <div className="mt-3 first:mt-0">
-      <div className="mb-1.5 px-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </div>
-      <div className="flex rounded-lg border border-border bg-muted p-0.5">
-        {options.map((o) => {
-          const Icon = o.icon;
-          const active = o.id === value;
-          return (
-            <button
-              key={o.id}
-              onClick={() => onChange(o.id)}
-              aria-pressed={active}
-              className={cn(
-                'inline-flex flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-center text-xs font-semibold leading-tight transition-colors',
-                active ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {Icon && <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />}
-              {o.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function DisplayMenu() {
-  const [open, setOpen] = useState(false);
-  // Seed from the persisted preference (already applied to the DOM at boot).
-  const [friendly, setFriendlyState] = useState(getFriendlyPref);
-  const ref = useRef<HTMLDivElement>(null);
-
-  function setFriendly(value: boolean) {
-    setFriendlyState(value);
-    setFriendlyPref(value); // persist + apply to :root
-  }
-
-  // Close on outside click.
-  useEffect(() => {
-    function onDoc(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, []);
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        title="Display & Accessibility"
-      >
-        <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
-        <span className="hidden sm:inline">Display</span>
-      </button>
-      {open && (
-        <div
-          role="menu"
-          className="absolute right-0 z-40 mt-2 w-72 rounded-xl border border-border bg-card p-3 shadow-lg"
-        >
-          <p className="px-0.5 text-sm font-semibold text-foreground">Display &amp; Accessibility</p>
-
-          <Seg
-            label="Colors"
-            value={friendly ? 'friendly' : 'standard'}
-            onChange={(v) => setFriendly(v === 'friendly')}
-            options={[
-              { id: 'standard', label: 'Standard' },
-              { id: 'friendly', label: 'Color-Vision Friendly', icon: Eye },
-            ]}
-          />
-
-          <p className="mt-3 px-0.5 text-[11px] leading-snug text-muted-foreground">
-            Status is always shown by icon, shape and label — never color alone. We'd validate the
-            exact palette with you.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
+// The color-vision-friendly palette is the app's default, applied at boot in main.tsx
+// via @/utils/theme — there is no in-app toggle for it (MBI-41).
 
 function ProfileMenu() {
   const { user, logout } = useUser();
@@ -221,10 +116,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <Wordmark />
           <div className="flex items-center gap-3">
-            <DisplayMenu />
-            <div className="border-l border-border pl-3">
-              <ProfileMenu />
-            </div>
+            <ProfileMenu />
           </div>
         </div>
         <nav className="mx-auto max-w-[1240px] px-2 sm:px-4">
