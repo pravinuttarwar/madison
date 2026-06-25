@@ -4,7 +4,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { ViewModeProvider, type ViewMode } from '@/context/view-mode';
 import { UserProvider } from '@/context/UserContext';
 import Dashboard, { MondayView, CategoryBadge } from '@/pages/Dashboard';
-import { getDashboard, type DashboardData } from '@/lib/api';
+import { type DashboardData } from '@/lib/api';
+import { dashboardMonday } from '@/test/fixtures';
 import type { EmailCategory } from '@/lib/data';
 
 afterEach(cleanup);
@@ -43,7 +44,7 @@ describe('Dashboard — Daily vs Monday composition', () => {
   });
 
   it('Monday view renders QuickBooks + spreadsheet figures with correct week-over-week deltas', async () => {
-    const data = await getDashboard('monday'); // full sample: financialWeek + metrics + totalEncounters
+    const data = dashboardMonday; // full sample: financialWeek + metrics + totalEncounters
     render(
       <MemoryRouter>
         <UserProvider>
@@ -135,7 +136,7 @@ describe('Dashboard — view toggle', () => {
 
 describe('Dashboard — null-safety when QuickBooks is not connected', () => {
   it('Monday view with financialWeek null shows a not-connected state, never crashes', async () => {
-    const data = await getDashboard('monday'); // real sample shape (mock mode)
+    const data = dashboardMonday; // real sample shape (mock mode)
     const noQbo = { ...data, financialWeek: null };
     render(
       <MemoryRouter>
@@ -151,7 +152,7 @@ describe('Dashboard — null-safety when QuickBooks is not connected', () => {
   });
 
   it('Monday view survives live data missing the spreadsheet fields (metrics/totalEncounters undefined)', async () => {
-    const data = await getDashboard('monday');
+    const data = dashboardMonday;
     // Mirror the live BFF shape when the providers' spreadsheet isn't wired.
     const noSpreadsheet: DashboardData = {
       ...data,

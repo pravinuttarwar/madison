@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import { qboToken } from './auth.js';
 import { currentSession } from './session.js';
+import { loadFixture } from './fixtures.js';
 
 function base() {
   return config.qbo.environment === 'production'
@@ -15,6 +16,12 @@ function realm() {
 
 // Read-only SQL-like query (the ONLY thing we call — never a write/POST to an entity).
 export async function query(sql) {
+  // TEST-ONLY (MBI-34): resolve from synthetic fixtures (the QueryResponse object).
+  if (config.fixturesMode) {
+    if (/FROM Deposit/i.test(sql)) return loadFixture('qbo', 'deposits.json');
+    if (/FROM Purchase/i.test(sql)) return loadFixture('qbo', 'purchases.json');
+    return {};
+  }
   const token = await qboToken();
   const url =
     `${base()}/v3/company/${realm()}/query?query=${encodeURIComponent(sql)}` +
