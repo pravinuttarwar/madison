@@ -76,6 +76,24 @@ describe('Dashboard — Daily vs Monday composition', () => {
   });
 });
 
+describe('Dashboard — email category briefing (MBI-19)', () => {
+  it('tags each important email with an icon + text category (never color alone)', async () => {
+    renderDashboard('weekday');
+    await screen.findByText(/Good morning/);
+
+    // The important emails on the briefing span all three category buckets, each shown
+    // as a text label (not color alone).
+    const actionNeeded = screen.getAllByText('Action needed');
+    expect(actionNeeded.length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Management').length).toBeGreaterThan(0);
+    expect(screen.getByText('Operational')).toBeTruthy();
+
+    // …and each label is paired with an icon (svg) inside the same badge — so the
+    // category is conveyed by icon + text, satisfying the color-blind requirement.
+    expect(actionNeeded[0].querySelector('svg')).toBeTruthy();
+  });
+});
+
 describe('Dashboard — view toggle', () => {
   it('switches Daily↔Monday and marks the active view by state (not color alone)', async () => {
     renderDashboard('weekday');

@@ -13,13 +13,17 @@ import {
   UserPlus,
   Landmark,
   TrendingUp,
+  Briefcase,
+  Cog,
+  AlertCircle,
+  type LucideIcon,
 } from 'lucide-react';
 import { Panel, Trend, KpiTile } from '@/components/primitives';
 import { Loading, ErrorState } from '@/components/AsyncState';
 import { useApi } from '@/hooks/useApi';
 import { getDashboard, sourceModeFor, type DashboardData } from '@/lib/api';
 import { usd, pctChange } from '@/lib/format';
-import { DATES } from '@/lib/data';
+import { DATES, type EmailCategory } from '@/lib/data';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/context/UserContext';
 import { useViewMode, type ViewMode } from '@/context/view-mode';
@@ -27,6 +31,26 @@ import { useViewMode, type ViewMode } from '@/context/view-mode';
 const outlookMode = sourceModeFor('outlook');
 const qboMode = sourceModeFor('quickbooks');
 const spreadsheetMode = sourceModeFor('spreadsheet');
+
+// Email briefing categories (MBI-19). Each important email is tagged Management /
+// Operational / Action-needed, conveyed by icon + text label (never color alone) so the
+// briefing is readable for color-vision deficiency. The icon tone is a secondary cue.
+const EMAIL_CATEGORY_META: Record<EmailCategory, { label: string; Icon: LucideIcon; tone: string }> = {
+  management: { label: 'Management', Icon: Briefcase, tone: 'text-primary' },
+  operational: { label: 'Operational', Icon: Cog, tone: 'text-muted-foreground' },
+  'action-needed': { label: 'Action needed', Icon: AlertCircle, tone: 'text-warning' },
+};
+
+function CategoryBadge({ category }: { category: EmailCategory }) {
+  const meta = EMAIL_CATEGORY_META[category];
+  const Icon = meta.Icon;
+  return (
+    <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+      <Icon className={`h-3 w-3 shrink-0 ${meta.tone}`} aria-hidden />
+      {meta.label}
+    </span>
+  );
+}
 
 // QuickBooks-not-connected note shared by the Monday financial tiles/panel. Keeps the
 // view from crashing when financialWeek is null (no QBO session).
@@ -221,6 +245,7 @@ export function TodayView({ data }: { data: DashboardData }) {
                       <span className="shrink-0 text-[11px] text-muted-foreground">{e.time}</span>
                     </div>
                     <p className="truncate text-xs text-muted-foreground">{e.subject}</p>
+                    <CategoryBadge category={e.category} />
                   </div>
                 </li>
               ))}

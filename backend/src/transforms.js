@@ -71,6 +71,31 @@ function decodeHtmlBody(html) {
 }
 
 // ── email ────────────────────────────────────────────────────────────────────
+// Phase-1 category classifier (MBI-19). Importance is already rule-based above; the
+// briefing additionally tags each email Management / Operational / Action-needed.
+// Classification is a sender/domain → category map. The map ships EMPTY until the
+// customer supplies their designated-sender lists (see the ticket's Open items); any
+// unmatched email defaults to `action-needed` so nothing surfaces uncategorized and
+// important mail is never hidden behind an unknown sender. Pure data in → no logging
+// of senders/subjects/bodies happens here (PHI-safe).
+export const EMAIL_CATEGORIES = ['management', 'operational', 'action-needed'];
+export const CATEGORY_DEFAULT = 'action-needed';
+const CATEGORY_RULES = {
+  // Populate from the customer's designated-sender lists. Keys are either a full sender
+  // address or a bare domain; values are the category. e.g. an owner mailbox → 'management',
+  // a 'billing.partner.example' domain → 'operational'. Left empty until the lists arrive.
+};
+export function classifyCategory(fromAddress, rules = CATEGORY_RULES) {
+  if (!fromAddress) return CATEGORY_DEFAULT;
+  const addr = String(fromAddress).toLowerCase().trim();
+  if (!addr) return CATEGORY_DEFAULT;
+  if (rules[addr]) return rules[addr]; // exact sender match wins
+  const at = addr.lastIndexOf('@');
+  const domain = at >= 0 ? addr.slice(at + 1) : addr;
+  if (rules[domain]) return rules[domain]; // then domain match
+  return CATEGORY_DEFAULT;
+}
+
 export function emailsFromGraph(messages) {
   return messages.map((m, i) => {
     const rawPreview = decodeHtmlBody(m.bodyPreview || '');
@@ -81,6 +106,7 @@ export function emailsFromGraph(messages) {
       id: m.id || `e${i}`,
       unread: m.isRead === false,
       important: m.importance === 'high' || Boolean(m.flag && m.flag.flagStatus === 'flagged'),
+      category: classifyCategory(m.from?.emailAddress?.address),
       from: m.from?.emailAddress?.name || m.from?.emailAddress?.address || 'Unknown',
       subject: m.subject || '(no subject)',
       preview: cleanDescription(rawPreview),

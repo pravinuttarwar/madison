@@ -258,10 +258,15 @@ export const WEEK_CALENDAR: CalendarDay[] = [
 ];
 
 // ── Email (Outlook) ───────────────────────────────────────────────────────────
+// Phase-1 briefing category (MBI-19). Rule-based on the backend (sender/domain →
+// category, defaulting to 'action-needed'); the dashboard renders it as icon + text.
+export type EmailCategory = 'management' | 'operational' | 'action-needed';
+
 export type Email = {
   id: string;
   unread: boolean;
   important: boolean;
+  category: EmailCategory;
   from: string;
   subject: string;
   preview: string;
@@ -275,6 +280,7 @@ export const EMAILS: Email[] = [
     id: 'e1',
     unread: true,
     important: true,
+    category: 'action-needed',
     from: 'Hetal — Billing',
     subject: 'UB-04 analysis ready',
     preview: 'Numbers are in for the transition model — needs your sign-off before the Wed meeting.',
@@ -285,6 +291,7 @@ export const EMAILS: Email[] = [
     id: 'e2',
     unread: true,
     important: true,
+    category: 'management',
     from: 'Research lab',
     subject: 'Positive reply — wearable pilot',
     preview: 'They are interested and want to schedule a call next week to scope the pilot protocol.',
@@ -295,6 +302,7 @@ export const EMAILS: Email[] = [
     id: 'e3',
     unread: true,
     important: false,
+    category: 'operational',
     from: 'Billing system support',
     subject: 'Coding question — follow-up',
     preview: 'Following up on the place-of-service coding question from last week.',
@@ -305,6 +313,7 @@ export const EMAILS: Email[] = [
     id: 'e4',
     unread: false,
     important: false,
+    category: 'operational',
     from: 'Commercial payer relations',
     subject: 'Provider notice — network update',
     preview: 'Routine network bulletin. No action required at this time.',
@@ -315,6 +324,7 @@ export const EMAILS: Email[] = [
     id: 'e5',
     unread: false,
     important: true,
+    category: 'operational',
     from: 'Front desk lead',
     subject: 'N1 conversion SOP — draft 2',
     preview: 'Second draft of the rollout plan for the MAs, ready for your review.',
@@ -325,6 +335,7 @@ export const EMAILS: Email[] = [
     id: 'e6',
     unread: true,
     important: true,
+    category: 'management',
     from: 'Practice manager',
     subject: 'Monday provider report — ready',
     preview: "This week's provider spreadsheet is finalized and shared to the team folder.",
@@ -335,6 +346,7 @@ export const EMAILS: Email[] = [
     id: 'e7',
     unread: true,
     important: false,
+    category: 'operational',
     from: 'Regenerative supplier',
     subject: 'Reorder confirmation',
     preview: 'Your peptide protocol reorder is confirmed and ships Thursday.',
@@ -345,6 +357,7 @@ export const EMAILS: Email[] = [
     id: 'e8',
     unread: true,
     important: false,
+    category: 'operational',
     from: 'IT support',
     subject: 'Mailbox storage notice',
     preview: 'Routine notice — your mailbox is at 70% of its storage quota.',
