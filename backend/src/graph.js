@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { graphToken } from './auth.js';
+import { loadFixture } from './fixtures.js';
 
 const BASE = 'https://graph.microsoft.com/v1.0';
 
@@ -8,7 +9,23 @@ function root() {
   return config.graph.user ? `/users/${encodeURIComponent(config.graph.user)}` : '/me';
 }
 
+// TEST-ONLY (MBI-34): map a Graph request path to a synthetic upstream fixture. Order matters
+// (more specific paths first). Each fixture mirrors the raw Graph JSON the live call returns.
+function graphFixture(reqPath) {
+  if (reqPath.includes("mailFolders('sentitems')")) return loadFixture('graph', 'sent.json');
+  if (reqPath.includes('conversationId eq')) return loadFixture('graph', 'conversation.json');
+  if (reqPath.includes('/calendarView')) return loadFixture('graph', 'calendar.json');
+  if (/\/todo\/lists\/[^/]+\/tasks/.test(reqPath)) return loadFixture('graph', 'todo-tasks.json');
+  if (reqPath.includes('/todo/lists')) return loadFixture('graph', 'todo-lists.json');
+  const nr = reqPath.match(/\/workbook\/names\/([^/]+)\/range/);
+  if (nr) return loadFixture('graph', 'names', `${decodeURIComponent(nr[1])}.json`);
+  if (reqPath.startsWith('/me?$select=displayName')) return loadFixture('graph', 'me.json');
+  if (reqPath.includes('/messages')) return loadFixture('graph', 'messages.json');
+  throw new Error(`No graph fixture for path: ${reqPath}`);
+}
+
 async function get(path, extraHeaders = {}) {
+  if (config.fixturesMode) return graphFixture(path);
   const token = await graphToken();
   const res = await fetch(`${BASE}${path}`, {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', ...extraHeaders },

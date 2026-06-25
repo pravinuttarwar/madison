@@ -14,6 +14,12 @@ export const config = {
     .filter(Boolean),
   demoMode: env.DEMO_MODE === '1' || env.DEMO_MODE === 'true',
 
+  // TEST-ONLY (MBI-34): when FIXTURES_DIR is set, graph.js/qbo.js resolve from synthetic
+  // upstream fixtures instead of calling Microsoft/Intuit, so the real route + transforms
+  // path runs against them in the gate. Never set in production — it bypasses OAuth/upstream.
+  fixturesDir: env.FIXTURES_DIR || '',
+  fixturesMode: Boolean(env.FIXTURES_DIR),
+
   // App credentials + non-secret config only. Per-visitor tokens (refresh token,
   // display name, QBO realm) live on the session (see session.js), never here.
   graph: {

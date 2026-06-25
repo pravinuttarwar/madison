@@ -15,10 +15,13 @@ const TTL = 90_000; // 90s in-memory cache
 const sk = (key) => `${currentSession()?.id || 'anon'}:${key}`;
 
 // Is the CURRENT visitor connected to the source they're asking for?
+// In fixtures mode (MBI-34) the upstream clients resolve from synthetic fixtures, so every
+// source counts as connected and the live producer path runs against them.
 function graphConnected() {
-  return Boolean(currentSession()?.graph.refreshToken);
+  return config.fixturesMode || Boolean(currentSession()?.graph.refreshToken);
 }
 function qboConnected() {
+  if (config.fixturesMode) return true;
   const q = currentSession()?.qbo;
   return Boolean(q?.refreshToken && q?.realmId);
 }
