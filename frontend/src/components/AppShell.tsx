@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getDarkPref, getFriendlyPref, setDarkPref, setFriendlyPref } from '@/utils/theme';
+import { getFriendlyPref, setFriendlyPref } from '@/utils/theme';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -9,8 +9,6 @@ import {
   CalendarDays,
   ListChecks,
   Eye,
-  Moon,
-  Sun,
   SlidersHorizontal,
   LogOut,
   type LucideIcon,
@@ -103,14 +101,9 @@ function Seg<T extends string>({
 function DisplayMenu() {
   const [open, setOpen] = useState(false);
   // Seed from the persisted preference (already applied to the DOM at boot).
-  const [dark, setDarkState] = useState(getDarkPref);
   const [friendly, setFriendlyState] = useState(getFriendlyPref);
   const ref = useRef<HTMLDivElement>(null);
 
-  function setDark(value: boolean) {
-    setDarkState(value);
-    setDarkPref(value); // persist + apply to <html>
-  }
   function setFriendly(value: boolean) {
     setFriendlyState(value);
     setFriendlyPref(value); // persist + apply to :root
@@ -143,16 +136,6 @@ function DisplayMenu() {
           className="absolute right-0 z-40 mt-2 w-72 rounded-xl border border-border bg-card p-3 shadow-lg"
         >
           <p className="px-0.5 text-sm font-semibold text-foreground">Display &amp; Accessibility</p>
-
-          <Seg
-            label="Theme"
-            value={dark ? 'dark' : 'light'}
-            onChange={(v) => setDark(v === 'dark')}
-            options={[
-              { id: 'light', label: 'Light', icon: Sun },
-              { id: 'dark', label: 'Dark', icon: Moon },
-            ]}
-          />
 
           <Seg
             label="Colors"
