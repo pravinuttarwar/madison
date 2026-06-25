@@ -54,9 +54,9 @@ app.use((req, res, next) => {
   next();
 });
 
-// Liveness + a quick view of what's wired.
+// Liveness.
 app.get('/health', (_req, res) => {
-  res.json({ ok: true, demoMode: config.demoMode });
+  res.json({ ok: true });
 });
 
 // ── One-time Microsoft OAuth flow (run locally only, captures refresh token) ──
@@ -229,6 +229,6 @@ app.listen(config.port, () => {
   // eslint-disable-next-line no-console
   console.log(
     `Madison Command Center on http://localhost:${config.port}  ` +
-      `(demoMode=${config.demoMode}, frontend=${haveFrontend ? 'served' : 'API-only'})`,
+      `(frontend=${haveFrontend ? 'served' : 'API-only'})`,
   );
 });

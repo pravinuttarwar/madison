@@ -92,14 +92,17 @@ test('GET /api/unknown — JSON 404, never SPA fallthrough', async () => {
   assert.equal(body.error, 'not_found');
 });
 
-test('GET /api/sources/status — four in-scope sources, all live via fixtures (no Teams)', async () => {
+test('GET /api/sources/status — four in-scope sources, env-driven sandbox/live, never mock (no Teams)', async () => {
   const { status, body } = await getJson('/api/sources/status');
   assert.equal(status, 200);
   assert.equal(body.length, 4);
   const byId = Object.fromEntries(body.map((s) => [s.id, s.mode]));
   for (const id of ['outlook', 'microsoftToDo', 'quickbooks', 'spreadsheet']) {
-    assert.equal(byId[id], 'live', `${id} should be live in fixtures mode`);
+    // MBI-36: mode is env-driven. The gate runs with the default QBO_ENV/MS_ENV (sandbox)
+    // and 'mock' is retired — so every source reports 'sandbox', never 'mock'/'live'.
+    assert.equal(byId[id], 'sandbox', `${id} should be sandbox under default env`);
   }
+  for (const s of body) assert.notEqual(s.mode, 'mock');
   assert.equal(byId.microsoftTeams, undefined);
 });
 

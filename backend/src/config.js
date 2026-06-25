@@ -12,7 +12,6 @@ export const config = {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
-  demoMode: env.DEMO_MODE === '1' || env.DEMO_MODE === 'true',
 
   // TEST-ONLY (MBI-34): when FIXTURES_DIR is set, graph.js/qbo.js resolve from synthetic
   // upstream fixtures instead of calling Microsoft/Intuit, so the real route + transforms
@@ -23,6 +22,9 @@ export const config = {
   // App credentials + non-secret config only. Per-visitor tokens (refresh token,
   // display name, QBO realm) live on the session (see session.js), never here.
   graph: {
+    // Which Microsoft app/tenant the deployment is wired to: 'sandbox' (dev tenant, the
+    // default) or 'production'. Drives the source-status badge — mirrors QBO_ENV.
+    environment: env.MS_ENV || 'sandbox',
     tenantId: env.MS_TENANT_ID || '',
     clientId: env.MS_CLIENT_ID || '',
     clientSecret: env.MS_CLIENT_SECRET || '',
