@@ -66,16 +66,19 @@ Legend: ✅ done · 🟡 prototype/partial (UI real, live data pending) · ⛔ o
 - **[MBI-36](https://connecthealth.atlassian.net/browse/MBI-36) — Backend retired `DEMO_MODE` + `demo.js`.** Routes are
   always live (401 Microsoft / 503 QuickBooks when disconnected); `/api/sources/status` reports env-driven
   `sandbox`/`live` (no `mock`). HIPAA audit + PHI-safe logging re-proven on the live path.
+- **[MBI-38](https://connecthealth.atlassian.net/browse/MBI-38) — Dropped the `mock` SourceMode.** `SourceMode` is
+  `sandbox | live` only; env-driven badges; live-only auth (the sample auto-login is gone); no "sample data" copy anywhere.
+- **[MBI-37](https://connecthealth.atlassian.net/browse/MBI-37) — Hardened empty/loading/error states.** Fixed EmailQueue
+  treating an empty inbox as an error (friendly `EmptyState` primitive); render tests pin loading/empty/error + 401→login
+  + 503→pending across the pages.
+- **[MBI-33](https://connecthealth.atlassian.net/browse/MBI-33) — Go live-only (Phase-2 epic) — DONE.** The runtime
+  sample path is gone end-to-end (frontend + backend); the gate runs the live path offline against fixtures. **Demo
+  decision (MBI-39):** the published `share.mindbowser.com` demo is a **deliberately frozen artifact** — the live-only
+  build is **not** deployed to that URL (so it stays the working sample-data demo). ⚠️ Do **not** "fix" the public demo
+  by deploying `main` to it; that's intentional, not a regression.
 
 ### 🟡 Remaining (open in Jira)
 
-- **[MBI-33](https://connecthealth.atlassian.net/browse/MBI-33) — Remove sample data, go live-only (Phase-2 epic).**
-  Graduate from the sample-data prototype to a **live-only product**. Live integration is wired to **sandbox**
-  apps (badges read `sandbox`; `live` on the production apps). **MBI-34 (fixtures), MBI-35 (frontend live-only),
-  and MBI-36 (backend `DEMO_MODE`/`demo.js` retired) are done** — the runtime sample path is gone end-to-end and
-  the gate runs the live path offline against fixtures. **Remaining:** MBI-37 (harden empty/error + auth states),
-  MBI-38 (Connections badges consume live `/api/sources/status` + `SourceMode` cleanup), MBI-39 (standalone
-  demo's fate).
 - **[MBI-22](https://connecthealth.atlassian.net/browse/MBI-22) — Operational reporting from SharePoint/OneDrive spreadsheets.**
   Reports must read the practice's departmental spreadsheets via Microsoft Graph Excel (not CureMD/
   PNC). **Build-prep (2026-06-25) split this into "connect the workbook now, map the metrics later":**
