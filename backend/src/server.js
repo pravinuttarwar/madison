@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { sessionMiddleware, currentSession, clearCurrentSession } from './session.js';
 import { router } from './routes.js';
+import { tlsEnforcement } from './security.js';
+import { auditMiddleware } from './audit.js';
 
 // Pin the process to the practice timezone so all date/time bucketing + display
 // (QuickBooks day buckets, calendar/email times, "yesterday"/"last week" windows)
@@ -30,6 +32,11 @@ const QBO_SCOPES = 'com.intuit.quickbooks.accounting';
 
 const app = express();
 
+// Behind a TLS-terminating proxy in prod: trust X-Forwarded-* so req.secure reflects the
+// edge, then enforce https (redirect + HSTS). Both are no-ops unless FORCE_HTTPS=1. (MAD-14)
+if (process.env.FORCE_HTTPS === '1') app.set('trust proxy', true);
+app.use(tlsEnforcement());
+
 app.use(
   cors({
     origin: config.corsOrigins.length ? config.corsOrigins : true,
@@ -42,17 +49,11 @@ app.use(express.json());
 // route so OAuth callbacks and API reads resolve the right visitor's tokens.
 app.use(sessionMiddleware);
 
-// Audit log: method + path + status only — never request/response bodies (no content,
-// no PHI). This is the "which source was read, when" trail from ARCHITECTURE.md §6.
-app.use((req, res, next) => {
-  const t = Date.now();
-  res.on('finish', () => {
-    // originalUrl (not req.path) so the full /api/... path survives router mount-stripping
-    // eslint-disable-next-line no-console
-    console.log(`${req.method} ${req.originalUrl} → ${res.statusCode} (${Date.now() - t}ms)`);
-  });
-  next();
-});
+// Audit log: method + path + status + ms only — never request/response bodies and never
+// the query string (no content, no PHI, no OAuth code/tokens). The "which source was
+// read, when" trail from ARCHITECTURE.md §6. See audit.js. (MAD-14)
+// eslint-disable-next-line no-console
+app.use(auditMiddleware(console.log));
 
 // Liveness.
 app.get('/health', (_req, res) => {
