@@ -1,0 +1,26 @@
+{
+  "issueKey": "MAD-21",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "/auth/qbo redirects to Intuit authorize: response_type=code, scope com.intuit.quickbooks.accounting, configured redirect_uri; no client id -> setup message, no crash"
+    },
+    {
+      "id": "AC-2",
+      "text": "/auth/qbo/callback exchanges code+realmId server-side, stores refreshToken+realmId on visitor session only; code/tokens/secret never sent to browser"
+    },
+    {
+      "id": "AC-3",
+      "text": "qboToken() mints ~1h access token from refresh token, reuses until ~60s before expiry, captures rotated refresh token"
+    },
+    {
+      "id": "AC-4",
+      "text": "read-only: QBO client issues only GET /v3/company/{realmId}/query; no write verbs on accounting entities"
+    },
+    {
+      "id": "AC-5",
+      "kind": "app-logging",
+      "text": "client id/secret and tokens never in logs/error responses; QBO connect/callback audited at HTTP layer (method path -> status, no secret values)"
+    }
+  ]
+}

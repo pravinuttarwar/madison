@@ -42,6 +42,11 @@ export const config = {
     awaitingLookbackDays: Number(env.AWAITING_LOOKBACK_DAYS) || 14,
     spreadsheetPath: env.SPREADSHEET_DRIVE_PATH || '',
     namedRanges: safeJson(env.SPREADSHEET_NAMED_RANGES) || {},
+    // Customer's designated sender/domain → category lists (MAD-17). Keys are a full
+    // sender address or a bare domain; values are management|operational|action-needed.
+    // Populated per-deployment via .env so the lists land without a code change; a
+    // missing/malformed value falls back to {} (every email defaults to action-needed).
+    categoryRules: safeJson(env.CATEGORY_RULES) || {},
   },
 
   qbo: {

@@ -1,0 +1,38 @@
+{
+  "issueKey": "MAD-17",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "kind": "contract",
+      "text": "Live email list: GET /api/email returns live /me/messages mapped to email DTO (from,subject,preview,time,unread,important,category; body/joinUrl on /api/email/:id), newest-first; returns 401 when Outlook not connected (no sample fallback)."
+    },
+    {
+      "id": "AC-2",
+      "kind": "contract",
+      "text": "Important-only surfacing, full list preserved: important=true iff Graph importance==high OR flag.flagStatus==flagged; Dashboard briefing + Emails-to-reply KPI surface important-only (unread && important); full /api/email array unchanged, no server-side filter added."
+    },
+    {
+      "id": "AC-3",
+      "text": "Category from designated-sender lists: category = exact-sender match else domain match else action-needed; category in {management,operational,action-needed}; with no rules configured every email defaults to action-needed (nothing hidden)."
+    },
+    {
+      "id": "AC-4",
+      "text": "Config seam for rules: CATEGORY_RULES in backend/.env drives classifyCategory with no code change (loaded in config.js, threaded into emailsFromGraph); empty/malformed config falls back safely to no rules and never crashes the route."
+    },
+    {
+      "id": "AC-5",
+      "kind": "audit",
+      "text": "Audit trail: reading email list or single email via /api/email[/:id], or being denied (401), records an audit entry (who/session, path, when, outcome) with NO email-content values (no sender address, subject, preview, body)."
+    },
+    {
+      "id": "AC-6",
+      "kind": "app-logging",
+      "text": "PHI-safe logging: an error on the email path logs route/ids/references only, never sender addresses, subjects, previews, or bodies."
+    },
+    {
+      "id": "AC-7",
+      "kind": "timezone",
+      "text": "Timezone correctness: Graph receivedDateTime (UTC) formats to the relative label deterministically in the practice timezone, pinned by a unit test not the host clock."
+    }
+  ]
+}

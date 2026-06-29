@@ -6,7 +6,19 @@ process.env.TZ = 'America/New_York';
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { financialsFromQbo, calendarFromGraph, tasksFromGraph } from '../src/transforms.js';
+import { financialsFromQbo, calendarFromGraph, tasksFromGraph, emailsFromGraph } from '../src/transforms.js';
+
+// [AC-7] Email receivedDateTime (UTC instant) renders in the practice zone (ET), not UTC —
+// including the date-boundary case where the ET wall-clock falls on the previous calendar
+// day. 2026-03-15T02:30Z is 2026-03-14 22:30 in America/New_York (EDT, UTC-4). The label
+// must read "Mar 14 · 22:30", proving the conversion is zone-correct and DST-aware (this
+// date is after the 2026-03-08 DST switch). Pinned to ET, deterministic on any host clock.
+test('[AC-7] email time renders in the practice zone with a correct UTC→ET date shift', () => {
+  const out = emailsFromGraph([
+    { id: 'tz', receivedDateTime: '2026-03-15T02:30:00Z', from: { emailAddress: { address: 'x@y.example' } } },
+  ]);
+  assert.equal(out[0].time, 'Mar 14 · 22:30');
+});
 
 // 2026-06-24 is a Wednesday. QBO TxnDate is a date-only string in the company's
 // local zone — it must bucket under Wed, not roll back a day via UTC-midnight parsing.

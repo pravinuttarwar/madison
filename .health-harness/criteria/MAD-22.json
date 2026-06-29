@@ -1,0 +1,27 @@
+{
+  "issueKey": "MAD-22",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "GET /api/financials returns 200 { weekly, daily }; weekly depositsByDay/totalDeposits/variableSpend/netContribution (last,prior); daily depositYesterday + variableSpend"
+    },
+    {
+      "id": "AC-2",
+      "text": "variable spend excludes purchases with AccountRef in QBO_FIXED_ACCOUNT_IDS; netContribution = deposits - variable spend"
+    },
+    {
+      "id": "AC-3",
+      "kind": "timezone",
+      "text": "dates use practice-zone company-local TxnDate; yesterday KPI + per-day grouping no UTC off-by-one"
+    },
+    {
+      "id": "AC-4",
+      "text": "QBO not connected -> 503 source_not_connected; UI shows Connect not logout"
+    },
+    {
+      "id": "AC-5",
+      "kind": "app-logging",
+      "text": "financials read audit-logged at HTTP layer (method path -> status); no tokens/secrets logged"
+    }
+  ]
+}

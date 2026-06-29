@@ -32,22 +32,36 @@ test('[MAD-15] devHooksEnabled is true only with the flag set AND not production
   assert.equal(devHooksEnabled({}), false, 'off by default');
 });
 
+// Drive the gate via process.env (the handler reads it directly), restoring after.
+function withEnv(vars, fn) {
+  const saved = {};
+  for (const k of Object.keys(vars)) { saved[k] = process.env[k]; process.env[k] = vars[k]; }
+  try { return fn(); } finally {
+    for (const k of Object.keys(vars)) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
+  }
+}
+
 test('[MAD-15] the handler 404s when disabled and never touches the session', () => {
   const s = mkSession();
   let status = 0;
   const res = { status(c) { status = c; return this; }, json() { return this; } };
-  sessionContext.run(s, () => handleExpireGraph({}, res, { ALLOW_TEST_HOOKS: '0', MS_ENV: 'sandbox' }));
+  withEnv({ ALLOW_TEST_HOOKS: '0', MS_ENV: 'sandbox' }, () =>
+    sessionContext.run(s, () => handleExpireGraph({}, res)));
   assert.equal(status, 404);
   assert.equal(s.graph.refreshToken, 'rt-live-synthetic', 'session untouched when the hook is disabled');
 });
 
-test('[MAD-15] the handler invalidates the session and returns ok (no token in the response) when enabled', () => {
+test('[MAD-15] the handler works when Express invokes it as (req, res, next) — next must not disable the gate', () => {
   const s = mkSession();
   let status = 0;
   let payload;
   const res = { status(c) { status = c; return this; }, json(b) { payload = b; return this; } };
-  sessionContext.run(s, () => handleExpireGraph({}, res, { ALLOW_TEST_HOOKS: '1', MS_ENV: 'sandbox' }));
-  assert.equal(status, 200);
+  // Express passes `next` as the 3rd arg. Regression for the bug where a 3rd `env` param
+  // captured `next` and silently 404'd the live route.
+  const next = () => { throw new Error('next() must not be called'); };
+  withEnv({ ALLOW_TEST_HOOKS: '1', MS_ENV: 'sandbox' }, () =>
+    sessionContext.run(s, () => handleExpireGraph({}, res, next)));
+  assert.equal(status, 200, 'enabled route returns 200 even when called Express-style');
   assert.equal(payload.ok, true);
   assert.notEqual(s.graph.refreshToken, 'rt-live-synthetic', 'session refresh token invalidated');
   // The response must not echo any token value (safe-logging discipline carries to responses).

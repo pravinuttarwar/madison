@@ -29,8 +29,11 @@ export function expireGraphToken(session) {
 }
 
 // POST /auth/test/expire-graph — gated; invalidates the caller's session, else 404 (inert).
-export function handleExpireGraph(_req, res, env = process.env) {
-  if (!devHooksEnabled(env)) return res.status(404).json({ error: 'not_found' });
+// NOTE: reads process.env directly via devHooksEnabled() — do NOT take env as a positional
+// param. Express invokes route handlers as (req, res, next), so a 3rd param would capture
+// `next`, not the env, and silently disable the gate.
+export function handleExpireGraph(_req, res) {
+  if (!devHooksEnabled()) return res.status(404).json({ error: 'not_found' });
   expireGraphToken(currentSession());
   // No token value in the response — only a confirmation the next Graph call will re-auth.
   return res.status(200).json({ ok: true, expired: 'graph' });

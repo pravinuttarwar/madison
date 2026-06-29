@@ -1,0 +1,28 @@
+{
+  "issueKey": "MAD-20",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "GET /api/tasks returns 200 array of {id,title,owner,due,status} aggregating across all connected users To Do lists"
+    },
+    {
+      "id": "AC-2",
+      "kind": "timezone",
+      "text": "status by practice-zone calendar date: completed->done, due<today->overdue, due==today->due-today, else upcoming; all-day dues not shifted"
+    },
+    {
+      "id": "AC-3",
+      "text": "Microsoft not connected -> 401 not_authenticated (tasks ride Graph session)"
+    },
+    {
+      "id": "AC-4",
+      "text": "owner reflects single connected user (constant); multi-owner tasks-by-owner out of scope here",
+      "defer": "single-user scope; multi-owner split to follow-up"
+    },
+    {
+      "id": "AC-5",
+      "kind": "app-logging",
+      "text": "tasks read audit-logged at HTTP layer; logs/errors carry ids/paths only, never task titles (PHI-adjacent)"
+    }
+  ]
+}
