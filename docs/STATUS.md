@@ -19,7 +19,7 @@ holds the active feature stories. This doc summarizes; the tickets are authorita
 | Calendar: today + week ahead | Calendar (`/calendar`) | ✅ UI done on sample data |
 | Tasks grouped by owner, due/overdue | Tasks (`/tasks`) | ✅ UI done on sample data |
 | Clean QuickBooks snapshot (deposits, variable spend, net contribution, **revenue**, **outstanding A/R**, **cash flow**) | Financials (`/financials`) | 🟡 UI done incl. accrual revenue tile (MAD-23) + outstanding-invoice / A/R aging (MAD-24) + cash-flow overview (MAD-25); live QBO via OAuth (MAD-15); fixed-cost exclusion is config-only |
-| Weekly provider spreadsheet snapshot + WoW deltas | Reports (`/reports`) | 🟡 UI done with the 12 metrics; spreadsheet read not wired (MBI-22) |
+| Weekly provider spreadsheet snapshot + WoW deltas | Reports (`/reports`) | 🟡 UI done with the 12 metrics; **workbook connection wired (MAD-26)** — paste/validate/persist a OneDrive/SharePoint link, `/api/reports` reads from it (env fallback); named-range → metric mapping for the practice's real sheets still parked (MBI-22) |
 | Color-blind-accessible UI (never color alone) | accessibility primitives + Display menu | ✅ Done — exact dark palette + Color-Vision-Friendly default (MBI-21) |
 | Timezone-correct dates (practice zone, America/New_York) | dashboard view default + date transforms | ✅ Done (MBI-26/27/28) |
 | Mirror the owner's design; drop CureMD, Plaid, AI panel, Projects, Connections, Teams | app shell + composition | ✅ Done |
@@ -136,20 +136,35 @@ Legend: ✅ done · 🟡 prototype/partial (UI real, live data pending) · ⛔ o
   call). No contract break; no DB/migration. AC-1..AC-8 pinned by
   `transforms`/`characterization-fixtures`/`cashflow`/`Financials.test.tsx`. PR
   [#32](https://github.com/pravinuttarwar/madison/pull/32) merged; **Testing (owner QA)**.
+- **[MAD-26](https://connecthealth.atlassian.net/browse/MAD-26) — Connect SharePoint/OneDrive workbook (paste, validate, persist, read)**
+  (Phase-1 productionization, epic [MAD-1](https://connecthealth.atlassian.net/browse/MAD-1), MAD Sprint 2; was
+  MBI-22 / MBI-29 / MBI-30). Revives `Connections.tsx` as the **weekly-report workbook connection** UI: a connected
+  Graph user pastes a OneDrive/SharePoint **share-URL or drive path**; the backend resolves it to a Graph drive item,
+  confirms **read-only reachability**, and shows connected / not-reachable status. The location is persisted as
+  **non-PHI config** (driveId/itemId/name only — **never cell values**) to a small **server-side JSON file** (the
+  backend stays DB-less / no-PHI-at-rest); `/api/reports` then reads named ranges from the connected item, with
+  `SPREADSHEET_DRIVE_PATH` env as fallback. Net-new: `workbook.js` (classify/connect/persist/`workbookBase`),
+  `graph.js` share-URL resolve + reachability, `workbookEvent` audit (item reference + outcome, never the share-URL
+  or cell values — HIPAA), `GET/POST /api/reports/connection`, and a `WorkbookCard` (paste → validate → status).
+  **Additive — `/api/reports` shape unchanged; no DB/migration; no PHI at rest.** AC-1..AC-8 pinned by
+  `workbook`/`graph-workbook`/`audit`/`workbook-connection`/`Connections.test.tsx`. PR
+  [#34](https://github.com/pravinuttarwar/madison/pull/34) merged; **Testing (owner QA)**. (Named-range → metric
+  mapping for the practice's real sheets remains parked under MBI-22, pending the customer's sheet formats.)
 
 ### 🟡 Remaining (open in Jira)
 
 - **[MBI-22](https://connecthealth.atlassian.net/browse/MBI-22) — Operational reporting from SharePoint/OneDrive spreadsheets.**
   Reports must read the practice's departmental spreadsheets via Microsoft Graph Excel (not CureMD/
   PNC). **Build-prep (2026-06-25) split this into "connect the workbook now, map the metrics later":**
-  - **[MBI-29](https://connecthealth.atlassian.net/browse/MBI-29) — Paste & validate a workbook link** —
-    revive/route `Connections.tsx`, resolve a OneDrive/SharePoint share-URL → Graph drive path, confirm
-    read-only reachability. **Unblocked — ready to build** (no customer input needed).
-  - **[MBI-30](https://connecthealth.atlassian.net/browse/MBI-30) — Persist the link & read `/api/reports`
-    off it** — durable **non-PHI** drive path (path only, never cell values); blocked-by MBI-29.
+  - **[MBI-29](https://connecthealth.atlassian.net/browse/MBI-29) Paste & validate a workbook link** +
+    **[MBI-30](https://connecthealth.atlassian.net/browse/MBI-30) persist the link & read `/api/reports`
+    off it** — ✅ **delivered via [MAD-26](https://connecthealth.atlassian.net/browse/MAD-26)** (PR
+    [#34](https://github.com/pravinuttarwar/madison/pull/34); Testing/owner QA): connect → validate →
+    persist (non-PHI drive path/id only) → `/api/reports` reads from it.
   - **Parked — realign MBI-22 when the practice shares all departmental sheet formats:** the named-range
     → 12-metric mapping + file architecture (**single canonical workbook** chosen). **Blocked on:** the
-    file layout (folder + named-range map); customer is open to our proposed template.
+    file layout (folder + named-range map); customer is open to our proposed template. (The *connection*
+    is built; what remains is mapping the ranges to the customer's real sheets.)
 
 ---
 
