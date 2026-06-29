@@ -6,7 +6,51 @@ process.env.TZ = 'America/New_York';
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { financialsFromQbo, outstandingInvoicesFromQbo, calendarFromGraph, tasksFromGraph, emailsFromGraph } from '../src/transforms.js';
+import { financialsFromQbo, outstandingInvoicesFromQbo, cashFlowFromQbo, calendarFromGraph, tasksFromGraph, emailsFromGraph } from '../src/transforms.js';
+
+// ── MAD-25: cash-flow overview (derived inflow/outflow/net) ───────────────────
+// now = 2026-06-25 (Thu) ET → financePeriods: lastWeek 06-15..06-21, priorWeek
+// 06-08..06-14, mtd 06-01..06-25. Cash in = deposits, cash out = ALL purchases
+// (incl. fixed-cost accounts), net = in − out — over each window in the practice zone.
+const CF_NOW = new Date('2026-06-25T12:00:00Z'); // 08:00 ET on 2026-06-25
+const CF_DEPOSITS = [
+  { TxnDate: '2026-06-17', TotalAmt: 5000 }, // last week
+  { TxnDate: '2026-06-10', TotalAmt: 3000 }, // prior week
+  { TxnDate: '2026-06-03', TotalAmt: 1000 }, // MTD only (neither week)
+];
+const CF_PURCHASES = [
+  { TxnDate: '2026-06-18', TotalAmt: 1200, AccountRef: { value: '99' } }, // last week, FIXED account
+  { TxnDate: '2026-06-19', TotalAmt: 800, AccountRef: { value: '5' } },   // last week, variable
+  { TxnDate: '2026-06-11', TotalAmt: 600, AccountRef: { value: '5' } },   // prior week
+  { TxnDate: '2026-06-02', TotalAmt: 400, AccountRef: { value: '5' } },   // MTD only
+];
+
+test('[AC-2] cash-flow inflow/outflow/net over last/prior week + MTD windows (practice zone)', () => {
+  const cf = cashFlowFromQbo(CF_DEPOSITS, CF_PURCHASES, CF_NOW);
+  assert.deepEqual(cf.weekly.inflow, { last: 5000, prior: 3000 });
+  assert.deepEqual(cf.weekly.outflow, { last: 2000, prior: 600 }); // 1200 fixed + 800 var
+  assert.deepEqual(cf.weekly.net, { last: 3000, prior: 2400 });
+  assert.deepEqual(cf.mtd, { inflow: 9000, outflow: 3000, net: 6000 });
+});
+
+test('[AC-3] cash-flow outflow INCLUDES fixed-cost purchases (distinct from variable spend)', () => {
+  const cf = cashFlowFromQbo(CF_DEPOSITS, CF_PURCHASES, CF_NOW);
+  // last-week outflow is 2000 (fixed 1200 + variable 800); dropping the fixed one would be 800.
+  assert.equal(cf.weekly.outflow.last, 2000);
+  // sanity: variable-only financials excludes the fixed account → its spend differs.
+  const { weekly } = financialsFromQbo(CF_DEPOSITS, CF_PURCHASES, ['99'], CF_NOW);
+  assert.notEqual(weekly.variableSpend.last, cf.weekly.outflow.last);
+});
+
+test('[AC-4] cash-flow degrades to zeroed inflow/outflow/net for empty/missing input (never throws)', () => {
+  for (const [d, p] of [[[], []], [undefined, undefined], [null, null]]) {
+    const cf = cashFlowFromQbo(d, p, CF_NOW);
+    assert.deepEqual(cf.weekly.inflow, { last: 0, prior: 0 });
+    assert.deepEqual(cf.weekly.outflow, { last: 0, prior: 0 });
+    assert.deepEqual(cf.weekly.net, { last: 0, prior: 0 });
+    assert.deepEqual(cf.mtd, { inflow: 0, outflow: 0, net: 0 });
+  }
+});
 
 // ── MAD-24: outstanding-invoice tracking / A/R aging (aggregate-only) ──────────
 // 2026-06-25 is a Thursday in EDT. QBO Invoice carries a date-only DueDate (company-local

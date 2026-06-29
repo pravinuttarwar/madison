@@ -1,4 +1,4 @@
-import { Wallet, TrendingUp, Landmark, Receipt, FileClock } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, Landmark, Receipt, FileClock, ArrowLeftRight } from 'lucide-react';
 import { useViewMode } from '@/context/view-mode';
 import { Panel, Trend, KpiTile } from '@/components/primitives';
 import { Loading } from '@/components/AsyncState';
@@ -59,7 +59,13 @@ export default function Financials() {
   // A financials error means QuickBooks needs (re)connecting → offer Connect.
   if (error || !data) return <ConnectQuickBooks />;
 
-  const { weekly: WEEKLY_FINANCIAL, daily: DAILY_FINANCIAL, revenue: REVENUE, receivables: AR } = data;
+  const { weekly: WEEKLY_FINANCIAL, daily: DAILY_FINANCIAL, revenue: REVENUE, receivables: AR, cashFlow: CF } = data;
+  // Cash-flow: the active window mirrors the view (Monday = last full week, Weekday = MTD).
+  const cfWindow = isMonday
+    ? { inflow: CF.weekly.inflow.last, outflow: CF.weekly.outflow.last, net: CF.weekly.net.last }
+    : { inflow: CF.mtd.inflow, outflow: CF.mtd.outflow, net: CF.mtd.net };
+  const cfPositive = cfWindow.net >= 0;
+  const cfMax = Math.max(1, cfWindow.inflow, cfWindow.outflow);
   const dep = WEEKLY_FINANCIAL.totalDeposits;
   const spend = WEEKLY_FINANCIAL.variableSpend;
   const net = WEEKLY_FINANCIAL.netContribution;
@@ -119,6 +125,13 @@ export default function Financials() {
               sub={`${AR.openCount} open invoices`}
               icon={FileClock}
             />
+            <KpiTile
+              label="Net cash flow (last week)"
+              value={usd(CF.weekly.net.last)}
+              sub={cfPositive ? 'Cash positive' : 'Cash negative'}
+              icon={cfPositive ? TrendingUp : TrendingDown}
+              trend={<Trend delta={pctChange(CF.weekly.net.last, CF.weekly.net.prior)} unit="%" />}
+            />
           </>
         ) : (
           <>
@@ -148,6 +161,12 @@ export default function Financials() {
               value={usd(AR.totalOutstanding)}
               sub={`${AR.openCount} open invoices`}
               icon={FileClock}
+            />
+            <KpiTile
+              label="Net cash flow (month-to-date)"
+              value={usd(CF.mtd.net)}
+              sub={cfPositive ? 'Cash positive' : 'Cash negative'}
+              icon={cfPositive ? TrendingUp : TrendingDown}
             />
           </>
         )}
@@ -267,6 +286,46 @@ export default function Financials() {
         <p className="mt-3 text-xs text-muted-foreground">
           Open balances grouped by how far past due they are — aggregate only, no patient names. "Current"
           isn't yet due; the older buckets are where to chase payment.
+        </p>
+      </Panel>
+
+      {/* Cash-flow: in vs out for the active window (last week on Monday, MTD on weekdays).
+          Cash out includes fixed costs, so this is total cash movement — distinct from
+          variable spend. Net direction is shown as text + icon, never colour alone. */}
+      <Panel title="Cash flow — in vs out" source="QuickBooks" sourceMode={qboMode}>
+        <div className="space-y-2.5">
+          {[
+            { label: 'Cash in', amount: cfWindow.inflow, color: 'bg-chart-2' },
+            { label: 'Cash out', amount: cfWindow.outflow, color: 'bg-chart-5' },
+          ].map((r) => (
+            <div key={r.label} className="flex items-center gap-3">
+              <span className="w-16 text-xs font-medium text-muted-foreground">{r.label}</span>
+              <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
+                <div className={`h-full rounded-full ${r.color}`} style={{ width: `${Math.round((r.amount / cfMax) * 100)}%` }} />
+              </div>
+              <span className="w-20 text-right text-xs font-semibold tabular-nums text-foreground">{usd(r.amount)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
+          <div className="flex items-center gap-2">
+            {cfPositive ? (
+              <TrendingUp className="h-4 w-4 text-success" aria-hidden />
+            ) : (
+              <TrendingDown className="h-4 w-4 text-destructive" aria-hidden />
+            )}
+            <div>
+              <div className="text-sm font-semibold text-foreground">Net cash flow</div>
+              <div className="text-[11px] text-muted-foreground">
+                {isMonday ? 'Last week' : 'Month-to-date'} · {cfPositive ? 'Cash positive' : 'Cash negative'}
+              </div>
+            </div>
+          </div>
+          <span className="text-sm font-semibold tabular-nums text-foreground">{usd(cfWindow.net)}</span>
+        </div>
+        <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+          <ArrowLeftRight className="h-3.5 w-3.5" aria-hidden />
+          Cash out here includes fixed costs, so this is total cash movement — broader than "variable spend".
         </p>
       </Panel>
     </div>

@@ -1,0 +1,40 @@
+{
+  "issueKey": "MAD-25",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "GET /api/financials returns a new cashFlow object alongside unchanged weekly/daily/revenue/receivables (additive)"
+    },
+    {
+      "id": "AC-2",
+      "kind": "timezone",
+      "text": "cashFlow.weekly = {inflow,outflow,net} last vs prior week + cashFlow.mtd; inflow=sum deposits, outflow=sum purchases, net=in-out; windows via financePeriods in practice timezone"
+    },
+    {
+      "id": "AC-3",
+      "text": "Cash-flow outflow INCLUDES fixed-cost-account purchases (total cash out, distinct from variableSpend which excludes them)"
+    },
+    {
+      "id": "AC-4",
+      "text": "Empty/missing deposits or purchases degrades cashFlow to zeroed inflow/outflow/net; never 500s; deposits/spend/revenue/receivables unaffected"
+    },
+    {
+      "id": "AC-5",
+      "text": "Financials page renders net cash-flow KPI tile (Monday: last week+WoW; Weekday: MTD) + inflow-vs-outflow breakdown; direction color-blind-safe (text+icon); no $-prefixed figures"
+    },
+    {
+      "id": "AC-6",
+      "kind": "audit",
+      "text": "Reading /api/financials records an audit entry (method/path/status/ms) with no financial values"
+    },
+    {
+      "id": "AC-7",
+      "kind": "app-logging",
+      "text": "Cash-flow computation errors log references/status only; never deposit/purchase amounts or payloads"
+    },
+    {
+      "id": "AC-8",
+      "text": "Fixtures mode: existing deposits.json/purchases.json drive cashFlow; characterization+transforms tests pin inflow/outflow/net math incl fixed-cost inclusion + additive contract; npm test passes offline"
+    }
+  ]
+}
