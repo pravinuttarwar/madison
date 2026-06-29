@@ -43,10 +43,15 @@ export async function listMessages(top = 25) {
   return json.value || [];
 }
 
-// Sent items in the lookback window — input to the awaiting-response engine.
+// Sent items in the lookback window — input to the awaiting-response engine. We select the
+// RFC threading signals (internetMessageId + the In-Reply-To/References headers) and
+// conversationIndex so the engine can thread WITHOUT relying on conversationId (see
+// awaiting.js). conversationId is still selected — used only to fetch a thread's messages.
 export async function listSentItems(lookbackDays) {
   const since = new Date(Date.now() - lookbackDays * 86_400_000).toISOString();
-  const sel = 'toRecipients,subject,sentDateTime,conversationId,conversationIndex';
+  const sel =
+    'toRecipients,subject,sentDateTime,conversationId,conversationIndex,' +
+    'internetMessageId,internetMessageHeaders';
   const json = await get(
     `${root()}/mailFolders('sentitems')/messages?$top=100&$orderby=sentDateTime desc` +
       `&$filter=sentDateTime ge ${since}&$select=${sel}`,
@@ -54,10 +59,15 @@ export async function listSentItems(lookbackDays) {
   return json.value || [];
 }
 
-// Most recent message in a conversation — to test whether the recipient has replied.
-// NOTE: Graph rejects $filter on conversationId combined with $orderby on a different
-// field ("restriction/sort too complex"). So we filter only, then pick newest in JS.
-export async function latestInConversation(conversationId) {
+// Most recent message in a thread — to test whether the recipient has replied. Threading
+// (which sent items are the same conversation) is decided by RFC headers/conversationIndex
+// in awaiting.js; here we only FETCH the thread's messages, for which conversationId is the
+// one practical Graph filter. NOTE: Graph rejects $filter on conversationId combined with
+// $orderby on a different field ("restriction/sort too complex") — so we filter, then pick
+// the newest in JS.
+export async function latestInThread(rep) {
+  const conversationId = rep && rep.conversationId;
+  if (!conversationId) return null;
   const sel = 'from,sentDateTime';
   const json = await get(
     `${root()}/messages?$top=25&$filter=conversationId eq '${conversationId}'&$select=${sel}`,
