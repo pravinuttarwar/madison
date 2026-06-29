@@ -167,6 +167,36 @@ export function getReports(): Promise<ReportsData> {
   return fetchJson<ReportsData>('/api/reports');
 }
 
+// ── Weekly-report workbook connection (MAD-26) ───────────────────────────────
+// The source the providers' weekly spreadsheet is read from: a connected OneDrive/
+// SharePoint workbook, the SPREADSHEET_DRIVE_PATH env fallback, or nothing yet.
+export type WorkbookConnection =
+  | { connected: true; name: string; source: 'share-url' | 'drive-path' | 'env'; via: 'connection' | 'env' }
+  | { connected: false };
+
+export type WorkbookConnectResult = { connected: true; name: string; source: 'share-url' | 'drive-path' };
+
+export function getWorkbookConnection(): Promise<WorkbookConnection> {
+  return fetchJson<WorkbookConnection>('/api/reports/connection');
+}
+
+// Connect a workbook by pasting a share-URL or drive path. On a not-reachable / failed
+// connect the backend returns 422/502 with a plain-language `reason` — surfaced as the
+// thrown ApiError's message so the UI can show it without exposing the raw URL/token.
+export async function connectWorkbook(input: string): Promise<WorkbookConnectResult> {
+  const res = await fetch(`${config.apiUrl}/api/reports/connection`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ input }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { reason?: string };
+    throw new ApiError(res.status, '/api/reports/connection', body.reason || 'Could not connect that workbook.');
+  }
+  return (await res.json()) as WorkbookConnectResult;
+}
+
 export function getDashboard(view: ViewMode): Promise<DashboardData> {
   return fetchJson<DashboardData>(`/api/dashboard?view=${view}`);
 }

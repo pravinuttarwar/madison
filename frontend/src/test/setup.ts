@@ -44,6 +44,10 @@ export function apiFixtureFor(pathname: string, search: string): unknown {
   if (pathname === '/api/settings') {
     return { awaitingThresholdHours: dashboardMonday.awaitingThresholdHours };
   }
+  // MAD-26: weekly-report workbook connection status (default = connected via env fallback).
+  if (pathname === '/api/reports/connection') {
+    return { connected: true, name: 'Madison Weekly Report.xlsx', source: 'env', via: 'env' };
+  }
   return undefined;
 }
 

@@ -6,6 +6,8 @@ import * as graph from './graph.js';
 import * as qbo from './qbo.js';
 import * as T from './transforms.js';
 import { computeAwaiting } from './awaiting.js';
+import { readWorkbook, workbookRef, connectWorkbook, WorkbookError } from './workbook.js';
+import { workbookEvent } from './audit.js';
 
 export const router = Router();
 const TTL = 90_000; // 90s in-memory cache
@@ -179,9 +181,50 @@ router.get('/reports', route('spreadsheet',
     for (const [key, rangeName] of Object.entries(map)) {
       values[key] = await graph.workbookNamedRange(rangeName);
     }
+    // Audit the workbook READ once per request — item reference + outcome, never cell values.
+    const ref = workbookRef();
+    workbookEvent('read', { sessionId: currentSession()?.id || 'none', ref: ref?.itemId || 'env', outcome: 'ok' });
     return T.reportsFromRanges(values, labels);
   },
 ));
+
+// ── weekly-report workbook CONNECTION (MAD-26: paste → resolve → validate → persist) ──
+// Both routes require the Microsoft session (the workbook lives in the owner's OneDrive/
+// SharePoint) → 401 when not connected, mirroring the other Graph-backed routes.
+const basename = (p) => String(p || '').split('/').filter(Boolean).pop() || '';
+
+router.get('/reports/connection', (_req, res) => {
+  if (!graphConnected()) return res.status(401).json({ error: 'not_authenticated', source: 'spreadsheet' });
+  const wb = readWorkbook();
+  if (wb) return res.json({ connected: true, name: wb.name, source: wb.source, via: 'connection' });
+  if (config.graph.spreadsheetPath) {
+    return res.json({ connected: true, name: basename(config.graph.spreadsheetPath), source: 'env', via: 'env' });
+  }
+  return res.json({ connected: false });
+});
+
+router.post('/reports/connection', async (req, res) => {
+  if (!graphConnected()) return res.status(401).json({ error: 'not_authenticated', source: 'spreadsheet' });
+  const input = (req.body && req.body.input) || '';
+  if (!String(input).trim()) return res.status(400).json({ error: 'missing_input' });
+  try {
+    const result = await connectWorkbook(input, {
+      sessionId: currentSession()?.id || 'none',
+      resolveShareUrl: graph.resolveShareUrl,
+      resolveDrivePath: graph.resolveDrivePath,
+      workbookReachable: graph.workbookReachable,
+      audit: (action, meta) => workbookEvent(action, meta),
+    });
+    return res.json(result);
+  } catch (err) {
+    // not-reachable is the expected "bad paste / no access" outcome — plain-language reason,
+    // no upstream error text (which can embed the share-URL/token). Anything else → 502.
+    if (err instanceof WorkbookError) {
+      return res.status(422).json({ error: 'not_reachable', reason: err.reason });
+    }
+    return res.status(502).json({ error: 'connect_failed' });
+  }
+});
 
 // ── dashboard aggregate (BFF) ─────────────────────────────────────────────────
 router.get('/dashboard', async (req, res) => {

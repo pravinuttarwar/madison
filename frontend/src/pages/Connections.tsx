@@ -9,12 +9,19 @@ import {
   Wallet,
   Check,
   ArrowRight,
+  AlertTriangle,
   type LucideIcon,
 } from 'lucide-react';
 import { Panel } from '@/components/primitives';
 import { Loading, ErrorState } from '@/components/AsyncState';
 import { useApi } from '@/hooks/useApi';
-import { getSourceStatus, type SourceMode } from '@/lib/api';
+import {
+  getSourceStatus,
+  getWorkbookConnection,
+  connectWorkbook,
+  type SourceMode,
+  type WorkbookConnection,
+} from '@/lib/api';
 
 const MODE_COPY: Record<SourceMode, { label: string; cls: string }> = {
   sandbox: { label: 'Sandbox', cls: 'border-warning/30 bg-warning/10 text-warning' },
@@ -75,6 +82,98 @@ function ConnectButton({
     >
       {children}
     </button>
+  );
+}
+
+// MAD-26 — connect the providers' weekly-report workbook by pasting a OneDrive/SharePoint
+// share-link or drive path. The backend resolves + validates read-only reachability and
+// persists only the location (never cell values); /api/reports then reads from it.
+function WorkbookCard() {
+  const { data, loading } = useApi(getWorkbookConnection, []);
+  const [connection, setConnection] = useState<WorkbookConnection | null>(null);
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // A fresh connect result takes precedence over the initially-loaded status.
+  const current = connection ?? data ?? null;
+  const connectedName = current && current.connected ? current.name : null;
+
+  async function onConnect() {
+    const value = input.trim();
+    if (!value || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await connectWorkbook(value);
+      setConnection({ connected: true, name: result.name, source: result.source, via: 'connection' });
+      setInput('');
+    } catch (e) {
+      // ApiError.message carries the backend's plain-language reason — never the raw URL/token.
+      setError(e instanceof Error ? e.message : 'Could not connect that workbook.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Panel
+      title="Weekly report workbook"
+      action={
+        connectedName ? (
+          <span className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success">
+            <Check className="h-3 w-3" strokeWidth={2.5} aria-hidden /> Connected
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[11px] font-semibold text-warning">
+            <AlertTriangle className="h-3 w-3" aria-hidden /> Not connected
+          </span>
+        )
+      }
+    >
+      <p className="text-sm text-muted-foreground">
+        Point the Reports tab at your providers' weekly spreadsheet in OneDrive or SharePoint.
+        Paste its share link or drive path — we confirm we can read it, then read the report
+        live each time. We store only the file's location, never its contents.
+      </p>
+
+      {connectedName && (
+        <div className="mt-3 flex items-center gap-2.5 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
+          <FileSpreadsheet className="h-4 w-4 text-muted-foreground" aria-hidden />
+          <span className="font-medium text-foreground">{connectedName}</span>
+          {current && current.connected && current.via === 'env' && (
+            <span className="text-xs text-muted-foreground">(default location)</span>
+          )}
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Paste a share link or drive path"
+          aria-label="Workbook share link or drive path"
+          className="min-w-0 flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground shadow-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
+        />
+        <button
+          onClick={onConnect}
+          disabled={busy || loading || !input.trim()}
+          className="inline-flex items-center gap-2 rounded-lg border border-transparent bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {busy ? 'Checking…' : connectedName ? 'Reconnect workbook' : 'Connect workbook'}
+        </button>
+      </div>
+
+      {error && (
+        <p className="mt-3 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-foreground">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden />
+          <span>
+            <span className="font-semibold">Not reachable.</span> {error}
+          </span>
+        </p>
+      )}
+    </Panel>
   );
 }
 
@@ -152,6 +251,9 @@ export default function Connections() {
           </p>
         )}
       </Panel>
+
+      {/* Weekly report workbook (MAD-26) — paste, validate, connect */}
+      <WorkbookCard />
 
       {/* QuickBooks */}
       <Panel title="QuickBooks Online" action={<ModeBadge mode={byId.quickbooks ?? 'sandbox'} />}>
