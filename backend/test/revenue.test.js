@@ -47,6 +47,33 @@ test('[AC-4] incomeFromProfitAndLoss returns 0 for empty/malformed reports (no t
   assert.equal(incomeFromProfitAndLoss({ Rows: { Row: [{ Summary: { ColData: [{ value: 'Net Income' }, { value: 'x' }] } }] } }), 0);
 });
 
+// ── [AC-1] Day-2 robustness against the real QBO ProfitAndLoss shape ──────────
+// A real QBO report carries the income figure in a Money column that is NOT always
+// the last ColData entry (comparison/period reports append a blank trailing column),
+// and the section is identified by group:"Income" even when the summary label is
+// localized/varies. Pick the last NUMERIC column of the Income section — never a
+// trailing blank (Number('') === 0 would otherwise silently report zero revenue).
+test('[AC-1] incomeFromProfitAndLoss reads the Income section by group, ignoring a trailing blank column', () => {
+  const realShape = {
+    Header: { ReportName: 'ProfitAndLoss', ReportBasis: 'Accrual' },
+    Columns: { Column: [{ ColTitle: '' }, { ColTitle: 'Total' }, { ColTitle: '' }] },
+    Rows: {
+      Row: [
+        {
+          type: 'Section',
+          group: 'Income',
+          Header: { ColData: [{ value: 'Income' }, { value: '' }, { value: '' }] },
+          Rows: { Row: [{ type: 'Data', ColData: [{ value: 'Patient Services' }, { value: '264500.00' }, { value: '' }] }] },
+          // Label localized (not the literal "Total Income"); amount in col 1, blank col 2.
+          Summary: { ColData: [{ value: 'Income — total' }, { value: '288400.00' }, { value: '' }] },
+        },
+        { type: 'Section', group: 'Expenses', Summary: { ColData: [{ value: 'Total Expenses' }, { value: '120000.00' }, { value: '' }] } },
+      ],
+    },
+  };
+  assert.equal(incomeFromProfitAndLoss(realShape), 288400);
+});
+
 // ── [AC-2] periods mirror the existing tiles: last week / prior week / MTD ─────
 test('[AC-2] financePeriods returns last-week, prior-week (Mon–Sun) and month-to-date ranges', () => {
   const now = new Date('2026-06-29T12:00:00Z'); // Monday 2026-06-29, 08:00 ET

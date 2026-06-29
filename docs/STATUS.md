@@ -18,7 +18,7 @@ holds the active feature stories. This doc summarizes; the tickets are authorita
 | "Sent, no reply" follow-up | Email Queue + Dashboard "Awaiting response" | 🟡 UI done; detection engine spec'd, not wired (needs live Graph) |
 | Calendar: today + week ahead | Calendar (`/calendar`) | ✅ UI done on sample data |
 | Tasks grouped by owner, due/overdue | Tasks (`/tasks`) | ✅ UI done on sample data |
-| Clean QuickBooks snapshot (deposits, variable spend, net contribution) | Financials (`/financials`) | 🟡 UI done; QBO not connected; fixed-cost exclusion is config-only |
+| Clean QuickBooks snapshot (deposits, variable spend, net contribution, **revenue**) | Financials (`/financials`) | 🟡 UI done incl. accrual revenue tile (MAD-23); live QBO via OAuth (MAD-15); fixed-cost exclusion is config-only |
 | Weekly provider spreadsheet snapshot + WoW deltas | Reports (`/reports`) | 🟡 UI done with the 12 metrics; spreadsheet read not wired (MBI-22) |
 | Color-blind-accessible UI (never color alone) | accessibility primitives + Display menu | ✅ Done — exact dark palette + Color-Vision-Friendly default (MBI-21) |
 | Timezone-correct dates (practice zone, America/New_York) | dashboard view default + date transforms | ✅ Done (MBI-26/27/28) |
@@ -101,6 +101,21 @@ Legend: ✅ done · 🟡 prototype/partial (UI real, live data pending) · ⛔ o
   Planner stories; admin-consent/tenant-restriction is a routed product dependency, not code. PR
   [#22](https://github.com/pravinuttarwar/madison/pull/22) merged; ticket sits in **Testing (owner QA)** — moves to Done
   after the owner's manual verification.
+- **[MAD-17](https://connecthealth.atlassian.net/browse/MAD-17) — Live Outlook email + important-email surfacing**
+  (Phase-1 productionization, epic [MAD-1](https://connecthealth.atlassian.net/browse/MAD-1), MAD Sprint 2). `/api/email`
+  + `/api/email/:id` serve live Microsoft Graph mail mapped to the email DTO (`important = high || flagged`, `unread`,
+  category); the customer's sender/domain→category lists load from a `CATEGORY_RULES` config seam (empty default →
+  `action-needed`, so important mail is never hidden). 401 when Outlook disconnected. AC-1..AC-7 pinned; audit + PHI-safe
+  logging re-proven. PR [#27](https://github.com/pravinuttarwar/madison/pull/27) merged; **Testing (owner QA)**.
+- **[MAD-23](https://connecthealth.atlassian.net/browse/MAD-23) — Revenue visibility (Financials)**
+  (Phase-1 productionization, epic [MAD-1](https://connecthealth.atlassian.net/browse/MAD-1), MAD Sprint 2). Adds an
+  **accrual-basis revenue** figure (QuickBooks ProfitAndLoss → Total Income) as an **additive** `revenue` field on
+  `/api/financials` — last full week + prior week (WoW) and month-to-date — and a **Revenue** tile in both Financials
+  view-modes, noting it is accrual-basis and so differs from cash deposits. Net-new: `qbo.report()` wiring + a synthetic
+  ProfitAndLoss fixture, the `incomeFromProfitAndLoss` parser (robust to the real QBO report shape — group-identified
+  Income section, blank trailing columns), and `financePeriods` (ET-correct window boundaries). No contract break; no
+  DB/migration. AC-1..AC-7 pinned by `revenue`/`characterization-fixtures`/`Financials.test.tsx`. PR
+  [#28](https://github.com/pravinuttarwar/madison/pull/28) merged; **Testing (owner QA)**.
 
 ### 🟡 Remaining (open in Jira)
 

@@ -318,20 +318,40 @@ export function financialsFromQbo(deposits, purchases, fixedAccountIds, now = ne
 // malformed report yields 0 — never throws — so the financials snapshot degrades
 // safely rather than 500-ing the whole route.
 export function incomeFromProfitAndLoss(report) {
-  let income = 0;
+  // The income figure lives in a Money column that is NOT reliably the last ColData
+  // entry — comparison/period P&L reports append blank trailing columns, and a blank
+  // value coerces to 0 (Number('') === 0), which would silently report zero revenue.
+  // Take the last column whose value is a real number instead.
+  const lastNumeric = (colData) => {
+    if (!Array.isArray(colData)) return null;
+    for (let i = colData.length - 1; i >= 0; i--) {
+      const raw = colData[i]?.value;
+      if (raw === '' || raw == null) continue;
+      const n = Number(raw);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
+  };
+
+  let income = 0, found = false;
   const visit = (rows) => {
     if (!Array.isArray(rows)) return;
     for (const row of rows) {
       const cd = row?.Summary?.ColData;
-      if (Array.isArray(cd) && cd.length && /^total income$/i.test(String(cd[0]?.value || '').trim())) {
-        const amt = Number(cd[cd.length - 1]?.value);
-        if (Number.isFinite(amt)) income = amt;
+      // Identify the Income summary by the canonical label OR the section's group
+      // (QBO marks the income section group:"Income" even when the label is localized).
+      const label = String(cd?.[0]?.value || '').trim();
+      const isIncome = Array.isArray(cd) &&
+        (/^total income$/i.test(label) || String(row?.group || '').toLowerCase() === 'income');
+      if (isIncome) {
+        const amt = lastNumeric(cd);
+        if (amt != null) { income = amt; found = true; }
       }
       visit(row?.Rows?.Row);
     }
   };
   visit(report?.Rows?.Row);
-  return income;
+  return found ? income : 0;
 }
 
 // The date ranges for the revenue tiles, mirroring how deposits/variable-spend are
