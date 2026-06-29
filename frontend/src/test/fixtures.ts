@@ -691,6 +691,19 @@ export const financialsFixture: FinancialsData = {
   daily: dashboardMonday.financialDay!,
   // Accrual revenue (MAD-23) — reads higher than cash deposits by design. Sample only.
   revenue: { weekly: { last: 288400, prior: 271500 }, mtd: 542900 },
+  // Outstanding A/R aging (MAD-24) — aggregate-only, no customer names. Sample only.
+  receivables: {
+    totalOutstanding: 84200,
+    openCount: 23,
+    asOf: '2026-06-25',
+    aging: [
+      { bucket: 'Current', amount: 41800, count: 11 },
+      { bucket: '1–30', amount: 22400, count: 6 },
+      { bucket: '31–60', amount: 11600, count: 3 },
+      { bucket: '61–90', amount: 5200, count: 2 },
+      { bucket: '90+', amount: 3200, count: 1 },
+    ],
+  },
 };
 
 // Signed-in profile (the live /api/me shape). Synthetic.

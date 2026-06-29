@@ -6,7 +6,58 @@ process.env.TZ = 'America/New_York';
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { financialsFromQbo, calendarFromGraph, tasksFromGraph, emailsFromGraph } from '../src/transforms.js';
+import { financialsFromQbo, outstandingInvoicesFromQbo, calendarFromGraph, tasksFromGraph, emailsFromGraph } from '../src/transforms.js';
+
+// ── MAD-24: outstanding-invoice tracking / A/R aging (aggregate-only) ──────────
+// 2026-06-25 is a Thursday in EDT. QBO Invoice carries a date-only DueDate (company-local
+// calendar date) + a Balance; CustomerRef may be a patient name (PHI) and must NEVER
+// surface — the DTO is aggregate-only.
+
+test('[AC-2][AC-4] outstanding invoices: totals/count exclude fully-paid; aggregate-only (no customer names)', () => {
+  const now = new Date('2026-06-25T16:00:00Z'); // 12:00 ET
+  const invoices = [
+    { Balance: 1200, DueDate: '2026-06-20', CustomerRef: { name: 'Jane Patient' } },
+    { Balance: 800, DueDate: '2026-06-24', CustomerRef: { name: 'John Patient' } },
+    { Balance: 0, DueDate: '2026-05-01', CustomerRef: { name: 'Paid Patient' } }, // excluded (Balance 0)
+  ];
+  const r = outstandingInvoicesFromQbo(invoices, now);
+  assert.equal(r.openCount, 2);
+  assert.equal(r.totalOutstanding, 2000);
+  // aggregate-only: no customer/patient names or per-invoice identifiers anywhere in the DTO.
+  assert.ok(!JSON.stringify(r).includes('Patient'), 'DTO must not carry customer/patient names');
+});
+
+test('[AC-3] A/R aging buckets by days-past-due (practice zone, DST-correct) sum to total', () => {
+  const now = new Date('2026-06-25T16:00:00Z'); // 12:00 ET (EDT)
+  const invoices = [
+    { Balance: 100, DueDate: '2026-07-10' }, // not yet due → Current
+    { Balance: 200, DueDate: '2026-06-10' }, // 15 days → 1–30
+    { Balance: 300, DueDate: '2026-05-10' }, // 46 days → 31–60
+    { Balance: 400, DueDate: '2026-04-10' }, // 76 days → 61–90
+    { Balance: 500, DueDate: '2026-01-10' }, // 166 days, spans the 2026-03-08 DST switch → 90+
+  ];
+  const r = outstandingInvoicesFromQbo(invoices, now);
+  const amt = Object.fromEntries(r.aging.map((a) => [a.bucket, a.amount]));
+  assert.equal(amt['Current'], 100);
+  assert.equal(amt['1–30'], 200);
+  assert.equal(amt['31–60'], 300);
+  assert.equal(amt['61–90'], 400);
+  assert.equal(amt['90+'], 500); // rounding absorbs the DST day-length drift (no off-by-one)
+  // the five buckets partition the outstanding total exactly.
+  assert.equal(r.aging.reduce((s, a) => s + a.amount, 0), r.totalOutstanding);
+  assert.equal(r.aging.length, 5);
+});
+
+test('[AC-5] outstanding invoices degrade to a zeroed snapshot for empty/missing/malformed input (never throws)', () => {
+  const now = new Date('2026-06-25T16:00:00Z');
+  for (const input of [[], undefined, null, [{}], [{ Balance: 'not-a-number' }]]) {
+    const r = outstandingInvoicesFromQbo(input, now);
+    assert.equal(r.totalOutstanding, 0);
+    assert.equal(r.openCount, 0);
+    assert.equal(r.aging.length, 5);
+    assert.equal(r.aging.reduce((s, a) => s + a.amount + a.count, 0), 0);
+  }
+});
 
 // [AC-7] Email receivedDateTime (UTC instant) renders in the practice zone (ET), not UTC —
 // including the date-boundary case where the ET wall-clock falls on the previous calendar

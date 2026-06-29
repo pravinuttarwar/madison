@@ -1,0 +1,48 @@
+{
+  "issueKey": "MAD-24",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "GET /api/financials returns a new receivables object alongside unchanged weekly/daily/revenue (additive, no contract break)"
+    },
+    {
+      "id": "AC-2",
+      "text": "receivables.totalOutstanding = sum of open-invoice balances; openCount = count; Balance=0 invoices excluded"
+    },
+    {
+      "id": "AC-3",
+      "kind": "timezone",
+      "text": "receivables.aging = five buckets Current/1-30/31-60/61-90/90+ days past due (amount+count each), days-past-due in practice timezone, buckets sum to totalOutstanding"
+    },
+    {
+      "id": "AC-4",
+      "text": "receivables DTO is aggregate-only: no customer/patient names or per-invoice identifiers in the response"
+    },
+    {
+      "id": "AC-5",
+      "text": "Invoice query failure/empty degrades receivables to zeroed totals/buckets; never 500s; deposits/spend/revenue unaffected"
+    },
+    {
+      "id": "AC-6",
+      "text": "QuickBooks not connected still returns 503 source_not_connected (auth/connection contract unchanged)"
+    },
+    {
+      "id": "AC-7",
+      "text": "Financials page renders Outstanding A/R KPI tile + aging panel in both Monday and Weekday views; money trend/magnitude-first, no $-prefixed figures"
+    },
+    {
+      "id": "AC-8",
+      "kind": "audit",
+      "text": "Reading /api/financials records an audit entry (method/path/status/ms) with no financial or patient values"
+    },
+    {
+      "id": "AC-9",
+      "kind": "app-logging",
+      "text": "Invoice query errors log references/status only; never invoice balances, customer names, or report payloads"
+    },
+    {
+      "id": "AC-10",
+      "text": "Fixtures mode: generate.js writes synthetic invoices.json across aging buckets; characterization+transforms tests pin receivables totals, bucket math, additive contract; npm test passes offline"
+    }
+  ]
+}

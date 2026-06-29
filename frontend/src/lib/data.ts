@@ -48,6 +48,17 @@ export type RevenueFinancial = {
   mtd: number;
 };
 
+// Outstanding-invoice tracking / A/R aging (QuickBooks open Invoices), MAD-24. Additive to
+// the financials snapshot. AGGREGATE-ONLY — totals, counts and aging-bucket sums; never any
+// customer/patient name (HIPAA / SOW no-PHI posture). A point-in-time snapshot, so it reads
+// the same in the Monday and Weekday views.
+export type ReceivablesFinancial = {
+  totalOutstanding: number;
+  openCount: number;
+  asOf: string;
+  aging: { bucket: string; amount: number; count: number }[];
+};
+
 export type DailyFinancial = {
   depositYesterday: {
     breakdown: { label: string; amount: number }[];

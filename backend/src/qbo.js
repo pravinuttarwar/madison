@@ -20,6 +20,7 @@ export async function query(sql) {
   if (config.fixturesMode) {
     if (/FROM Deposit/i.test(sql)) return loadFixture('qbo', 'deposits.json');
     if (/FROM Purchase/i.test(sql)) return loadFixture('qbo', 'purchases.json');
+    if (/FROM Invoice/i.test(sql)) return loadFixture('qbo', 'invoices.json');
     return {};
   }
   const token = await qboToken();
@@ -64,4 +65,12 @@ export async function purchases(fromISO, toISO) {
     `SELECT * FROM Purchase WHERE TxnDate >= '${fromISO}' AND TxnDate <= '${toISO}'`,
   );
   return r.Purchase || [];
+}
+
+// Open (unpaid) invoices — A/R aging (MAD-24). Point-in-time, not a date window: every
+// invoice still carrying a balance. Read-only query; the aggregate-only transform keeps
+// customer/patient names out of the response.
+export async function invoices() {
+  const r = await query(`SELECT * FROM Invoice WHERE Balance > '0'`);
+  return r.Invoice || [];
 }
