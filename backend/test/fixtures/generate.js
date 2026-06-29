@@ -159,4 +159,9 @@ export function writeFixtures(dir, now = new Date()) {
   for (const [name, [last, prior]] of Object.entries(RANGE_VALUES)) {
     w(names, `${name}.json`)({ values: [[last, prior]] });
   }
+
+  // ── Graph: workbook connection (MAD-26) — drive item a share-URL / drive path resolves to,
+  // and a worksheet list proving read-only reachability. Synthetic refs only (no real drive). ──
+  w(g, 'driveitem.json')({ id: 'item-9', name: 'Madison Weekly Report.xlsx', parentReference: { driveId: 'drive-1' } });
+  w(g, 'worksheets.json')({ value: [{ name: 'Week' }] });
 }

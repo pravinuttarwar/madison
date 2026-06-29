@@ -5,7 +5,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { auditMiddleware, auditPath } from '../src/audit.js';
+import { auditMiddleware, auditPath, workbookEvent } from '../src/audit.js';
 
 function mkReq({ method = 'GET', url = '/api/dashboard', body } = {}) {
   return { method, originalUrl: url, url, body };
@@ -70,4 +70,32 @@ test('[AC-5] strips the query string so the OAuth code / tokens never land in lo
 test('[AC-5] auditPath returns the pathname without the query string', () => {
   assert.equal(auditPath({ originalUrl: '/api/x?token=abc' }), '/api/x');
   assert.equal(auditPath({ originalUrl: '/api/x' }), '/api/x');
+});
+
+// ── MAD-26 — workbook access audit (AC-7) + PHI-/secret-safe logging (AC-8) ──
+test('[AC-7] workbookEvent records action, session reference, item reference and outcome', () => {
+  const lines = [];
+  workbookEvent('resolve', { sessionId: 'sess-abc', ref: 'item-9', outcome: 'ok' }, (l) => lines.push(l), () => 'T');
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /workbook/);
+  assert.match(lines[0], /resolve/);
+  assert.match(lines[0], /sess-abc/);
+  assert.match(lines[0], /item-9/);
+  assert.match(lines[0], /ok/);
+});
+
+test('[AC-7] a denied workbook access still emits an audit entry', () => {
+  const lines = [];
+  workbookEvent('validate', { sessionId: 'sess-abc', ref: 'item-9', outcome: 'denied' }, (l) => lines.push(l), () => 'T');
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /validate/);
+  assert.match(lines[0], /denied/);
+});
+
+test('[AC-8] the audit line carries no raw share-URL and no cell values', () => {
+  const lines = [];
+  // Even though a caller hands a ref, the line must never contain a URL or workbook contents.
+  workbookEvent('read', { sessionId: 'sess-abc', ref: 'item-9', outcome: 'ok' }, (l) => lines.push(l), () => 'T');
+  assert.doesNotMatch(lines[0], /https?:\/\//, 'no share-URL in the audit line');
+  assert.doesNotMatch(lines[0], /sharepoint|onedrive/i, 'no share host in the audit line');
 });

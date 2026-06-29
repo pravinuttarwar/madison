@@ -23,6 +23,17 @@ export function authEvent(event, { sessionId = 'none', source = 'graph', outcome
   log(`audit auth ${source} ${event} session=${sessionId} → ${outcome} @${now()}`);
 }
 
+// Workbook-access audit entry (MAD-26, AC-7). Records WHO (session reference, not a name/PHI) ·
+// WHAT (action: resolve | validate | read + the drive-ITEM reference, not the share-URL) · WHEN ·
+// OUTCOME (ok | denied) for the weekly-report workbook connection — the "who resolved/validated/
+// read which workbook, when" trail. It receives only references: NEVER the raw share-URL (which can
+// embed an access token) and NEVER cell values (MAD-26, AC-8). `log` and `now` are injectable.
+// tz-safe: now() is an ISO-8601 UTC audit timestamp for machine ordering — never parsed back or
+// rendered to a user, so timezone/DST never enters in.
+export function workbookEvent(action, { sessionId = 'none', ref = 'none', outcome = 'ok' } = {}, log = console.log, now = () => new Date().toISOString()) {
+  log(`audit workbook ${action} session=${sessionId} item=${ref} → ${outcome} @${now()}`);
+}
+
 // Express middleware factory. `log` and `now` are injectable for tests.
 // tz-safe: now() is used only for an elapsed-millisecond duration (end - start); no
 // calendar/user-facing time, so timezone/DST never enters in.

@@ -1,0 +1,39 @@
+{
+  "issueKey": "MAD-26",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "Connect via share-URL: connected Graph user pastes a OneDrive/SharePoint share-URL; backend resolves to a Graph drive item, confirms read-only reachability, UI shows Connected with resolved workbook name"
+    },
+    {
+      "id": "AC-2",
+      "text": "Connect via drive path: pasting a drive path validates reachability the same way and shows the same connected status"
+    },
+    {
+      "id": "AC-3",
+      "text": "Not-reachable handling: a URL/path that does not resolve or is not readable shows a not-reachable state with a plain-language reason; previously-persisted connection left unchanged"
+    },
+    {
+      "id": "AC-4",
+      "text": "Durable persistence (drive-path only): on success, only the resolved drive path/driveItem id is written to a server-side non-PHI config file (never cell values); survives restart; SPREADSHEET_DRIVE_PATH env is fallback"
+    },
+    {
+      "id": "AC-5",
+      "text": "Reports read from the connection: /api/reports reads named ranges from the connected drive path (not env hardcode); reads stay live (90s cache); env path only as fallback"
+    },
+    {
+      "id": "AC-6",
+      "text": "Read-only guarantee: connect/validate/read make only read-only Graph calls; nothing written back to OneDrive/SharePoint"
+    },
+    {
+      "id": "AC-7",
+      "kind": "audit",
+      "text": "Audit: user resolve/validate/read (or denied) records an audit entry (who session-ref, what resolve|validate|read + drive-item ref, when, outcome) with no cell values and no raw share-URL"
+    },
+    {
+      "id": "AC-8",
+      "kind": "app-logging",
+      "text": "PHI-safe logging: an error on the workbook path logs drive-item ids/references only, never cell values, never the raw share-URL (can embed a token)"
+    }
+  ]
+}

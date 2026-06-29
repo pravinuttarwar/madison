@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import { graphToken } from './auth.js';
 import { loadFixture } from './fixtures.js';
+import { workbookBase, workbookRef } from './workbook.js';
 
 const BASE = 'https://graph.microsoft.com/v1.0';
 
@@ -17,6 +18,10 @@ function graphFixture(reqPath) {
   if (reqPath.includes('/calendarView')) return loadFixture('graph', 'calendar.json');
   if (/\/todo\/lists\/[^/]+\/tasks/.test(reqPath)) return loadFixture('graph', 'todo-tasks.json');
   if (reqPath.includes('/todo/lists')) return loadFixture('graph', 'todo-lists.json');
+  // MAD-26 workbook connection: share-URL resolve, drive-path resolve, reachability check.
+  if (reqPath.includes('/shares/')) return loadFixture('graph', 'driveitem.json');
+  if (reqPath.includes('/workbook/worksheets')) return loadFixture('graph', 'worksheets.json');
+  if (reqPath.includes('/drive/root:') && reqPath.includes('$select=id,name')) return loadFixture('graph', 'driveitem.json');
   const nr = reqPath.match(/\/workbook\/names\/([^/]+)\/range/);
   if (nr) return loadFixture('graph', 'names', `${decodeURIComponent(nr[1])}.json`);
   if (reqPath.startsWith('/me?$select=displayName')) return loadFixture('graph', 'me.json');
@@ -113,12 +118,43 @@ export async function listTodoTasks() {
   return all;
 }
 
-// Weekly spreadsheet — read a named range's values (2-D array).
+// ── MAD-26: workbook connection (resolve a pasted share-URL/path → a drive item) ──
+
+// Encode a share-URL for Graph's /shares/{token} endpoint: un-padded base64url, 'u!' prefixed.
+export function encodeShareUrl(shareUrl) {
+  const b64 = Buffer.from(String(shareUrl), 'utf8')
+    .toString('base64')
+    .replace(/=+$/, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+  return `u!${b64}`;
+}
+
+// Resolve a OneDrive/SharePoint share-URL → a drive-item reference (read-only).
+export async function resolveShareUrl(shareUrl) {
+  const json = await get(`/shares/${encodeShareUrl(shareUrl)}/driveItem?$select=id,name,parentReference`);
+  return { driveId: json.parentReference?.driveId || '', itemId: json.id || '', name: json.name || '' };
+}
+
+// Resolve a drive path (e.g. /Reports/Weekly.xlsx) → a drive-item reference (read-only).
+export async function resolveDrivePath(p) {
+  const json = await get(`${root()}/drive/root:${p}:?$select=id,name,parentReference`);
+  return { driveId: json.parentReference?.driveId || '', itemId: json.id || '', name: json.name || '' };
+}
+
+// Confirm read-only reachability — open the workbook (list one worksheet). Throws if unreadable.
+export async function workbookReachable({ driveId, itemId }) {
+  const base = driveId ? `/drives/${driveId}/items/${itemId}` : `${root()}/drive/items/${itemId}`;
+  await get(`${base}/workbook/worksheets?$top=1&$select=name`);
+  return true;
+}
+
+// Weekly spreadsheet — read a named range's values (2-D array). Reads address the CONNECTED
+// drive item (MAD-26) when one is persisted, else fall back to the SPREADSHEET_DRIVE_PATH env.
 export async function workbookNamedRange(name) {
-  const path = config.graph.spreadsheetPath;
-  if (!path) throw new Error('SPREADSHEET_DRIVE_PATH not configured');
+  const base = workbookBase(workbookRef(), root(), config.graph.spreadsheetPath);
   const json = await get(
-    `${root()}/drive/root:${path}:/workbook/names/${encodeURIComponent(name)}/range?$select=values`,
+    `${base}/workbook/names/${encodeURIComponent(name)}/range?$select=values`,
   );
   return json.values || [];
 }

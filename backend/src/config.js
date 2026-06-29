@@ -1,4 +1,8 @@
 import 'dotenv/config';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Tokens live in memory ONLY. They are captured exclusively via the live OAuth flow at
 // runtime — never seeded from .env or disk. So every start begins disconnected and the
@@ -58,6 +62,12 @@ export const config = {
       .map((s) => s.trim())
       .filter(Boolean),
   },
+
+  // MAD-26: where the connected workbook's location reference is persisted. A small
+  // server-side JSON file (NON-PHI config — drive path/id only, never cell values), so the
+  // backend stays DB-less and keeps no PHI at rest. Default lives under backend/_data/
+  // (gitignored); override with WORKBOOK_CONFIG_PATH. SPREADSHEET_DRIVE_PATH is the fallback.
+  workbookConfigPath: env.WORKBOOK_CONFIG_PATH || resolve(__dirname, '../_data/workbook.json'),
 
   // Whether the app has the credentials to OFFER each source (not whether a given
   // visitor is connected — that's per-session). Drives the source-status badges.
