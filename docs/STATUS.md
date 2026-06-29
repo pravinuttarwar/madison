@@ -18,7 +18,7 @@ holds the active feature stories. This doc summarizes; the tickets are authorita
 | "Sent, no reply" follow-up | Email Queue + Dashboard "Awaiting response" | 🟡 UI done; detection engine spec'd, not wired (needs live Graph) |
 | Calendar: today + week ahead | Calendar (`/calendar`) | ✅ UI done on sample data |
 | Tasks grouped by owner, due/overdue | Tasks (`/tasks`) | ✅ UI done on sample data |
-| Clean QuickBooks snapshot (deposits, variable spend, net contribution, **revenue**) | Financials (`/financials`) | 🟡 UI done incl. accrual revenue tile (MAD-23); live QBO via OAuth (MAD-15); fixed-cost exclusion is config-only |
+| Clean QuickBooks snapshot (deposits, variable spend, net contribution, **revenue**, **outstanding A/R**) | Financials (`/financials`) | 🟡 UI done incl. accrual revenue tile (MAD-23) + outstanding-invoice / A/R aging (MAD-24); live QBO via OAuth (MAD-15); fixed-cost exclusion is config-only |
 | Weekly provider spreadsheet snapshot + WoW deltas | Reports (`/reports`) | 🟡 UI done with the 12 metrics; spreadsheet read not wired (MBI-22) |
 | Color-blind-accessible UI (never color alone) | accessibility primitives + Display menu | ✅ Done — exact dark palette + Color-Vision-Friendly default (MBI-21) |
 | Timezone-correct dates (practice zone, America/New_York) | dashboard view default + date transforms | ✅ Done (MBI-26/27/28) |
@@ -116,6 +116,16 @@ Legend: ✅ done · 🟡 prototype/partial (UI real, live data pending) · ⛔ o
   Income section, blank trailing columns), and `financePeriods` (ET-correct window boundaries). No contract break; no
   DB/migration. AC-1..AC-7 pinned by `revenue`/`characterization-fixtures`/`Financials.test.tsx`. PR
   [#28](https://github.com/pravinuttarwar/madison/pull/28) merged; **Testing (owner QA)**.
+- **[MAD-24](https://connecthealth.atlassian.net/browse/MAD-24) — Outstanding-invoice tracking (Financials)**
+  (Phase-1 productionization, epic [MAD-1](https://connecthealth.atlassian.net/browse/MAD-1), MAD Sprint 2). Adds
+  **aggregate A/R visibility** from open QuickBooks Invoices (`Balance > 0`) as an **additive** `receivables` field on
+  `/api/financials` — total outstanding, open-invoice count, and five aging buckets (Current / 1–30 / 31–60 / 61–90 /
+  90+ days past due) — plus an **Outstanding A/R** tile and an aging panel in both Financials view-modes. Net-new:
+  `qbo.invoices()` query + a synthetic `invoices.json` fixture, the `outstandingInvoicesFromQbo` transform (days-past-due
+  in the practice zone, DST-correct; degrades to a zeroed snapshot on failure). **Aggregate-only — no customer/patient
+  names in the DTO or logs** (HIPAA / SOW no-PHI posture). No contract break; no DB/migration. AC-1..AC-10 pinned by
+  `transforms`/`characterization-fixtures`/`receivables`/`Financials.test.tsx`. PR
+  [#30](https://github.com/pravinuttarwar/madison/pull/30) merged; **Testing (owner QA)**.
 
 ### 🟡 Remaining (open in Jira)
 
