@@ -353,6 +353,36 @@ export function outstandingInvoicesFromQbo(invoices, now = new Date()) {
   return { totalOutstanding, openCount, asOf: localYmd(now), aging };
 }
 
+// ── cash-flow overview (QuickBooks) — MAD-25 ──────────────────────────────────
+// Derived cash movement from data already fetched: cash IN = deposits, cash OUT = ALL
+// purchases (including fixed-cost accounts, unlike variableSpend), net = in − out. Over
+// last week vs the prior week (WoW) and month-to-date, using the same financePeriods
+// windows as revenue — so the boundaries are practice-zone (ET) correct. TxnDate and the
+// window bounds are both date-only "YYYY-MM-DD", so a string comparison is an exact
+// calendar test (DST-immune). Defensive: missing/empty input yields a zeroed summary
+// (never throws) so the financials snapshot degrades safely. Pure account-level totals.
+export function cashFlowFromQbo(deposits, purchases, now = new Date()) {
+  const dep = Array.isArray(deposits) ? deposits : [];
+  const pur = Array.isArray(purchases) ? purchases : [];
+  const p = financePeriods(now);
+  const inWindow = (txn, w) => typeof txn === 'string' && txn >= w.start && txn <= w.end;
+  const flow = (w) => {
+    const inflow = sum(dep.filter((d) => inWindow(d.TxnDate, w)), (d) => Number(d.TotalAmt));
+    const outflow = sum(pur.filter((x) => inWindow(x.TxnDate, w)), (x) => Number(x.TotalAmt));
+    return { inflow, outflow, net: inflow - outflow };
+  };
+  const last = flow(p.lastWeek);
+  const prior = flow(p.priorWeek);
+  return {
+    weekly: {
+      inflow: { last: last.inflow, prior: prior.inflow },
+      outflow: { last: last.outflow, prior: prior.outflow },
+      net: { last: last.net, prior: prior.net },
+    },
+    mtd: flow(p.mtd),
+  };
+}
+
 // ── revenue (QuickBooks ProfitAndLoss) ────────────────────────────────────────
 // MAD-23: accrual-basis revenue = the "Total Income" summary line of the QBO
 // ProfitAndLoss report. Walk the report rows and return the Total Income figure

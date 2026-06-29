@@ -82,6 +82,33 @@ describe('Financials — outstanding A/R / aging (MAD-24)', () => {
   });
 });
 
+// [AC-5] MAD-25: a net cash-flow tile (Monday: last week + WoW; Weekday: MTD) and an
+// inflow-vs-outflow breakdown render in both view modes. Net direction is color-blind-safe
+// (text label + icon, never colour alone); magnitudes are non-"$".
+describe('Financials — cash-flow overview (MAD-25)', () => {
+  it('[AC-5] renders the last-week net cash-flow tile + in/out breakdown in Monday mode', async () => {
+    renderFinancials('monday');
+    expect(await screen.findByText('Net cash flow (last week)')).toBeTruthy();
+    expect(screen.getByText('Cash flow — in vs out')).toBeTruthy();
+    expect(screen.getAllByText('Cash in').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Cash out').length).toBeGreaterThan(0);
+    // net.last 86150 → "86.2K USD" (non-"$" magnitude)
+    expect(screen.getAllByText('86.2K USD').length).toBeGreaterThan(0);
+  });
+
+  it('[AC-5] renders the month-to-date net cash-flow tile in weekday mode', async () => {
+    renderFinancials('weekday');
+    expect(await screen.findByText('Net cash flow (month-to-date)')).toBeTruthy();
+    expect(screen.getByText('Cash flow — in vs out')).toBeTruthy();
+  });
+
+  it('[AC-5] shows the net direction as a color-blind-safe text label (not colour alone)', async () => {
+    renderFinancials('monday');
+    // positive net → an explicit "Cash positive" label (text, paired with an icon)
+    expect(await screen.findByText('Cash positive')).toBeTruthy();
+  });
+});
+
 // MBI-35/38 (AC3): with the sample fallback gone and QuickBooks a real (sandbox) source,
 // an unreachable backend surfaces the not-connected/Connect state — never sample numbers.
 describe('Financials — graceful when the backend is unreachable (live-only)', () => {

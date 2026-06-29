@@ -704,6 +704,15 @@ export const financialsFixture: FinancialsData = {
       { bucket: '90+', amount: 3200, count: 1 },
     ],
   },
+  // Cash-flow overview (MAD-25) — derived in/out/net. Sample only.
+  cashFlow: {
+    weekly: {
+      inflow: { last: 182450, prior: 171200 },
+      outflow: { last: 96300, prior: 120800 },
+      net: { last: 86150, prior: 50400 },
+    },
+    mtd: { inflow: 712800, outflow: 458900, net: 253900 },
+  },
 };
 
 // Signed-in profile (the live /api/me shape). Synthetic.

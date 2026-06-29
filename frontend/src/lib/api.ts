@@ -30,6 +30,7 @@ import type {
   DailyFinancial,
   RevenueFinancial,
   ReceivablesFinancial,
+  CashFlowFinancial,
 } from '@/lib/data';
 
 // ── Sources & their wiring ───────────────────────────────────────────────────
@@ -69,7 +70,7 @@ export type SourceStatus = { id: SourceId; label: string; mode: SourceMode };
 // ── Response DTOs (the contract) ─────────────────────────────────────────────
 export type CalendarData = { today: ScheduleItem[]; week: CalendarDay[] };
 
-export type FinancialsData = { weekly: WeeklyFinancial; daily: DailyFinancial; revenue: RevenueFinancial; receivables: ReceivablesFinancial };
+export type FinancialsData = { weekly: WeeklyFinancial; daily: DailyFinancial; revenue: RevenueFinancial; receivables: ReceivablesFinancial; cashFlow: CashFlowFinancial };
 
 export type ReportsData = {
   weekNumber: number;

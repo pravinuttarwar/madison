@@ -59,6 +59,18 @@ export type ReceivablesFinancial = {
   aging: { bucket: string; amount: number; count: number }[];
 };
 
+// Cash-flow overview (QuickBooks deposits vs all purchases), MAD-25. Additive to the
+// financials snapshot. Cash in = deposits, cash out = ALL purchases (incl. fixed costs,
+// unlike variableSpend), net = in − out — last full week vs prior (WoW) and month-to-date.
+export type CashFlowFinancial = {
+  weekly: {
+    inflow: { last: number; prior: number };
+    outflow: { last: number; prior: number };
+    net: { last: number; prior: number };
+  };
+  mtd: { inflow: number; outflow: number; net: number };
+};
+
 export type DailyFinancial = {
   depositYesterday: {
     breakdown: { label: string; amount: number }[];

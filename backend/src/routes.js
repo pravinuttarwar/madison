@@ -163,6 +163,9 @@ router.get('/financials', route('quickbooks',
     const fin = T.financialsFromQbo(dep, pur, config.qbo.fixedAccountIds, now);
     fin.revenue = revenue;
     fin.receivables = receivables;
+    // Cash-flow (MAD-25) is derived from the deposits/purchases already fetched — no extra
+    // I/O, and the transform is defensive (zeroed, never throws), so attach it directly.
+    fin.cashFlow = T.cashFlowFromQbo(dep, pur, now);
     return fin;
   },
 ));

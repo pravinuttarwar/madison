@@ -214,6 +214,30 @@ test('[AC-4] GET /api/financials — receivables exposes no customer/patient nam
   assert.ok(!JSON.stringify(body.receivables).includes('Patient'), 'receivables must not carry patient/customer names');
 });
 
+// [AC-1] Cash-flow is an ADDITIVE field: derived inflow/outflow/net over the week/MTD
+// windows from the deposits + purchases already fetched. The weekly/daily/revenue/
+// receivables contract is unchanged. [AC-8] proves it flows through the live route off
+// the synthetic deposits/purchases fixtures (offline). Dates in the fixture are relative
+// to NOW, so assert the date-robust invariant (net = inflow − outflow) + shape, not fixed
+// sums (the exact math is pinned deterministically in transforms.test.js).
+test('[AC-1][AC-8] GET /api/financials — additive cashFlow (inflow/outflow/net) wired through the route', async () => {
+  const { status, body } = await getJson('/api/financials');
+  assert.equal(status, 200);
+  assert.ok(body.weekly && body.daily && body.revenue && body.receivables, 'existing contract preserved');
+  assert.ok(body.cashFlow, 'cashFlow field is present');
+  const w = body.cashFlow.weekly;
+  for (const k of ['inflow', 'outflow', 'net']) {
+    assert.ok(w[k] && typeof w[k].last === 'number' && typeof w[k].prior === 'number', `weekly.${k} has last+prior`);
+  }
+  // net = inflow − outflow holds for each window (the defining invariant).
+  assert.equal(w.net.last, w.inflow.last - w.outflow.last);
+  assert.equal(w.net.prior, w.inflow.prior - w.outflow.prior);
+  const m = body.cashFlow.mtd;
+  assert.equal(m.net, m.inflow - m.outflow);
+  // MTD spans both weeks, so its totals are at least the last-week magnitudes.
+  assert.ok(m.inflow >= w.inflow.last && m.outflow >= w.outflow.last);
+});
+
 test('GET /api/reports — 12 weekly metrics + encounters by specialty', async () => {
   const { status, body } = await getJson('/api/reports');
   assert.equal(status, 200);
