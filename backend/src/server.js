@@ -8,6 +8,7 @@ import { sessionMiddleware, currentSession, clearCurrentSession } from './sessio
 import { router } from './routes.js';
 import { tlsEnforcement } from './security.js';
 import { auditMiddleware } from './audit.js';
+import { startMsSignIn, handleMsCallback } from './server-oauth.js';
 
 // Pin the process to the practice timezone so all date/time bucketing + display
 // (QuickBooks day buckets, calendar/email times, "yesterday"/"last week" windows)
@@ -21,12 +22,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // (one port) serves the SPA + /api + OAuth. Override with FRONTEND_DIST if needed.
 const FRONTEND_DIST = process.env.FRONTEND_DIST || path.resolve(__dirname, '../../frontend/dist');
 
-const MS_SCOPES = 'openid profile Mail.Read Calendars.Read Tasks.Read Files.Read offline_access';
 const PORT = process.env.PORT || 8787;
 // Redirect URIs are env-overridable so production (e.g. the studio.mindbowser.com
 // backend) can register its own HTTPS callback while local dev stays on localhost.
-// The path /auth/microsoft/callback is the canonical one; /callback is kept as an alias.
-const MS_REDIRECT = process.env.MS_REDIRECT_URI || `http://localhost:${PORT}/auth/microsoft/callback`;
 const QBO_REDIRECT = process.env.QBO_REDIRECT_URI || `http://localhost:${PORT}/auth/qbo/callback`;
 const QBO_SCOPES = 'com.intuit.quickbooks.accounting';
 
@@ -60,79 +58,10 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
 
-// ── One-time Microsoft OAuth flow (run locally only, captures refresh token) ──
-app.get('/auth/microsoft', (req, res) => {
-  const clientId = req.query.client_id || config.graph.clientId;
-  const tenant = req.query.tenant_id || config.graph.tenantId || 'common';
-  if (!clientId) {
-    return res.send(`
-      <h2>Microsoft login — set up</h2>
-      <p>Open this URL with your Azure AD app credentials appended:</p>
-      <pre>http://localhost:${config.port}/auth/microsoft?client_id=YOUR_CLIENT_ID&tenant_id=YOUR_TENANT_ID</pre>
-      <p>Or fill <code>MS_CLIENT_ID</code> and <code>MS_TENANT_ID</code> in <code>backend/.env</code> first, then visit <a href="/auth/microsoft">/auth/microsoft</a> again.</p>
-    `);
-  }
-  const url = new URL(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize`);
-  url.searchParams.set('client_id', clientId);
-  url.searchParams.set('response_type', 'code');
-  url.searchParams.set('redirect_uri', MS_REDIRECT);
-  url.searchParams.set('scope', MS_SCOPES);
-  url.searchParams.set('response_mode', 'query');
-  url.searchParams.set('prompt', 'select_account');
-  res.redirect(url.toString());
-});
-
-async function handleMsCallback(req, res) {
-  const { code, error, error_description } = req.query;
-  if (error) return res.status(400).send(`<h2>Auth error</h2><pre>${error}: ${error_description}</pre>`);
-  const clientId = config.graph.clientId;
-  const clientSecret = config.graph.clientSecret;
-  const tenant = config.graph.tenantId || 'common';
-  if (!clientId || !clientSecret) {
-    return res.status(400).send('<h2>Missing MS_CLIENT_ID / MS_CLIENT_SECRET in backend/.env</h2>');
-  }
-  try {
-    const body = new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: MS_REDIRECT,
-      scope: MS_SCOPES,
-    });
-    const tokenRes = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body,
-    });
-    const json = await tokenRes.json();
-    if (!tokenRes.ok) return res.status(502).send(`<h2>Token exchange failed</h2><pre>${JSON.stringify(json, null, 2)}</pre>`);
-
-    const refreshToken = json.refresh_token;
-    // Decode the id_token JWT claims — name claim is available from 'profile' scope.
-    // base64url → base64 conversion for Node compat (pad + replace - and _).
-    let displayName = '';
-    if (json.id_token) {
-      try {
-        const part = json.id_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-        const payload = JSON.parse(Buffer.from(part, 'base64').toString('utf8'));
-        displayName = payload.name || payload.preferred_username || '';
-      } catch { /* ignore malformed token */ }
-    }
-    // Store on THIS visitor's session only (in memory) — not a global/shared slot.
-    const s = currentSession();
-    s.graph.refreshToken = refreshToken;
-    s.graph.displayName = displayName;
-    s.graph.accessToken = null;
-    s.graph.expiresAt = 0;
-
-    const frontendUrl = process.env.FRONTEND_URL || ''; // relative → same origin (single-port deploy)
-    res.redirect(`${frontendUrl}/#/?auth=success`);
-  } catch (err) {
-    res.status(502).send(`<h2>Error</h2><pre>${err.message}</pre>`);
-  }
-}
-
+// ── One-time Microsoft OAuth flow (captures refresh token; handlers in server-oauth.js) ──
+// The read-only scope set, authorize-URL builder, and token-exchange (no token/code ever
+// reaches the browser) live in server-oauth.js / oauth-graph.js so they're unit-testable.
+app.get('/auth/microsoft', startMsSignIn);
 // Canonical path + backward-compatible alias.
 app.get('/auth/microsoft/callback', handleMsCallback);
 app.get('/callback', handleMsCallback);
