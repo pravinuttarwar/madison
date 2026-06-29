@@ -1,16 +1,28 @@
 {
   "tracker": "jira",
-  "projectKey": "MBI",
+  "projectKey": "MAD",
   "cloudId": "75778fde-f905-4ba3-abb2-325f02ad7767",
   "site": "https://connecthealth.atlassian.net",
   "jira": {
     "transitions": {
-      "onStart": { "id": "31", "name": "In Progress" },
-      "onShip": { "id": "2", "name": "IN REVIEW" },
-      "onMerge": { "id": "41", "name": "Done" }
+      "onStart": {
+        "id": "31",
+        "name": "In Progress"
+      },
+      "onShip": {
+        "id": "41",
+        "name": "Testing"
+      },
+      "onMerge": {
+        "id": "41",
+        "name": "Testing"
+      }
     }
   },
-  "repos": ["frontend", "backend"],
+  "repos": [
+    "frontend",
+    "backend"
+  ],
   "stack": {
     "frontend": "React 19 + Vite 6 + TypeScript (pnpm), Tailwind v4, react-router-dom v7 (HashRouter)",
     "backend": "Node >=20 ESM, Express 4 — read-only BFF, in-memory sessions, no DB"
