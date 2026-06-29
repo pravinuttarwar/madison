@@ -88,6 +88,19 @@ Legend: ✅ done · 🟡 prototype/partial (UI real, live data pending) · ⛔ o
   **Deferred to an ops/infra ticket ([MAD-33](https://connecthealth.atlassian.net/browse/MAD-33)):** production provisioning,
   live vault wiring, BAA determination (the original Blocker). PR [#20](https://github.com/pravinuttarwar/madison/pull/20)
   merged; ticket sits in **Testing (owner QA)** — moves to Done after the owner's manual verification.
+- **[MAD-15](https://connecthealth.atlassian.net/browse/MAD-15) — Microsoft Graph production OAuth + token management**
+  (Phase-1 productionization, epic [MAD-1](https://connecthealth.atlassian.net/browse/MAD-1), MAD Sprint 1). Hardening on
+  the existing Graph OAuth plumbing: `auth.js` `graphToken()` now treats a **rejected refresh token** (400/401 = revoked/
+  expired/password reset) as a forced re-auth — clears the session's Graph creds, audits it, and signals `not_authenticated`
+  so routes return **401** (re-prompt sign-in) instead of a generic 502 (`routes.js` `errorResponse()`). Adds an `authEvent()`
+  audit seam (`audit.js`) recording who·what·when·outcome for consent/refresh/re-auth — never a token/secret/code. New
+  `oauth-graph.js` (single-source read-only `GRAPH_SCOPE` + pure `buildAuthorizeUrl()`, pinned tenant + HTTPS redirect) and
+  `server-oauth.js` (sign-in/callback extracted so the no-token-to-browser guarantee is unit-testable). Refresh tokens stay
+  **in-memory** (owner's no-storage preference; a persistent encrypted vault is a separate later ticket). AC-1..AC-7 pinned
+  by `graph-oauth`/`oauth-signin` tests. **Deferred:** conditional `Sites.Read.All`/`Group.Read.All` scopes → SharePoint/
+  Planner stories; admin-consent/tenant-restriction is a routed product dependency, not code. PR
+  [#22](https://github.com/pravinuttarwar/madison/pull/22) merged; ticket sits in **Testing (owner QA)** — moves to Done
+  after the owner's manual verification.
 
 ### 🟡 Remaining (open in Jira)
 
