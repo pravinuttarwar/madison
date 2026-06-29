@@ -1,0 +1,35 @@
+{
+  "issueKey": "MAD-15",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "Read-only consent: unauthenticated owner sign-in requests only openid profile offline_access Mail.Read Calendars.Read Tasks.Read Files.Read — no write scopes, no Sites.Read.All/Group.Read.All"
+    },
+    {
+      "id": "AC-2",
+      "text": "Callback stores refresh token + displayName in in-memory session; no token to browser; OAuth code never in bundle/response"
+    },
+    {
+      "id": "AC-3",
+      "text": "Transparent refresh: expired/near-expiry access token refreshed via refresh-token grant with rotation, no user re-prompt"
+    },
+    {
+      "id": "AC-4",
+      "text": "Re-auth flow: refresh-token rejection clears session Graph creds and returns 401 not_authenticated, not 502"
+    },
+    {
+      "id": "AC-5",
+      "text": "Production config: HTTPS redirect URI, pinned MS_TENANT_ID, client secret server-side only via secret seam, never in bundle/response"
+    },
+    {
+      "id": "AC-6",
+      "kind": "audit",
+      "text": "Audit entry for auth events (consent/refresh/re-auth): who/what/when/outcome, no token/secret/code value"
+    },
+    {
+      "id": "AC-7",
+      "kind": "app-logging",
+      "text": "Safe logging on OAuth/refresh errors: event/status/session reference only, never token/secret/code"
+    }
+  ]
+}

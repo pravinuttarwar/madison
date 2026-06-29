@@ -33,6 +33,20 @@ function sourceReady(id) {
 // Graph (the Microsoft identity/session) → 401 so the UI returns to login. QuickBooks is a
 // secondary connection → 503 so the UI shows a "Connect" button instead of logging out.
 // (MBI-36: the runtime sample path is gone — routes are always live.)
+// Map a producer error to the response contract. A cleared/rejected token surfaces as
+// 'not_authenticated' (from auth.js) → the SAME 401 (Graph) / 503 (QuickBooks) the UI uses
+// to re-prompt sign-in or show "Connect" (MAD-15, AC-4). Anything else is a transient
+// upstream failure → 502. Pure + exported so the mapping is unit-testable.
+export function errorResponse(sourceId, err) {
+  const message = String(err?.message || err);
+  if (message.startsWith('not_authenticated')) {
+    return sourceId === 'quickbooks'
+      ? { status: 503, body: { error: 'source_not_connected', source: sourceId } }
+      : { status: 401, body: { error: 'not_authenticated', source: sourceId } };
+  }
+  return { status: 502, body: { error: 'upstream_failed', source: sourceId, message } };
+}
+
 function route(sourceId, liveProducer) {
   return async (req, res) => {
     try {
@@ -44,7 +58,8 @@ function route(sourceId, liveProducer) {
       }
       return res.json(await liveProducer(req));
     } catch (err) {
-      res.status(502).json({ error: 'upstream_failed', source: sourceId, message: String(err.message || err) });
+      const { status, body } = errorResponse(sourceId, err);
+      res.status(status).json(body);
     }
   };
 }

@@ -1,11 +1,11 @@
 import { config } from './config.js';
 import { currentSession } from './session.js';
+import { GRAPH_SCOPE } from './oauth-graph.js';
+import { authEvent } from './audit.js';
 
 // Access + refresh tokens live on the CURRENT visitor's session (in memory only).
 // Each call resolves the session via AsyncLocalStorage, so two browsers never share
 // a connection. A 'not_authenticated' throw → the route layer returns 401 → login.
-
-const GRAPH_SCOPE = 'openid profile Mail.Read Calendars.Read Tasks.Read Files.Read offline_access';
 
 // ── Microsoft Graph: refresh-token grant (per session) ────────────────────────
 export async function graphToken() {
@@ -27,12 +27,28 @@ export async function graphToken() {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
   });
-  if (!res.ok) throw new Error(`Graph token refresh failed (${res.status}): ${await res.text()}`);
+  if (!res.ok) {
+    // 400/401 from the token endpoint = the refresh token itself is rejected (revoked /
+    // expired / password reset). Clear THIS session's Graph creds so the next request is
+    // treated as unauthenticated, audit the forced re-auth, and signal not_authenticated
+    // → the route layer returns 401 (re-prompt sign-in), not a transient 502. (MAD-15, AC-4)
+    if (res.status === 400 || res.status === 401) {
+      g.refreshToken = '';
+      g.accessToken = null;
+      g.expiresAt = 0;
+      authEvent('reauth_required', { sessionId: s.id, outcome: 'refresh_rejected' });
+      throw new Error('not_authenticated:graph');
+    }
+    // Transient upstream failure — keep creds (a later request may succeed), surface as 502.
+    // Note: the upstream body is NOT included — it can carry sensitive detail (AC-7).
+    throw new Error(`Graph token refresh failed (${res.status})`);
+  }
   const json = await res.json();
   // Microsoft rotates refresh tokens — keep the session's copy current.
   if (json.refresh_token) g.refreshToken = json.refresh_token;
   g.accessToken = json.access_token;
   g.expiresAt = Date.now() + json.expires_in * 1000;
+  authEvent('token_refresh', { sessionId: s.id, outcome: 'ok' });
   return g.accessToken;
 }
 

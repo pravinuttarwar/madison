@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Madison Medical — Command Center v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600;9..144,800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --red: #C0002A;
+    --red-dim: #7a0019;
+    --red-glow: rgba(192, 0, 42, 0.15);
+    --bg: #0a0a0c;
+    --bg-panel: #121216;
+    --bg-panel-alt: #17171d;
+    --border: #25252d;
+    --border-bright: #3a3a44;
+    --text: #e8e8ea;
+    --text-dim: #8a8a94;
+    --text-ghost: #55555e;
+    --green: #3fb950;
+    --amber: #d29922;
+    --blue: #58a6ff;
+    --purple: #a371f7;
+    --display: 'Fraunces', Georgia, serif;
+    --mono: 'JetBrains Mono', 'Courier New', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.5;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(circle at 15% 10%, var(--red-glow) 0%, transparent 40%),
+      radial-gradient(circle at 85% 90%, rgba(88, 166, 255, 0.05) 0%, transparent 40%);
+    pointer-events: none; z-index: 0;
+  }
+  .app { position: relative; z-index: 1; display: grid; grid-template-columns: 240px 1fr 360px; grid-template-rows: 56px 1fr; min-height: 100vh; }
+
+  /* Header */
+  header {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-panel);
+  }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand-mark {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, var(--red), var(--red-dim));
+    display: grid; place-items: center;
+    font-family: var(--display); font-weight: 800; font-size: 20px;
+    color: white;
+    border-radius: 4px;
+    box-shadow: 0 0 20px var(--red-glow);
+  }
+  .brand-text { font-family: var(--display); font-weight: 600; font-size: 15px; letter-spacing: 0.01em; }
+  .brand-text span { color: var(--text-dim); font-weight: 300; }
+  .header-status { display: flex; align-items: center; gap: 20px; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; }
+  .status-pill { display: flex; align-items: center; gap: 6px; }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 8px currentColor; }
+  .day-mode {
+    background: var(--red); color: white;
+    padding: 4px 10px; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.15em;
+  }
+  .day-mode.weekday { background: var(--bg); border: 1px solid var(--border-bright); color: var(--text-dim); }
+  .clock { font-family: var(--mono); font-weight: 500; color: var(--text); letter-spacing: 0.08em; }
+  .view-toggle {
+    display: flex; gap: 0; border: 1px solid var(--border-bright);
+  }
+  .view-toggle button {
+    background: transparent; border: none; color: var(--text-dim);
+    font-family: var(--mono); font-size: 10px; padding: 5px 10px;
+    cursor: pointer; letter-spacing: 0.1em; text-transform: uppercase;
+    border-right: 1px solid var(--border-bright);
+  }
+  .view-toggle button:last-child { border-right: none; }
+  .view-toggle button.active { background: var(--red); color: white; }
+
+  /* Sidebar */
+  aside.left {
+    border-right: 1px solid var(--border);
+    background: var(--bg-panel);
+    padding: 20px 0;
+    overflow-y: auto;
+  }
+  .sidebar-group { margin-bottom: 26px; }
+  .sidebar-label { padding: 0 20px 8px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--text-ghost); }
+  .sidebar-item {
+    padding: 8px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    cursor: pointer;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+    font-size: 11px;
+  }
+  .sidebar-item:hover { background: var(--bg-panel-alt); color: var(--text); }
+  .sidebar-item.active { border-left-color: var(--red); background: var(--bg-panel-alt); color: var(--text); }
+  .sidebar-item .count { font-size: 10px; color: var(--text-ghost); font-weight: 500; }
+  .sidebar-item .count.urgent { color: var(--red); }
+  .sidebar-item .count.green { color: var(--green); }
+
+  .api-status { padding: 14px 20px; border-top: 1px solid var(--border); margin-top: 12px; }
+  .api-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; font-size: 10px; }
+  .api-name { color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; font-size: 9px; }
+  .api-state { display: flex; align-items: center; gap: 5px; color: var(--amber); font-size: 9px; }
+  .api-state .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+  .api-state.connected { color: var(--green); }
+
+  /* Main */
+  main {
+    padding: 22px 26px;
+    overflow-y: auto;
+  }
+  .greeting-block { margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+  .greeting-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--text-ghost); margin-bottom: 6px; }
+  .greeting { font-family: var(--display); font-size: 30px; font-weight: 400; letter-spacing: -0.01em; line-height: 1.15; }
+  .greeting em { font-style: italic; color: var(--red); font-weight: 300; }
+  .greeting-meta { margin-top: 10px; font-size: 11px; color: var(--text-dim); display: flex; gap: 18px; flex-wrap: wrap; }
+  .greeting-meta span::before { content: '// '; color: var(--text-ghost); }
+
+  .priority-banner {
+    background: linear-gradient(90deg, var(--red-glow) 0%, transparent 60%);
+    border-left: 2px solid var(--red);
+    padding: 10px 14px;
+    margin-bottom: 22px;
+    font-size: 11px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .priority-banner .tag { background: var(--red); color: white; padding: 2px 8px; font-size: 9px; font-weight: 700; letter-spacing: 0.1em; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    padding: 16px;
+    transition: border-color 0.2s;
+  }
+  .panel:hover { border-color: var(--border-bright); }
+  .panel.wide { grid-column: span 2; }
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-title {
+    font-family: var(--display); font-weight: 600; font-size: 13px;
+    letter-spacing: 0.02em;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-title::before {
+    content: ''; width: 4px; height: 13px; background: var(--red);
+  }
+  .panel-title.green::before { background: var(--green); }
+  .panel-title.blue::before { background: var(--blue); }
+  .panel-title.amber::before { background: var(--amber); }
+  .panel-title.purple::before { background: var(--purple); }
+  .panel-badge {
+    font-size: 9px; color: var(--text-ghost);
+    text-transform: uppercase; letter-spacing: 0.12em;
+  }
+  .panel-body { font-size: 11px; }
+  .item-row {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 7px 0;
+    border-bottom: 1px dashed var(--border);
+    font-size: 11px;
+  }
+  .item-row:last-child { border-bottom: none; }
+  .item-time { color: var(--red); font-weight: 500; min-width: 54px; letter-spacing: 0.04em; }
+  .item-title { flex: 1; color: var(--text); }
+  .item-meta { color: var(--text-dim); font-size: 10px; margin-top: 1px; }
+  .item-row.urgent .item-title::after { content: ' ●'; color: var(--red); }
+  .item-row.overdue .item-time { color: var(--red); }
+  .item-owner { font-size: 9px; color: var(--text-ghost); text-transform: uppercase; letter-spacing: 0.08em; padding: 1px 6px; border: 1px solid var(--border-bright); }
+
+  .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+  .metric {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    padding: 12px;
+  }
+  .metric-label { font-size: 9px; color: var(--text-ghost); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 5px; }
+  .metric-value { font-family: var(--display); font-size: 26px; font-weight: 600; line-height: 1; }
+  .metric-delta { font-size: 9px; color: var(--text-dim); margin-top: 3px; }
+  .metric-delta.pos { color: var(--green); }
+  .metric-delta.neg { color: var(--red); }
+
+  /* Financial styling */
+  .fin-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px dashed var(--border); font-size: 11px; }
+  .fin-row:last-child { border-bottom: none; }
+  .fin-row .label { color: var(--text-dim); }
+  .fin-row .value { font-family: var(--display); font-weight: 600; font-size: 14px; }
+  .fin-row .value.green { color: var(--green); }
+  .fin-row .value.red { color: var(--red); }
+  .fin-total { padding-top: 10px; margin-top: 6px; border-top: 1px solid var(--border-bright); }
+  .fin-total .value { font-size: 18px; }
+
+  /* Monday weekly table */
+  .weekly-table { width: 100%; font-size: 11px; border-collapse: collapse; }
+  .weekly-table th { text-align: left; padding: 6px 8px; font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-ghost); border-bottom: 1px solid var(--border-bright); font-weight: 500; }
+  .weekly-table th:not(:first-child) { text-align: right; }
+  .weekly-table td { padding: 7px 8px; border-bottom: 1px dashed var(--border); }
+  .weekly-table td:not(:first-child) { text-align: right; font-family: var(--display); font-weight: 500; font-size: 13px; }
+  .weekly-table td.delta { font-size: 10px; font-family: var(--mono); }
+  .weekly-table td.delta.pos { color: var(--green); }
+  .weekly-table td.delta.neg { color: var(--red); }
+  .weekly-table tr:last-child td { border-bottom: none; }
+
+  /* Owner badge */
+  .owner-pill {
+    display: inline-block; padding: 2px 7px; font-size: 9px;
+    background: var(--bg); border: 1px solid var(--border-bright);
+    color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em;
+    margin-left: 6px;
+  }
+  .owner-pill.me { color: var(--red); border-color: var(--red-dim); }
+
+  /* Chat sidebar */
+  aside.right {
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    height: calc(100vh - 56px);
+  }
+  .chat-header { padding: 16px 18px; border-bottom: 1px solid var(--border); }
+  .chat-title { font-family: var(--display); font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 9px; }
+  .chat-title::before { content: ''; width: 8px; height: 8px; background: var(--red); border-radius: 50%; box-shadow: 0 0 12px var(--red); }
+  .chat-sub { font-size: 9px; color: var(--text-ghost); text-transform: uppercase; letter-spacing: 0.12em; margin-top: 4px; }
+  .chat-body {
+    flex: 1; overflow-y: auto; padding: 18px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .msg { max-width: 92%; font-size: 11px; line-height: 1.55; }
+  .msg.user { align-self: flex-end; background: var(--red); color: white; padding: 9px 12px; border-radius: 2px 2px 0 2px; }
+  .msg.bot { align-self: flex-start; color: var(--text); }
+  .msg.bot .msg-label { font-size: 9px; color: var(--text-ghost); text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 4px; }
+  .msg.bot .msg-content { padding-left: 9px; border-left: 1px solid var(--border-bright); white-space: pre-wrap; }
+  .msg.bot.thinking .msg-content { color: var(--text-dim); font-style: italic; }
+  .chat-input-wrap { border-top: 1px solid var(--border); padding: 12px; }
+  .chat-input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--mono); font-size: 11px;
+    padding: 9px 11px; resize: none; outline: none;
+    transition: border-color 0.15s;
+  }
+  .chat-input:focus { border-color: var(--red); }
+  .chat-hint { font-size: 9px; color: var(--text-ghost); margin-top: 5px; text-transform: uppercase; letter-spacing: 0.12em; display: flex; justify-content: space-between; }
+  .suggestions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .suggestion {
+    font-size: 9px; background: transparent;
+    border: 1px solid var(--border-bright); color: var(--text-dim);
+    padding: 4px 7px; cursor: pointer; font-family: var(--mono);
+    transition: all 0.15s;
+  }
+  .suggestion:hover { border-color: var(--red); color: var(--text); }
+
+  /* Demo banner */
+  .demo-banner {
+    background: var(--amber); color: #1a1a1a;
+    padding: 5px 24px; font-size: 10px; font-weight: 700;
+    text-align: center; letter-spacing: 0.15em; text-transform: uppercase;
+  }
+
+  /* Multi-screen optimization for stacked G9s */
+  @media (min-width: 4000px) {
+    .grid { grid-template-columns: repeat(3, 1fr); }
+    .grid-3 { grid-template-columns: repeat(4, 1fr); }
+    aside.left { width: 320px; }
+    aside.right { width: 480px; }
+  }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-bright); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--red-dim); }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="demo-banner">Demo Mode v2 — All Data Mock • Day-aware View • Wire Backend To Go Live</div>
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="brand-mark">M</div>
+      <div class="brand-text">Madison Medical <span>/ Command Center v2</span></div>
+    </div>
+    <div class="header-status">
+      <div class="day-mode" id="day-mode">MONDAY</div>
+      <div class="view-toggle">
+        <button id="btn-monday" class="active">Monday View</button>
+        <button id="btn-weekday">Weekday View</button>
+      </div>
+      <div class="status-pill">USER: <span style="color:var(--text)">DR. ROMANO</span></div>
+      <div class="clock" id="clock">--:--:--</div>
+    </div>
+  </header>
+
+  <aside class="left">
+    <div class="sidebar-group">
+      <div class="sidebar-label">View</div>
+      <div class="sidebar-item active"><span>Dashboard</span><span class="count">●</span></div>
+      <div class="sidebar-item"><span>Calendar</span><span class="count">5</span></div>
+      <div class="sidebar-item"><span>Tasks</span><span class="count">14</span></div>
+      <div class="sidebar-item"><span>Email Queue</span><span class="count urgent">8</span></div>
+      <div class="sidebar-item"><span>Reports</span><span class="count">12</span></div>
+      <div class="sidebar-item"><span>Financials</span><span class="count green">$</span></div>
+    </div>
+    <div class="sidebar-group">
+      <div class="sidebar-label">Projects</div>
+      <div class="sidebar-item"><span>Wearable Device</span><span class="count">A1</span></div>
+      <div class="sidebar-item"><span>Recovery Suite</span><span class="count">A2</span></div>
+      <div class="sidebar-item"><span>Dr. Ianuzzi</span><span class="count">A3</span></div>
+      <div class="sidebar-item"><span>UB-04 Transition</span><span class="count">A4</span></div>
+      <div class="sidebar-item"><span>Full Throttle 90d</span><span class="count">A5</span></div>
+    </div>
+    <div class="api-status">
+      <div class="sidebar-label" style="padding: 0 0 10px">Data Sources</div>
+      <div class="api-row"><span class="api-name">CureMD</span><span class="api-state"><span class="dot"></span>MOCK</span></div>
+      <div class="api-row"><span class="api-name">Outlook / Graph</span><span class="api-state"><span class="dot"></span>MOCK</span></div>
+      <div class="api-row"><span class="api-name">MS To Do</span><span class="api-state"><span class="dot"></span>MOCK</span></div>
+      <div class="api-row"><span class="api-name">MS Teams</span><span class="api-state"><span class="dot"></span>MOCK</span></div>
+      <div class="api-row"><span class="api-name">Plaid (PNC)</span><span class="api-state"><span class="dot"></span>MOCK</span></div>
+      <div class="api-row"><span class="api-name">QuickBooks</span><span class="api-state"><span class="dot"></span>MOCK</span></div>
+      <div class="api-row"><span class="api-name">Spreadsheets</span><span class="api-state"><span class="dot"></span>MOCK</span></div>
+      <div class="api-row"><span class="api-name">Claude</span><span class="api-state connected"><span class="dot"></span>LIVE</span></div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="greeting-block">
+      <div class="greeting-label" id="greeting-label">Monday Strategic Rollup</div>
+      <div class="greeting" id="greeting">Good morning, <em>Dr. Romano.</em></div>
+      <div class="greeting-meta" id="greeting-meta">
+        <span id="meta-date">Monday, April 27, 2026</span>
+        <span>Week 17 in review</span>
+        <span id="meta-extra">12 priority items this week</span>
+      </div>
+    </div>
+
+    <!-- ========== MONDAY VIEW ========== -->
+    <section id="monday-view">
+      <div class="priority-banner">
+        <span class="tag">WEEK 17</span>
+        <span>Last week: 1,547 patient encounters · $312k deposits · 22 new patients · 8 N1 conversions still gap</span>
+      </div>
+
+      <!-- Weekly Clinical Report — the big one -->
+      <div class="grid">
+        <div class="panel wide">
+          <div class="panel-header">
+            <div class="panel-title">Clinical Weekly Report</div>
+            <div class="panel-badge">Week 16 · Source: CureMD + spreadsheets</div>
+          </div>
+          <div class="panel-body">
+            <table class="weekly-table">
+              <thead>
+                <tr>
+                  <th>Metric</th>
+                  <th>Last Week</th>
+                  <th>Prior Week</th>
+                  <th>Δ</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>Total new patients</td><td>22</td><td>18</td><td class="delta pos">+4</td></tr>
+                <tr><td>Total medical seen</td><td>284</td><td>271</td><td class="delta pos">+13</td></tr>
+                <tr><td>Total N1</td><td>187</td><td>192</td><td class="delta neg">-5</td></tr>
+                <tr><td>Total chiro seen</td><td>612</td><td>598</td><td class="delta pos">+14</td></tr>
+                <tr><td>Total admin codes</td><td>94</td><td>88</td><td class="delta pos">+6</td></tr>
+                <tr><td>Total allergy tests</td><td>14</td><td>11</td><td class="delta pos">+3</td></tr>
+                <tr><td>Total allergy kits dispersed</td><td>9</td><td>12</td><td class="delta neg">-3</td></tr>
+                <tr><td>Total recovery — new</td><td>17</td><td>13</td><td class="delta pos">+4</td></tr>
+                <tr><td>Total recovery — all</td><td>142</td><td>129</td><td class="delta pos">+13</td></tr>
+                <tr><td>Total pod</td><td>78</td><td>82</td><td class="delta neg">-4</td></tr>
+                <tr><td>Total acu</td><td>56</td><td>61</td><td class="delta neg">-5</td></tr>
+                <tr><td>Total procedures</td><td>31</td><td>28</td><td class="delta pos">+3</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Financial Weekly + Priority Week -->
+      <div class="grid">
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title green">Financial — Last Week</div>
+            <div class="panel-badge">Plaid + QBO</div>
+          </div>
+          <div class="panel-body">
+            <div class="fin-row"><span class="label">Mon deposit</span><span class="value">$58,420</span></div>
+            <div class="fin-row"><span class="label">Tue deposit</span><span class="value">$71,210</span></div>
+            <div class="fin-row"><span class="label">Wed deposit</span><span class="value">$64,890</span></div>
+            <div class="fin-row"><span class="label">Thu deposit</span><span class="value">$59,140</span></div>
+            <div class="fin-row"><span class="label">Fri deposit</span><span class="value">$58,720</span></div>
+            <div class="fin-row fin-total"><span class="label" style="font-weight:600;color:var(--text)">Total deposits</span><span class="value green">$312,380</span></div>
+            <div class="fin-row"><span class="label">Variable spend (QBO)</span><span class="value red">$87,440</span></div>
+            <div class="fin-row"><span class="label">Top category</span><span class="value" style="font-size:11px">Med supplies $24k</span></div>
+            <div class="fin-row fin-total"><span class="label" style="font-weight:600;color:var(--text)">Net contribution</span><span class="value green">$224,940</span></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title amber">Priority — This Week</div>
+            <div class="panel-badge">Owner attached</div>
+          </div>
+          <div class="panel-body">
+            <div class="item-row urgent">
+              <span class="item-time" style="min-width:auto">!</span>
+              <span class="item-title">UB-04 transition decision finalize<div class="item-meta">Hetal needs sign-off · Due Wed</div></span>
+              <span class="owner-pill me">DCR</span>
+            </div>
+            <div class="item-row urgent">
+              <span class="item-time" style="min-width:auto">!</span>
+              <span class="item-title">Caltech wearable call<div class="item-meta">Confirm Tue or Wed slot</div></span>
+              <span class="owner-pill me">DCR</span>
+            </div>
+            <div class="item-row">
+              <span class="item-time" style="min-width:auto">→</span>
+              <span class="item-title">Ianuzzi IG Live execution<div class="item-meta">Thu evening · Social manager owns</div></span>
+              <span class="owner-pill">Social</span>
+            </div>
+            <div class="item-row">
+              <span class="item-time" style="min-width:auto">→</span>
+              <span class="item-title">Recovery Suite ROI model v3<div class="item-meta">Due Fri</div></span>
+              <span class="owner-pill me">DCR</span>
+            </div>
+            <div class="item-row">
+              <span class="item-time" style="min-width:auto">→</span>
+              <span class="item-title">N1 conversion SOP rollout to MAs<div class="item-meta">Front desk lead</div></span>
+              <span class="owner-pill">Front</span>
+            </div>
+            <div class="item-row">
+              <span class="item-time" style="min-width:auto">→</span>
+              <span class="item-title">Peptide handout v3 sign-off<div class="item-meta">Due Mon next</div></span>
+              <span class="owner-pill me">DCR</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Calendar Week + Projects At Play -->
+      <div class="grid">
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title blue">This Week's Calendar</div>
+            <div class="panel-badge">Outlook</div>
+          </div>
+          <div class="panel-body">
+            <div class="item-row"><span class="item-time">MON</span><span class="item-title">Hetal billing review · Staff huddle 8am<div class="item-meta">2 meetings</div></span></div>
+            <div class="item-row urgent"><span class="item-time">TUE</span><span class="item-title">Caltech call (tentative) · Recovery suite walkthrough<div class="item-meta">3 meetings</div></span></div>
+            <div class="item-row"><span class="item-time">WED</span><span class="item-title">UB-04 final decision · Ianuzzi 1:1<div class="item-meta">4 meetings</div></span></div>
+            <div class="item-row urgent"><span class="item-time">THU</span><span class="item-title">Ianuzzi IG Live · Vendor demo (regen)<div class="item-meta">3 meetings + 1 evening</div></span></div>
+            <div class="item-row"><span class="item-time">FRI</span><span class="item-title">Recovery suite ROI review · Peptide protocol sign-off<div class="item-meta">2 meetings</div></span></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title purple">Projects At Play</div>
+            <div class="panel-badge">5 active · open milestones</div>
+          </div>
+          <div class="panel-body">
+            <div class="item-row"><span class="item-time" style="min-width:auto">A1</span><span class="item-title">Wearable Device<div class="item-meta">Caltech reply · pilot protocol v2 due Fri</div></span><span class="owner-pill me">DCR</span></div>
+            <div class="item-row"><span class="item-time" style="min-width:auto">A2</span><span class="item-title">Recovery Suite Buildout<div class="item-meta">ROI model v3 + floor plan finalization</div></span><span class="owner-pill me">DCR</span></div>
+            <div class="item-row"><span class="item-time" style="min-width:auto">A3</span><span class="item-title">Dr. Ianuzzi Onboarding<div class="item-meta">Track C IG Live this Thu</div></span><span class="owner-pill">Social</span></div>
+            <div class="item-row urgent"><span class="item-time" style="min-width:auto">A4</span><span class="item-title">UB-04 Transition<div class="item-meta">Decision Wed · Horizon + Aetna outreach</div></span><span class="owner-pill">Hetal</span></div>
+            <div class="item-row"><span class="item-time" style="min-width:auto">A5</span><span class="item-title">Full Throttle 90d<div class="item-meta">Dept owner check-ins this week</div></span><span class="owner-pill me">DCR</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Awaiting Response — Follow-Up Engine</div>
+            <div class="panel-badge">Sent &gt; 48h, no reply</div>
+          </div>
+          <div class="panel-body">
+            <div class="item-row urgent"><span class="item-time" style="min-width:auto">7d</span><span class="item-title">UCSD lab — wearable outreach<div class="item-meta">Sent Apr 20 · no reply</div></span></div>
+            <div class="item-row urgent"><span class="item-time" style="min-width:auto">5d</span><span class="item-title">Aetna provider relations<div class="item-meta">UB-04 question · no reply</div></span></div>
+            <div class="item-row"><span class="item-time" style="min-width:auto">3d</span><span class="item-title">Vendor — cryo chamber service quote<div class="item-meta">Sent Apr 24</div></span></div>
+            <div class="item-row"><span class="item-time" style="min-width:auto">2d</span><span class="item-title">Social manager — IG Live brief<div class="item-meta">Confirmation needed</div></span></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Tasks by Owner</div>
+            <div class="panel-badge">MS To Do · grouped</div>
+          </div>
+          <div class="panel-body">
+            <div class="item-row"><span class="item-time" style="min-width:auto;color:var(--red)">DCR</span><span class="item-title">6 open · 2 overdue<div class="item-meta">Caltech reply, ROI v3, peptide v3, IG Live brief, others</div></span></div>
+            <div class="item-row"><span class="item-time" style="min-width:auto;color:var(--blue)">HETAL</span><span class="item-title">3 open · 0 overdue<div class="item-meta">UB-04 final, payer call notes</div></span></div>
+            <div class="item-row"><span class="item-time" style="min-width:auto;color:var(--blue)">SOCIAL</span><span class="item-title">4 open · 1 overdue<div class="item-meta">IG Live confirmation 1d late</div></span></div>
+            <div class="item-row"><span class="item-time" style="min-width:auto;color:var(--blue)">FRONT</span><span class="item-title">2 open · 0 overdue<div class="item-meta">N1 SOP rollout</div></span></div>
+            <div class="item-row"><span class="item-time" style="min-width:auto;color:var(--blue)">IANUZZI</span><span class="item-title">1 open · 0 overdue<div class="item-meta">Peptide deck review</div></span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== WEEKDAY (TUE-SUN) VIEW ========== -->
+    <section id="weekday-view" class="hidden">
+      <div class="priority-banner">
+        <span class="tag">TODAY</span>
+        <span>3 items need attention before 10am — Hetal billing reply, Caltech call confirm, Ianuzzi peptide deck Q.</span>
+      </div>
+
+      <div class="metric-grid">
+        <div class="metric"><div class="metric-label">Patients Today</div><div class="metric-value">47</div><div class="metric-delta pos">+4 vs avg</div></div>
+        <div class="metric"><div class="metric-label">N1 Pending</div><div class="metric-value" style="color:var(--red)">12</div><div class="metric-delta neg">Conversion gap</div></div>
+        <div class="metric"><div class="metric-label">Yest. Deposit</div><div class="metric-value" style="font-size:22px">$58,420</div><div class="metric-delta">Plaid · PNC</div></div>
+        <div class="metric"><div class="metric-label">Yest. Var Spend</div><div class="metric-value" style="font-size:22px;color:var(--text-dim)">$14,210</div><div class="metric-delta">QBO</div></div>
+      </div>
+
+      <!-- Daily Financials -->
+      <div class="grid-3">
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title green">Bank Deposits — Yesterday</div><div class="panel-badge">Plaid · PNC</div></div>
+          <div class="panel-body">
+            <div class="fin-row"><span class="label">Card batch AM</span><span class="value">$22,140</span></div>
+            <div class="fin-row"><span class="label">Card batch PM</span><span class="value">$28,640</span></div>
+            <div class="fin-row"><span class="label">Insurance ACH</span><span class="value">$7,640</span></div>
+            <div class="fin-row fin-total"><span class="label" style="color:var(--text);font-weight:600">Total deposit</span><span class="value green">$58,420</span></div>
+            <div class="fin-row" style="margin-top:8px"><span class="label" style="font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-ghost)">Posted 06:42 EDT</span><span class="label" style="font-size:9px">PNC Acct ****4419</span></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title amber">Front Desk Recon — Yesterday</div><div class="panel-badge">CureMD billing</div></div>
+          <div class="panel-body">
+            <div class="fin-row"><span class="label">Card collected</span><span class="value">$50,780</span></div>
+            <div class="fin-row"><span class="label">Cash collected</span><span class="value">$1,240</span></div>
+            <div class="fin-row"><span class="label">Check collected</span><span class="value">$2,420</span></div>
+            <div class="fin-row"><span class="label">Insurance posted</span><span class="value">$7,640</span></div>
+            <div class="fin-row fin-total"><span class="label" style="color:var(--text);font-weight:600">Total collected</span><span class="value">$62,080</span></div>
+            <div class="fin-row" style="margin-top:8px"><span class="label" style="color:var(--amber);font-size:10px">Δ vs. deposit:</span><span class="value" style="color:var(--amber);font-size:11px">-$3,660 in transit</span></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">Variable Spend MTD</div><div class="panel-badge">QBO · ex fixed</div></div>
+          <div class="panel-body">
+            <div class="fin-row"><span class="label">Yesterday</span><span class="value">$14,210</span></div>
+            <div class="fin-row"><span class="label">Week-to-date</span><span class="value">$48,640</span></div>
+            <div class="fin-row"><span class="label">Month-to-date</span><span class="value">$214,820</span></div>
+            <div class="fin-row" style="margin-top:6px"><span class="label" style="font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-ghost)">Top categories</span></div>
+            <div class="fin-row"><span class="label">Med supplies</span><span class="value" style="font-size:11px">$62,140</span></div>
+            <div class="fin-row"><span class="label">Lab / regen</span><span class="value" style="font-size:11px">$48,290</span></div>
+            <div class="fin-row"><span class="label">Marketing</span><span class="value" style="font-size:11px">$31,420</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title blue">Today's Schedule</div><div class="panel-badge">Outlook</div></div>
+          <div class="panel-body">
+            <div class="item-row"><span class="item-time">08:00</span><span class="item-title">Clinic open / huddle<div class="item-meta">Full team</div></span></div>
+            <div class="item-row urgent"><span class="item-time">10:00</span><span class="item-title">Recovery Suite financial review<div class="item-meta">w/ Hetal · UB-04</div></span></div>
+            <div class="item-row"><span class="item-time">12:30</span><span class="item-title">Ianuzzi 1:1<div class="item-meta">Track A progress</div></span></div>
+            <div class="item-row"><span class="item-time">14:00</span><span class="item-title">OPEN<div class="item-meta">2pm patient moved</div></span></div>
+            <div class="item-row"><span class="item-time">16:30</span><span class="item-title">Peptide protocol review<div class="item-meta">Regen team</div></span></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title amber">Priority Today — w/ Owner</div><div class="panel-badge">Top 5</div></div>
+          <div class="panel-body">
+            <div class="item-row urgent"><span class="item-time" style="min-width:auto">!</span><span class="item-title">Reply to Hetal — UB-04 model<div class="item-meta">Before 10am meeting</div></span><span class="owner-pill me">DCR</span></div>
+            <div class="item-row urgent"><span class="item-time" style="min-width:auto">!</span><span class="item-title">Confirm Caltech call slot<div class="item-meta">Tue or Wed</div></span><span class="owner-pill me">DCR</span></div>
+            <div class="item-row"><span class="item-time" style="min-width:auto">→</span><span class="item-title">Sign off peptide handout v3<div class="item-meta">Ianuzzi waiting</div></span><span class="owner-pill me">DCR</span></div>
+            <div class="item-row"><span class="item-time" style="min-width:auto">→</span><span class="item-title">N1 SOP rollout check-in<div class="item-meta">Front desk lead</div></span><span class="owner-pill">Front</span></div>
+            <div class="item-row"><span class="item-time" style="min-width:auto">→</span><span class="item-title">Recovery suite walkthrough notes<div class="item-meta">For ROI v3</div></span><span class="owner-pill me">DCR</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">Email Triage</div><div class="panel-badge">Outlook</div></div>
+          <div class="panel-body">
+            <div class="item-row urgent"><span class="item-time" style="min-width:auto">●</span><span class="item-title">Hetal · UB-04 analysis ready<div class="item-meta">Last night 23:14</div></span></div>
+            <div class="item-row urgent"><span class="item-time" style="min-width:auto">●</span><span class="item-title">Caltech lab · positive reply<div class="item-meta">Wants call next week</div></span></div>
+            <div class="item-row"><span class="item-time" style="min-width:auto">●</span><span class="item-title">CureMD support · POL classification<div class="item-meta">Follow-up</div></span></div>
+            <div class="item-row"><span class="item-time" style="min-width:auto">○</span><span class="item-title">Horizon BCBSNJ · provider notice<div class="item-meta">Not urgent</div></span></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">Awaiting Response</div><div class="panel-badge">Follow-up engine</div></div>
+          <div class="panel-body">
+            <div class="item-row urgent"><span class="item-time" style="min-width:auto">7d</span><span class="item-title">UCSD lab — wearable outreach<div class="item-meta">No reply since Apr 20</div></span></div>
+            <div class="item-row urgent"><span class="item-time" style="min-width:auto">5d</span><span class="item-title">Aetna provider relations<div class="item-meta">UB-04 question</div></span></div>
+            <div class="item-row"><span class="item-time" style="min-width:auto">3d</span><span class="item-title">Cryo vendor service quote<div class="item-meta">Sent Apr 24</div></span></div>
+            <div class="item-row"><span class="item-time" style="min-width:auto">2d</span><span class="item-title">Social mgr — IG Live brief<div class="item-meta">Confirmation needed</div></span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">Dr. Derosa Recovery Report</div><div class="panel-badge">Daily · CureMD</div></div>
+          <div class="panel-body">
+            <div class="fin-row"><span class="label">Patients seen yesterday</span><span class="value">28</span></div>
+            <div class="fin-row"><span class="label">New recovery patients</span><span class="value">3</span></div>
+            <div class="fin-row"><span class="label">Modality breakdown</span><span class="value" style="font-size:10px">Cryo 12 · IR 9 · Red 7</span></div>
+            <div class="fin-row"><span class="label">Membership conversions</span><span class="value green">2</span></div>
+            <div class="fin-row"><span class="label">No-shows</span><span class="value red">1</span></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title purple">Projects · Still At Play</div><div class="panel-badge">5 active</div></div>
+          <div class="panel-body">
+            <div class="item-row"><span class="item-time" style="min-width:auto">A1</span><span class="item-title">Wearable · Caltech call this week<div class="item-meta">Pilot protocol v2 due Fri</div></span></div>
+            <div class="item-row urgent"><span class="item-time" style="min-width:auto">A4</span><span class="item-title">UB-04 · decision Wed<div class="item-meta">Hetal owns, you sign off</div></span></div>
+            <div class="item-row"><span class="item-time" style="min-width:auto">A2</span><span class="item-title">Recovery Suite · ROI v3 Fri<div class="item-meta">Floor plan also</div></span></div>
+            <div class="item-row"><span class="item-time" style="min-width:auto">A3</span><span class="item-title">Ianuzzi · IG Live Thu<div class="item-meta">Track C launch</div></span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <aside class="right">
+    <div class="chat-header">
+      <div class="chat-title">Jarvis</div>
+      <div class="chat-sub" id="chat-sub">Powered by Claude · day-aware · ask anything</div>
+    </div>
+    <div class="chat-body" id="chat-body">
+      <div class="msg bot">
+        <div class="msg-label">Jarvis</div>
+        <div class="msg-content">Monday view loaded. Last week: 1,547 encounters, $312k deposits, 22 new patients, allergy kits down 3 (worth checking). Six items need your attention this week, two are urgent. Ready.</div>
+      </div>
+    </div>
+    <div class="chat-input-wrap">
+      <textarea class="chat-input" id="chat-input" rows="2" placeholder="Ask Jarvis..."></textarea>
+      <div class="chat-hint"><span>ENTER send · SHIFT+ENTER newline</span><span id="chat-status">READY</span></div>
+      <div class="suggestions" id="suggestions"></div>
+    </div>
+  </aside>
+</div>
+
+<script>
+/* ============================================================
+   CLOCK + DAY DETECTION
+   ============================================================ */
+function updateClock() {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2, '0');
+  const m = String(now.getMinutes()).padStart(2, '0');
+  const s = String(now.getSeconds()).padStart(2, '0');
+  document.getElementById('clock').textContent = `${h}:${m}:${s}`;
+}
+setInterval(updateClock, 1000); updateClock();
+
+const DAYS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+const today = new Date();
+const todayDay = DAYS[today.getDay()];
+document.getElementById('day-mode').textContent = todayDay;
+
+/* Auto-pick view based on day; user can override */
+let currentView = todayDay === 'MON' ? 'monday' : 'weekday';
+
+const btnMon = document.getElementById('btn-monday');
+const btnWk = document.getElementById('btn-weekday');
+const mondayView = document.getElementById('monday-view');
+const weekdayView = document.getElementById('weekday-view');
+const greetingLabel = document.getElementById('greeting-label');
+const dayModeEl = document.getElementById('day-mode');
+const metaExtra = document.getElementById('meta-extra');
+const chatSub = document.getElementById('chat-sub');
+
+function setView(v) {
+  currentView = v;
+  if (v === 'monday') {
+    mondayView.classList.remove('hidden');
+    weekdayView.classList.add('hidden');
+    btnMon.classList.add('active'); btnWk.classList.remove('active');
+    greetingLabel.textContent = 'Monday Strategic Rollup';
+    dayModeEl.classList.remove('weekday');
+    metaExtra.textContent = '12 priority items this week';
+    chatSub.textContent = 'Day-aware · Monday view loaded';
+    setSuggestions(['Summarize last week in 3 bullets','Why are allergy kits down?','Draft this week kickoff message','What should be priority Tuesday?']);
+  } else {
+    mondayView.classList.add('hidden');
+    weekdayView.classList.remove('hidden');
+    btnMon.classList.remove('active'); btnWk.classList.add('active');
+    greetingLabel.textContent = 'Daily Briefing';
+    dayModeEl.classList.add('weekday');
+    metaExtra.textContent = '47 patients · 12 N1 pending';
+    chatSub.textContent = 'Day-aware · Weekday tactical view';
+    setSuggestions(['What needs attention before 10am?','Reply to Hetal','Reply to Caltech','Front desk vs deposit gap?']);
+  }
+}
+
+function setSuggestions(arr) {
+  const el = document.getElementById('suggestions');
+  el.innerHTML = '';
+  arr.forEach(p => {
+    const b = document.createElement('button');
+    b.className = 'suggestion';
+    b.textContent = p.length > 30 ? p.slice(0,28)+'…' : p;
+    b.dataset.prompt = p;
+    b.addEventListener('click', () => sendMessage(p));
+    el.appendChild(b);
+  });
+}
+
+btnMon.addEventListener('click', () => setView('monday'));
+btnWk.addEventListener('click', () => setView('weekday'));
+setView(currentView);
+
+/* ============================================================
+   DATA MODEL — Mock structure that matches what the backend
+   proxy will return when wired to live APIs.
+   ------------------------------------------------------------
+   Backend pulls in parallel from:
+     CureMD          → clinical counts + Derosa report + N1
+     Microsoft Graph → calendar, mail, to-do, teams
+     Plaid (PNC)     → daily deposits
+     QuickBooks      → variable spend (ex-fixed costs)
+     Spreadsheets    → multi-sheet weekly metrics consolidation
+   Returns single JSON blob matching this shape.
+   ============================================================ */
+
+const DATA = {
+  user: "Dr. Romano",
+  today: today.toDateString(),
+  view_mode: currentView,
+  weekly: {
+    week_number: 16,
+    clinical: {
+      new_patients: { last: 22, prior: 18 },
+      medical_seen: { last: 284, prior: 271 },
+      n1: { last: 187, prior: 192 },
+      chiro_seen: { last: 612, prior: 598 },
+      admin_codes: { last: 94, prior: 88 },
+      allergy_tests: { last: 14, prior: 11 },
+      allergy_kits: { last: 9, prior: 12 },
+      recovery_new: { last: 17, prior: 13 },
+      recovery_all: { last: 142, prior: 129 },
+      pod: { last: 78, prior: 82 },
+      acu: { last: 56, prior: 61 },
+      procedures: { last: 31, prior: 28 }
+    },
+    financial: {
+      deposits_by_day: { mon: 58420, tue: 71210, wed: 64890, thu: 59140, fri: 58720 },
+      total_deposits: 312380,
+      variable_spend: 87440,
+      net_contribution: 224940,
+      top_category: "Med supplies $24k"
+    }
+  },
+  daily: {
+    deposits_yesterday: { am_card: 22140, pm_card: 28640, ach: 7640, total: 58420, account: "PNC ****4419", posted: "06:42 EDT" },
+    front_desk_yesterday: { card: 50780, cash: 1240, check: 2420, insurance: 7640, total: 62080, gap_vs_deposit: -3660 },
+    qbo_variable: { yesterday: 14210, wtd: 48640, mtd: 214820, top: { meds: 62140, lab: 48290, marketing: 31420 } },
+    derosa: { seen: 28, new: 3, modality: "Cryo 12 · IR 9 · Red 7", conversions: 2, no_shows: 1 },
+    schedule: [
+      "08:00 Clinic huddle","10:00 Hetal UB-04 review","12:30 Ianuzzi 1:1","14:00 OPEN","16:30 Peptide protocol"
+    ],
+    priority_today: [
+      { task: "Reply to Hetal UB-04 model", owner: "DCR", urgent: true },
+      { task: "Confirm Caltech call slot", owner: "DCR", urgent: true },
+      { task: "Sign off peptide handout v3", owner: "DCR" },
+      { task: "N1 SOP rollout check-in", owner: "Front" },
+      { task: "Recovery suite walkthrough notes", owner: "DCR" }
+    ],
+    awaiting_response: [
+      { who: "UCSD lab", topic: "wearable outreach", days: 7 },
+      { who: "Aetna provider relations", topic: "UB-04 question", days: 5 },
+      { who: "Cryo vendor", topic: "service quote", days: 3 },
+      { who: "Social mgr", topic: "IG Live brief", days: 2 }
+    ]
+  },
+  projects: {
+    A1: { name: "Wearable Device", status: "Caltech call this week, pilot v2 due Fri", owner: "DCR" },
+    A2: { name: "Recovery Suite", status: "ROI v3 + floor plan due Fri", owner: "DCR" },
+    A3: { name: "Dr. Ianuzzi", status: "IG Live Thu, Track C launch", owner: "Social" },
+    A4: { name: "UB-04 Transition", status: "Decision Wed, Horizon + Aetna outreach", owner: "Hetal", urgent: true },
+    A5: { name: "Full Throttle 90d", status: "Dept owner check-ins", owner: "DCR" }
+  }
+};
+
+/* ============================================================
+   LIVE DATA FETCHER — points to backend proxy when ready
+   ============================================================ */
+const BACKEND_URL = null;
+async function fetchLiveData() {
+  if (!BACKEND_URL) return DATA;
+  try {
+    const res = await fetch(BACKEND_URL, { credentials: 'include' });
+    if (!res.ok) throw new Error(`Backend ${res.status}`);
+    return await res.json();
+  } catch (e) { console.error("Live fetch failed:", e); return DATA; }
+}
+
+/* ============================================================
+   CHATBOT — Claude API
+   ============================================================ */
+const conversation = [];
+
+async function askClaude(userMessage) {
+  conversation.push({ role: "user", content: userMessage });
+
+  const systemPrompt = `You are Jarvis, Dr. Carmen Romano's executive assistant at Madison Medical Sports & Wellness in Madison, NJ.
+
+Style rules — non-negotiable:
+- Direct, fast, results-oriented. No affirmations. No "great question." No preamble.
+- Short sentences. Concrete numbers. Execution-ready.
+- Sign drafts as "Dr. Romano" only.
+- When asked for analysis, give an opinion, not a list of considerations.
+
+Current view: ${currentView === 'monday' ? 'MONDAY STRATEGIC ROLLUP (Week 16 in review)' : 'WEEKDAY TACTICAL VIEW'}
+Current day: ${todayDay}
+
+=== DASHBOARD CONTEXT ===
+${JSON.stringify(DATA, null, 2)}
+=== END CONTEXT ===
+
+When drafting emails or messages: tight, professional, no fluff, action-oriented closings.`;
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-5",
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: conversation
+      })
+    });
+    const data = await response.json();
+    const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("\n");
+    conversation.push({ role: "assistant", content: text });
+    return text || "(no response)";
+  } catch (e) {
+    console.error(e); return "Connection error. Check console.";
+  }
+}
+
+const chatBody = document.getElementById('chat-body');
+const chatInput = document.getElementById('chat-input');
+const chatStatus = document.getElementById('chat-status');
+
+function renderMessage(role, text, isThinking = false) {
+  const el = document.createElement('div');
+  el.className = `msg ${role}${isThinking ? ' thinking' : ''}`;
+  if (role === 'bot') {
+    el.innerHTML = `<div class="msg-label">Jarvis</div><div class="msg-content"></div>`;
+    el.querySelector('.msg-content').textContent = text;
+  } else {
+    el.textContent = text;
+  }
+  chatBody.appendChild(el);
+  chatBody.scrollTop = chatBody.scrollHeight;
+  return el;
+}
+
+async function sendMessage(text) {
+  if (!text || !text.trim()) return;
+  renderMessage('user', text.trim());
+  chatInput.value = '';
+  chatStatus.textContent = 'THINKING...';
+  chatStatus.style.color = 'var(--amber)';
+  const thinkingEl = renderMessage('bot', 'Processing...', true);
+  const reply = await askClaude(text.trim());
+  thinkingEl.classList.remove('thinking');
+  thinkingEl.querySelector('.msg-content').textContent = reply;
+  chatStatus.textContent = 'READY';
+  chatStatus.style.color = 'var(--text-ghost)';
+}
+
+chatInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(chatInput.value); }
+});
+</script>
+</body>
+</html>
