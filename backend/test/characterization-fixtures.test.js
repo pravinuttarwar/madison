@@ -136,12 +136,15 @@ test('GET /api/email/:id — body resolves for a known id', async () => {
   assert.ok(body.body && body.body.length > 0);
 });
 
-test('GET /api/email/awaiting — follow-up list (latest from owner, past threshold)', async () => {
+test('[AC-4] GET /api/email/awaiting — follow-up list (latest from owner, past threshold) with the stable DTO shape', async () => {
   const { status, body } = await getJson('/api/email/awaiting');
   assert.equal(status, 200);
   assert.ok(Array.isArray(body));
   assert.equal(body.length, 1);
+  // Contract preserved for the EmailQueue consumer — exact field set, unchanged.
+  assert.deepEqual(Object.keys(body[0]).sort(), ['days', 'detail', 'hours', 'id', 'subject', 'to', 'wait']);
   assert.equal(typeof body[0].wait, 'string');
+  assert.equal(body[0].to, 'External Lab');
 });
 
 test('GET /api/calendar — today events + week-ahead grouping', async () => {

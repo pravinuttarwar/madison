@@ -86,8 +86,18 @@ export function writeFixtures(dir, now = new Date()) {
   });
 
   // ── Graph: sent items + conversation (awaiting-response engine: latest from owner, old) ──
+  // The sent item carries the real threading signals — internetMessageId + the RFC headers
+  // and conversationIndex — so the live path threads it via awaiting.js (NOT conversationId).
   w(g, 'sent.json')({
-    value: [{ conversationId: 'c1', subject: 'Awaiting reply', sentDateTime: iso(at(-5, 9)), toRecipients: [{ emailAddress: { name: 'External Lab', address: 'lab@external.example' } }] }],
+    value: [{
+      conversationId: 'c1',
+      conversationIndex: Buffer.alloc(22, 3).toString('base64'),
+      internetMessageId: '<await-1@madison.example>',
+      internetMessageHeaders: [{ name: 'Message-ID', value: '<await-1@madison.example>' }],
+      subject: 'Awaiting reply',
+      sentDateTime: iso(at(-5, 9)),
+      toRecipients: [{ emailAddress: { name: 'External Lab', address: 'lab@external.example' } }],
+    }],
   });
   w(g, 'conversation.json')({ value: [{ from: { emailAddress: { address: MS_USER } }, sentDateTime: iso(at(-5, 9)) }] });
 

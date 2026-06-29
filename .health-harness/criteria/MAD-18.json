@@ -1,0 +1,39 @@
+{
+  "issueKey": "MAD-18",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "Threading uses conversationIndex + RFC headers (Message-ID/In-Reply-To/References) ordered by sentDateTime, not conversationId"
+    },
+    {
+      "id": "AC-2",
+      "text": "Conversation whose latest message is from owner and age >= 48h threshold yields one awaiting item; replies from others or younger-than-threshold excluded"
+    },
+    {
+      "id": "AC-3",
+      "text": "Awaiting items ordered by days/hours waiting descending"
+    },
+    {
+      "id": "AC-4",
+      "text": "DTO shape {id,hours,days,wait,to,subject,detail} preserved unchanged for EmailQueue consumer"
+    },
+    {
+      "id": "AC-5",
+      "text": "Uses AWAITING_THRESHOLD_HOURS/AWAITING_LOOKBACK_DAYS (48/14) and owner mailbox from config"
+    },
+    {
+      "id": "AC-6",
+      "text": "401 when unauthenticated, 502 on upstream failure, 200 + JSON array (empty when none)"
+    },
+    {
+      "id": "AC-7",
+      "kind": "audit",
+      "text": "Mailbox read records an audit entry (who/what+source/when/outcome) with no PHI values"
+    },
+    {
+      "id": "AC-8",
+      "kind": "app-logging",
+      "text": "Errors on the awaiting path log references/ids/paths only, never subjects/recipients/bodies"
+    }
+  ]
+}

@@ -5,6 +5,7 @@ import { currentSession } from './session.js';
 import * as graph from './graph.js';
 import * as qbo from './qbo.js';
 import * as T from './transforms.js';
+import { computeAwaiting } from './awaiting.js';
 
 export const router = Router();
 const TTL = 90_000; // 90s in-memory cache
@@ -64,28 +65,10 @@ function route(sourceId, liveProducer) {
   };
 }
 
-// ── awaiting-response engine (per the customer's backend spec) ────────────────
-async function computeAwaiting() {
-  const { awaitingThresholdHours, awaitingLookbackDays, user } = config.graph;
-  const owner = (user || '').toLowerCase();
-  const sent = await graph.listSentItems(awaitingLookbackDays);
-  const seen = new Set();
-  const out = [];
-  let idx = 0;
-  for (const msg of sent) {
-    if (!msg.conversationId || seen.has(msg.conversationId)) continue;
-    seen.add(msg.conversationId);
-    const latest = await graph.latestInConversation(msg.conversationId);
-    if (!latest) continue;
-    const latestFrom = (latest.from?.emailAddress?.address || '').toLowerCase();
-    const fromOwner = owner ? latestFrom === owner : true; // set MS_USER for a precise test
-    const ageH = (Date.now() - new Date(latest.sentDateTime).getTime()) / 3_600_000;
-    if (fromOwner && ageH >= awaitingThresholdHours) {
-      out.push(T.awaitingItem(msg, ageH, idx++));
-    }
-  }
-  return out.sort((a, b) => b.hours - a.hours);
-}
+// ── awaiting-response engine ──────────────────────────────────────────────────
+// The engine (threading + detection) lives in awaiting.js so it's unit-testable with
+// injected fetchers; here we bind it to the live Graph client + runtime config.
+const buildAwaiting = () => computeAwaiting(graph, config.graph);
 
 // ── signed-in user profile ────────────────────────────────────────────────────
 // Name comes from the id_token JWT decoded at login (no User.Read needed).
@@ -109,7 +92,7 @@ router.get('/settings', (_req, res) => {
 
 // ── email ──────────────────────────────────────────────────────────────────��─
 router.get('/email', route('outlook', async () => T.emailsFromGraph(await cached(sk('msgs'), TTL, () => graph.listMessages(25)))));
-router.get('/email/awaiting', route('outlook', async () => cached(sk('await'), TTL, computeAwaiting)));
+router.get('/email/awaiting', route('outlook', async () => cached(sk('await'), TTL, buildAwaiting)));
 router.get('/email/:id', route('outlook',
   async (req) => {
     const all = T.emailsFromGraph(await cached(sk('msgs50'), TTL, () => graph.listMessages(50)));
@@ -190,7 +173,7 @@ router.get('/dashboard', async (req, res) => {
         graph.listMessages(25).then(T.emailsFromGraph).catch(() => []),
         graph.calendarView(start.toISOString(), end.toISOString()).then(T.calendarFromGraph).catch(() => null),
         graph.listTodoTasks().then(T.tasksFromGraph).catch(() => []),
-        computeAwaiting().catch(() => []),
+        buildAwaiting().catch(() => []),
       ]);
 
       d.emails = msgs;
