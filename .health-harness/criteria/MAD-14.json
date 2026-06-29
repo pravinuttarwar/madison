@@ -1,0 +1,30 @@
+{
+  "issueKey": "MAD-14",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "kind": "",
+      "text": "Proxy-aware TLS enforcement (env-gated): FORCE_HTTPS=1 + trust proxy redirects X-Forwarded-Proto http to https; https proceeds; unset = no redirect (local dev)."
+    },
+    {
+      "id": "AC-2",
+      "kind": "",
+      "text": "HSTS + secure cookies under production config: enforcement on => Strict-Transport-Security header and session cookie Secure+HttpOnly+SameSite=Lax (COOKIE_SECURE gates); off => no HSTS, cookie not forced Secure."
+    },
+    {
+      "id": "AC-3",
+      "kind": "",
+      "text": "Secrets server-side only; tokens never persisted: app credentials read only from env/secret-source behind a single config accessor (vault-ready), never hardcoded, never to browser; per-visitor OAuth tokens in-memory only, never to disk, never to browser."
+    },
+    {
+      "id": "AC-4",
+      "kind": "audit",
+      "text": "Audit middleware on all /api routes: every /api request (read/write/denied/401/503) records an audit entry (method, path, status, ms; never bodies, never PHI), mounted before the router."
+    },
+    {
+      "id": "AC-5",
+      "kind": "app-logging",
+      "text": "PHI-/secret-safe logging on error paths: error on a source-read path logs ids/paths/references only, never PHI values, never secret/token values."
+    }
+  ]
+}

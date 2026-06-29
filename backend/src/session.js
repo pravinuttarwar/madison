@@ -8,6 +8,7 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes } from 'node:crypto';
+import { isSecureCookie } from './security.js';
 
 const COOKIE = 'mcc_sid';
 const TTL_MS = 12 * 60 * 60 * 1000; // 12h idle lifetime
@@ -51,7 +52,7 @@ export function sessionMiddleware(req, res, next) {
     res.cookie(COOKIE, sid, {
       httpOnly: true,
       sameSite: 'lax', // sent on the top-level OAuth redirect back to /callback
-      secure: process.env.COOKIE_SECURE === '1',
+      secure: isSecureCookie(), // Secure under TLS enforcement (FORCE_HTTPS) or COOKIE_SECURE (MAD-14)
       path: process.env.COOKIE_PATH || '/',
       maxAge: TTL_MS,
     });

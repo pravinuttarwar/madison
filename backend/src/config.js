@@ -6,6 +6,15 @@ import 'dotenv/config';
 // (client id/secret/tenant) and config, never user refresh tokens.
 const env = process.env;
 
+// Single accessor for app credentials/secrets (MAD-14, AC-3). Today it reads from the
+// process environment (.env); it's the ONE seam a secrets vault would replace later —
+// swap the body for a vault client and every call site is covered without changes. App
+// credentials stay server-side and are never sent to the browser. Per-visitor OAuth
+// tokens are NOT secrets-at-rest — they live in memory on the session (see session.js).
+export function getSecret(name, source = process.env) {
+  return source[name] || '';
+}
+
 export const config = {
   port: Number(env.PORT) || 8787,
   corsOrigins: (env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:4173')
@@ -27,7 +36,7 @@ export const config = {
     environment: env.MS_ENV || 'sandbox',
     tenantId: env.MS_TENANT_ID || '',
     clientId: env.MS_CLIENT_ID || '',
-    clientSecret: env.MS_CLIENT_SECRET || '',
+    clientSecret: getSecret('MS_CLIENT_SECRET'),
     user: env.MS_USER || '', // empty → use /me
     awaitingThresholdHours: Number(env.AWAITING_THRESHOLD_HOURS) || 48,
     awaitingLookbackDays: Number(env.AWAITING_LOOKBACK_DAYS) || 14,
@@ -38,7 +47,7 @@ export const config = {
   qbo: {
     environment: env.QBO_ENV || 'sandbox',
     clientId: env.QBO_CLIENT_ID || '',
-    clientSecret: env.QBO_CLIENT_SECRET || '',
+    clientSecret: getSecret('QBO_CLIENT_SECRET'),
     fixedAccountIds: (env.QBO_FIXED_ACCOUNT_IDS || '')
       .split(',')
       .map((s) => s.trim())
