@@ -9,6 +9,7 @@ import { router } from './routes.js';
 import { tlsEnforcement } from './security.js';
 import { auditMiddleware } from './audit.js';
 import { startMsSignIn, handleMsCallback } from './server-oauth.js';
+import { devHooksEnabled, handleExpireGraph } from './dev-hooks.js';
 
 // Pin the process to the practice timezone so all date/time bucketing + display
 // (QuickBooks day buckets, calendar/email times, "yesterday"/"last week" windows)
@@ -121,6 +122,15 @@ app.get('/auth/qbo/callback', async (req, res) => {
     res.status(502).send(`<h2>Error</h2><pre>${err.message}</pre>`);
   }
 });
+
+// ── DEV-ONLY: force the Graph re-auth path (MAD-15 AC-4 verification) ──
+// Mounted only when ALLOW_TEST_HOOKS=1 and not production (see dev-hooks.js). POST it, then
+// hit any Graph page → the next refresh is rejected → 401 re-prompt. Never present in prod.
+if (devHooksEnabled()) {
+  app.post('/auth/test/expire-graph', handleExpireGraph);
+  // eslint-disable-next-line no-console
+  console.log('[dev] test hook mounted: POST /auth/test/expire-graph (ALLOW_TEST_HOOKS=1)');
+}
 
 // ── Sign out — clear THIS visitor's session tokens (other sessions untouched) ──
 app.post('/auth/logout', (_req, res) => {
