@@ -18,7 +18,7 @@ holds the active feature stories. This doc summarizes; the tickets are authorita
 | "Sent, no reply" follow-up | Email Queue + Dashboard "Awaiting response" | 🟡 UI done; detection engine spec'd, not wired (needs live Graph) |
 | Calendar: today + week ahead | Calendar (`/calendar`) | ✅ UI done on sample data |
 | Tasks grouped by owner, due/overdue | Tasks (`/tasks`) | ✅ UI done on sample data |
-| Clean QuickBooks snapshot (deposits, variable spend, net contribution, **revenue**, **outstanding A/R**) | Financials (`/financials`) | 🟡 UI done incl. accrual revenue tile (MAD-23) + outstanding-invoice / A/R aging (MAD-24); live QBO via OAuth (MAD-15); fixed-cost exclusion is config-only |
+| Clean QuickBooks snapshot (deposits, variable spend, net contribution, **revenue**, **outstanding A/R**, **cash flow**) | Financials (`/financials`) | 🟡 UI done incl. accrual revenue tile (MAD-23) + outstanding-invoice / A/R aging (MAD-24) + cash-flow overview (MAD-25); live QBO via OAuth (MAD-15); fixed-cost exclusion is config-only |
 | Weekly provider spreadsheet snapshot + WoW deltas | Reports (`/reports`) | 🟡 UI done with the 12 metrics; spreadsheet read not wired (MBI-22) |
 | Color-blind-accessible UI (never color alone) | accessibility primitives + Display menu | ✅ Done — exact dark palette + Color-Vision-Friendly default (MBI-21) |
 | Timezone-correct dates (practice zone, America/New_York) | dashboard view default + date transforms | ✅ Done (MBI-26/27/28) |
@@ -126,6 +126,16 @@ Legend: ✅ done · 🟡 prototype/partial (UI real, live data pending) · ⛔ o
   names in the DTO or logs** (HIPAA / SOW no-PHI posture). No contract break; no DB/migration. AC-1..AC-10 pinned by
   `transforms`/`characterization-fixtures`/`receivables`/`Financials.test.tsx`. PR
   [#30](https://github.com/pravinuttarwar/madison/pull/30) merged; **Testing (owner QA)**.
+- **[MAD-25](https://connecthealth.atlassian.net/browse/MAD-25) — Cash-flow overview (Financials)**
+  (Phase-1 productionization, epic [MAD-1](https://connecthealth.atlassian.net/browse/MAD-1), MAD Sprint 2). Adds a
+  **derived cash-flow summary** as an **additive** `cashFlow` field on `/api/financials` — cash in (deposits), cash out
+  (**all** purchases incl. fixed costs, distinct from variable spend), net = in − out — over last week vs prior (WoW) and
+  month-to-date, plus a **Net cash flow** tile (Monday: last week + WoW; Weekday: MTD) and an inflow-vs-outflow panel with
+  color-blind-safe direction. Net-new: the `cashFlowFromQbo` transform over `financePeriods` windows (practice-zone,
+  DST-immune date-only compare; degrades to a zeroed summary), reusing the deposits/purchases already fetched (no new QBO
+  call). No contract break; no DB/migration. AC-1..AC-8 pinned by
+  `transforms`/`characterization-fixtures`/`cashflow`/`Financials.test.tsx`. PR
+  [#32](https://github.com/pravinuttarwar/madison/pull/32) merged; **Testing (owner QA)**.
 
 ### 🟡 Remaining (open in Jira)
 
