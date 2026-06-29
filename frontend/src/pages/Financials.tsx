@@ -1,4 +1,4 @@
-import { Wallet, TrendingUp, Landmark, Receipt } from 'lucide-react';
+import { Wallet, TrendingUp, Landmark, Receipt, FileClock } from 'lucide-react';
 import { useViewMode } from '@/context/view-mode';
 import { Panel, Trend, KpiTile } from '@/components/primitives';
 import { Loading } from '@/components/AsyncState';
@@ -59,7 +59,7 @@ export default function Financials() {
   // A financials error means QuickBooks needs (re)connecting → offer Connect.
   if (error || !data) return <ConnectQuickBooks />;
 
-  const { weekly: WEEKLY_FINANCIAL, daily: DAILY_FINANCIAL, revenue: REVENUE } = data;
+  const { weekly: WEEKLY_FINANCIAL, daily: DAILY_FINANCIAL, revenue: REVENUE, receivables: AR } = data;
   const dep = WEEKLY_FINANCIAL.totalDeposits;
   const spend = WEEKLY_FINANCIAL.variableSpend;
   const net = WEEKLY_FINANCIAL.netContribution;
@@ -67,6 +67,9 @@ export default function Financials() {
   const vspend = DAILY_FINANCIAL.variableSpend;
   const maxDep = Math.max(...WEEKLY_FINANCIAL.depositsByDay.map((d) => d.amount));
   const maxCat = Math.max(...vspend.topCategories.map((c) => c.amount));
+  // A/R is a point-in-time snapshot — identical in both view modes. Guard the bar scale
+  // against an all-zero aging set (no open invoices) so we never divide by zero.
+  const maxAging = Math.max(1, ...AR.aging.map((a) => a.amount));
 
   return (
     <div className="space-y-5">
@@ -110,6 +113,12 @@ export default function Financials() {
               icon={Receipt}
               trend={<Trend delta={pctChange(REVENUE.weekly.last, REVENUE.weekly.prior)} unit="%" />}
             />
+            <KpiTile
+              label="Outstanding A/R"
+              value={usd(AR.totalOutstanding)}
+              sub={`${AR.openCount} open invoices`}
+              icon={FileClock}
+            />
           </>
         ) : (
           <>
@@ -133,6 +142,12 @@ export default function Financials() {
               value={usd(REVENUE.mtd)}
               sub="Accrual basis · differs from deposits"
               icon={Receipt}
+            />
+            <KpiTile
+              label="Outstanding A/R"
+              value={usd(AR.totalOutstanding)}
+              sub={`${AR.openCount} open invoices`}
+              icon={FileClock}
             />
           </>
         )}
@@ -224,6 +239,36 @@ export default function Financials() {
           </p>
         </Panel>
       </div>
+
+      {/* Outstanding A/R aging — point-in-time, the same in either view. Aggregate-only:
+          totals and bucket sums, never a patient name. */}
+      <Panel title="Accounts receivable aging" source="QuickBooks" sourceMode={qboMode}>
+        <div className="space-y-2.5">
+          {AR.aging.map((a) => (
+            <div key={a.bucket} className="flex items-center gap-3">
+              <span className="w-16 text-xs font-medium text-muted-foreground">{a.bucket}</span>
+              <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
+                <div className="h-full rounded-full bg-chart-4" style={{ width: `${Math.round((a.amount / maxAging) * 100)}%` }} />
+              </div>
+              <span className="w-12 text-right text-[11px] tabular-nums text-muted-foreground">
+                {a.count} {a.count === 1 ? 'inv' : 'invs'}
+              </span>
+              <span className="w-20 text-right text-xs font-semibold tabular-nums text-foreground">{usd(a.amount)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
+          <div>
+            <div className="text-sm font-semibold text-foreground">Total outstanding</div>
+            <div className="text-[11px] text-muted-foreground">{AR.openCount} open invoices · as of {AR.asOf}</div>
+          </div>
+          <span className="text-sm font-semibold tabular-nums text-foreground">{usd(AR.totalOutstanding)}</span>
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Open balances grouped by how far past due they are — aggregate only, no patient names. "Current"
+          isn't yet due; the older buckets are where to chase payment.
+        </p>
+      </Panel>
     </div>
   );
 }

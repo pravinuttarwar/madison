@@ -137,18 +137,32 @@ async function revenueFromQbo(now) {
   }
 }
 
+// Outstanding-invoice tracking / A/R aging (MAD-24) from open QBO Invoices. Wrapped so an
+// Invoice-query failure degrades to a zeroed receivables snapshot rather than 500-ing the
+// whole financials snapshot — and the catch logs nothing (no balances / customer names on
+// any path). ADDITIVE: deposits/variable-spend/net-contribution/revenue are unchanged.
+async function receivablesFromQbo(now) {
+  try {
+    return T.outstandingInvoicesFromQbo(await qbo.invoices(), now);
+  } catch {
+    return T.outstandingInvoicesFromQbo(null, now); // zeroed snapshot, never throws
+  }
+}
+
 router.get('/financials', route('quickbooks',
   async () => {
     const now = new Date();
     const iso = (d) => d.toISOString().slice(0, 10);
     const from60 = new Date(now.getTime() - 60 * 86_400_000);
-    const [dep, pur, revenue] = await Promise.all([
+    const [dep, pur, revenue, receivables] = await Promise.all([
       cached(sk('qbo-dep'), TTL, () => qbo.deposits(iso(from60), iso(now))),
       cached(sk('qbo-pur'), TTL, () => qbo.purchases(iso(from60), iso(now))),
       cached(sk('qbo-rev'), TTL, () => revenueFromQbo(now)),
+      cached(sk('qbo-inv'), TTL, () => receivablesFromQbo(now)),
     ]);
     const fin = T.financialsFromQbo(dep, pur, config.qbo.fixedAccountIds, now);
     fin.revenue = revenue;
+    fin.receivables = receivables;
     return fin;
   },
 ));

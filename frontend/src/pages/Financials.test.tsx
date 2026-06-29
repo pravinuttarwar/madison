@@ -52,6 +52,36 @@ describe('Financials — accrual revenue tile (MAD-23)', () => {
   });
 });
 
+// [AC-7] MAD-24: aggregate Outstanding A/R — a KPI tile (total + open count) and an aging
+// panel (the five buckets) render in BOTH view modes (A/R is a point-in-time snapshot,
+// identical across views). Aggregate-only — no customer/patient names.
+describe('Financials — outstanding A/R / aging (MAD-24)', () => {
+  it('[AC-7] renders the Outstanding A/R tile + aging panel in Monday mode', async () => {
+    renderFinancials('monday');
+    expect(await screen.findByText('Outstanding A/R')).toBeTruthy();
+    expect(screen.getByText('Accounts receivable aging')).toBeTruthy();
+    // every aging bucket is shown
+    for (const b of ['Current', '1–30', '31–60', '61–90', '90+']) {
+      expect(screen.getByText(b)).toBeTruthy();
+    }
+  });
+
+  it('[AC-7] renders the Outstanding A/R tile + aging panel in weekday mode', async () => {
+    renderFinancials('weekday');
+    expect(await screen.findByText('Outstanding A/R')).toBeTruthy();
+    expect(screen.getByText('Accounts receivable aging')).toBeTruthy();
+  });
+
+  it('[AC-7] shows the open-invoice count and the A/R magnitude (not just a label)', async () => {
+    renderFinancials('monday');
+    await screen.findByText('Outstanding A/R');
+    // openCount 23 surfaces (KPI tile + panel total); totalOutstanding 84200 → "84.2K USD"
+    // (non-"$" magnitude per governance).
+    expect(screen.getAllByText(/23 open invoices/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('84.2K USD').length).toBeGreaterThan(0);
+  });
+});
+
 // MBI-35/38 (AC3): with the sample fallback gone and QuickBooks a real (sandbox) source,
 // an unreachable backend surfaces the not-connected/Connect state — never sample numbers.
 describe('Financials — graceful when the backend is unreachable (live-only)', () => {

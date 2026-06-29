@@ -185,6 +185,35 @@ test('[AC-1] GET /api/financials — additive revenue from ProfitAndLoss (accrua
   assert.equal(body.revenue.mtd, 288400);
 });
 
+// [AC-1] Receivables is an ADDITIVE field: aggregate A/R from open QBO Invoices
+// (Balance > 0) with aging buckets. The weekly/daily/revenue contract is unchanged.
+// [AC-10] proves the synthetic invoices.json fixture flows through the live route.
+test('[AC-1][AC-10] GET /api/financials — additive receivables (A/R aging) from open invoices', async () => {
+  const { status, body } = await getJson('/api/financials');
+  assert.equal(status, 200);
+  assert.ok(body.weekly && body.daily && body.revenue, 'existing weekly/daily/revenue contract is preserved');
+  assert.ok(body.receivables, 'receivables field is present');
+  assert.equal(body.receivables.openCount, 5); // 5 open; the fully-paid (Balance 0) invoice is excluded
+  assert.equal(body.receivables.totalOutstanding, 12600);
+  assert.equal(body.receivables.aging.length, 5);
+  const amt = Object.fromEntries(body.receivables.aging.map((a) => [a.bucket, a.amount]));
+  assert.equal(amt['Current'], 900);
+  assert.equal(amt['1–30'], 1200);
+  assert.equal(amt['31–60'], 3400);
+  assert.equal(amt['61–90'], 2100);
+  assert.equal(amt['90+'], 5000);
+  // buckets partition the total exactly.
+  assert.equal(body.receivables.aging.reduce((s, a) => s + a.amount, 0), 12600);
+});
+
+// [AC-4] aggregate-only: the response carries NO customer/patient name from the fixture's
+// CustomerRef — only totals, counts and bucket sums.
+test('[AC-4] GET /api/financials — receivables exposes no customer/patient names', async () => {
+  const { status, body } = await getJson('/api/financials');
+  assert.equal(status, 200);
+  assert.ok(!JSON.stringify(body.receivables).includes('Patient'), 'receivables must not carry patient/customer names');
+});
+
 test('GET /api/reports — 12 weekly metrics + encounters by specialty', async () => {
   const { status, body } = await getJson('/api/reports');
   assert.equal(status, 200);

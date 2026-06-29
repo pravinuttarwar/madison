@@ -311,6 +311,48 @@ export function financialsFromQbo(deposits, purchases, fixedAccountIds, now = ne
   return { weekly, daily };
 }
 
+// ── outstanding invoices / A/R aging (QuickBooks) — MAD-24 ────────────────────
+// Aggregate-only A/R snapshot from open QBO Invoices (Balance > 0). Returns totals +
+// aging buckets ONLY — CustomerRef / patient names NEVER leave this transform (HIPAA /
+// SOW no-PHI posture). Aging = days past due from each invoice's DueDate, computed in the
+// process (practice) zone via parseLocalDate — the same ET convention as the deposit
+// buckets, so there's no UTC off-by-one. Defensive: missing/empty/malformed input yields a
+// zeroed snapshot (never throws) so the financials route degrades safely rather than 500-ing.
+const AGING_BUCKETS = ['Current', '1–30', '31–60', '61–90', '90+'];
+
+// Map days-past-due → bucket index. ≤0 (not yet due / due today) = Current.
+function agingBucketIndex(daysPastDue) {
+  if (daysPastDue <= 0) return 0;
+  if (daysPastDue <= 30) return 1;
+  if (daysPastDue <= 60) return 2;
+  if (daysPastDue <= 90) return 3;
+  return 4;
+}
+
+export function outstandingInvoicesFromQbo(invoices, now = new Date()) {
+  const aging = AGING_BUCKETS.map((bucket) => ({ bucket, amount: 0, count: 0 }));
+  if (!Array.isArray(invoices)) {
+    return { totalOutstanding: 0, openCount: 0, asOf: localYmd(now), aging };
+  }
+  // "Today" as a practice-zone calendar date (local midnight) — the reference for
+  // days-past-due. Math.round absorbs the 23h/25h day at a DST boundary (no off-by-one).
+  const today = parseLocalDate(localYmd(now));
+  let totalOutstanding = 0;
+  let openCount = 0;
+  for (const inv of invoices) {
+    const balance = Number(inv?.Balance);
+    if (!(balance > 0)) continue; // open invoices only — fully-paid (Balance 0) excluded
+    openCount += 1;
+    totalOutstanding += balance;
+    const due = inv?.DueDate ? parseLocalDate(inv.DueDate) : today;
+    const daysPastDue = Math.round((today - due) / 86_400_000);
+    const bucket = aging[agingBucketIndex(daysPastDue)];
+    bucket.amount += balance;
+    bucket.count += 1;
+  }
+  return { totalOutstanding, openCount, asOf: localYmd(now), aging };
+}
+
 // ── revenue (QuickBooks ProfitAndLoss) ────────────────────────────────────────
 // MAD-23: accrual-basis revenue = the "Total Income" summary line of the QBO
 // ProfitAndLoss report. Walk the report rows and return the Total Income figure

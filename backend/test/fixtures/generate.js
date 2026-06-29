@@ -128,6 +128,28 @@ export function writeFixtures(dir, now = new Date()) {
     },
   });
 
+  // ── QuickBooks: open invoices (A/R aging — MAD-24) ──
+  // Open invoices (Balance > 0) spanning every aging bucket, dated relative to NOW so the
+  // days-past-due bucketing is deterministic at test time. CustomerRef carries a synthetic
+  // patient name on purpose — the aggregate-only DTO must strip it (no PHI surfaces). One
+  // fully-paid invoice (Balance 0) is included to prove it's excluded from the totals.
+  const inv = (dueDeltaDays, balance) => ({
+    DueDate: ymd(at(dueDeltaDays)),
+    Balance: balance,
+    TotalAmt: balance,
+    CustomerRef: { value: '99', name: 'Synthetic Patient' },
+  });
+  w(q, 'invoices.json')({
+    Invoice: [
+      inv(10, 900),    // not yet due → Current
+      inv(-5, 1200),   // 1–30
+      inv(-40, 3400),  // 31–60
+      inv(-75, 2100),  // 61–90
+      inv(-120, 5000), // 90+
+      inv(-200, 0),    // fully paid → excluded
+    ],
+  });
+
   // ── Graph: workbook named ranges → [[last, prior]] (drives 12 weekly metrics) ──
   const RANGE_VALUES = {
     NewPatients: [22, 18], MedicalSeen: [284, 271], N1: [187, 192], ChiroSeen: [612, 598],
