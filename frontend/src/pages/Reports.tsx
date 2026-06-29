@@ -66,6 +66,8 @@ export default function Reports() {
     totalEncounters: TOTAL_ENCOUNTERS,
   } = data;
   const maxEnc = Math.max(...ENCOUNTERS_BY_SPECIALTY.map((e) => e.last));
+  // MAD-29: a year-ago column appears only when the workbook supplies prior-year values.
+  const hasYoY = WEEKLY_METRICS.some((m) => m.yearAgo !== undefined);
 
   return (
     <div className="space-y-5">
@@ -94,6 +96,12 @@ export default function Reports() {
             </span>
             <Trend delta={pctChange(TOTAL_ENCOUNTERS.last, TOTAL_ENCOUNTERS.prior)} unit="%" />
           </div>
+          {hasYoY && TOTAL_ENCOUNTERS.yearAgo !== undefined && (
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span>YoY</span>
+              <Trend delta={pctChange(TOTAL_ENCOUNTERS.last, TOTAL_ENCOUNTERS.yearAgo)} unit="%" />
+            </div>
+          )}
         </div>
         {WEEKLY_METRICS.slice(0, 3).map((m) => (
           <div key={m.key} className="rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -117,6 +125,12 @@ export default function Reports() {
                   <span className="flex items-center gap-2 tabular-nums text-muted-foreground">
                     {e.last}
                     <Trend delta={e.last - e.prior} />
+                    {hasYoY && e.yearAgo !== undefined && (
+                      <span className="flex items-center gap-1">
+                        <span className="text-[10px] uppercase tracking-wide">YoY</span>
+                        <Trend delta={e.last - e.yearAgo} />
+                      </span>
+                    )}
                   </span>
                 </div>
                 <Bar value={e.last} max={maxEnc} colorVar={CHART_COLORS[i % CHART_COLORS.length]} />
@@ -134,7 +148,8 @@ export default function Reports() {
                   <th className="py-2 pr-3 font-medium">Metric</th>
                   <th className="py-2 px-3 text-right font-medium">Last week</th>
                   <th className="py-2 px-3 text-right font-medium">Prior</th>
-                  <th className="py-2 pl-3 text-right font-medium">Change</th>
+                  <th className="py-2 px-3 text-right font-medium">Change</th>
+                  {hasYoY && <th className="py-2 pl-3 text-right font-medium">YoY</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -143,17 +158,22 @@ export default function Reports() {
                     <td className="py-2.5 pr-3 font-medium text-foreground">{m.label}</td>
                     <td className="py-2.5 px-3 text-right tabular-nums text-foreground">{m.last}</td>
                     <td className="py-2.5 px-3 text-right tabular-nums text-muted-foreground">{m.prior}</td>
-                    <td className="py-2.5 pl-3 text-right">
+                    <td className="py-2.5 px-3 text-right">
                       <Trend delta={m.last - m.prior} />
                     </td>
+                    {hasYoY && (
+                      <td className="py-2.5 pl-3 text-right">
+                        {m.yearAgo !== undefined ? <Trend delta={m.last - m.yearAgo} /> : <span className="text-muted-foreground">—</span>}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
-            Change is week-over-week count difference. We'd mirror your exact metric layout and named
-            ranges once you share the source file.
+            Change is the week-over-week count difference{hasYoY ? '; YoY compares against the same period last year' : ''}. We'd
+            mirror your exact metric layout and named ranges once you share the source file.
           </p>
         </Panel>
       </div>

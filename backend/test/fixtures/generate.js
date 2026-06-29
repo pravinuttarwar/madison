@@ -17,10 +17,17 @@ const RANGE_NAMES = {
   recoveryNew: 'RecoveryNew', recoveryAll: 'RecoveryAll', pod: 'Pod', acu: 'Acu', procedures: 'Procedures',
 };
 
+// MAD-29: prior-year named ranges (same metrics, last year) → drives the YoY comparison.
+const PREV_YEAR_RANGE_NAMES = Object.fromEntries(
+  Object.entries(RANGE_NAMES).map(([k, name]) => [k, `${name}PrevYear`]),
+);
+
 // Env the spawned server needs for the live path to read these fixtures.
 export const FIXTURE_ENV = {
   MS_USER,
   SPREADSHEET_NAMED_RANGES: JSON.stringify(RANGE_NAMES),
+  // MAD-29: prior-year ranges → /api/reports adds an additive yearAgo per metric.
+  SPREADSHEET_PREV_YEAR_RANGES: JSON.stringify(PREV_YEAR_RANGE_NAMES),
   // workbookNamedRange() requires a configured path before it reads (the fixtures seam
   // ignores the value). Synthetic — never a real drive path.
   SPREADSHEET_DRIVE_PATH: '/synthetic/Madison Weekly Report.xlsx',
@@ -158,6 +165,12 @@ export function writeFixtures(dir, now = new Date()) {
   };
   for (const [name, [last, prior]] of Object.entries(RANGE_VALUES)) {
     w(names, `${name}.json`)({ values: [[last, prior]] });
+  }
+
+  // MAD-29: prior-year value per metric (a single cell) → drives the additive yearAgo.
+  // Synthetic: ~90% of last-week as the year-ago figure, so YoY deltas are non-trivial.
+  for (const [name, [last]] of Object.entries(RANGE_VALUES)) {
+    w(names, `${name}PrevYear.json`)({ values: [[Math.round(last * 0.9)]] });
   }
 
   // ── Graph: workbook connection (MAD-26) — drive item a share-URL / drive path resolves to,

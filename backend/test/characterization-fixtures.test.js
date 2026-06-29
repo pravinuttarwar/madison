@@ -246,6 +246,39 @@ test('GET /api/reports — 12 weekly metrics + encounters by specialty', async (
   assert.ok(body.totalEncounters.last > 0);
 });
 
+// [AC-1] MAD-29: with prior-year ranges configured (FIXTURE_ENV), each metric carries an
+// additive yearAgo and totalEncounters.yearAgo is their sum — through the live route.
+test('[AC-1] GET /api/reports — additive year-ago (YoY) values from prior-year named ranges', async () => {
+  const { status, body } = await getJson('/api/reports');
+  assert.equal(status, 200);
+  for (const m of body.metrics) {
+    assert.equal(typeof m.yearAgo, 'number', `metric ${m.key} has a numeric yearAgo`);
+    // existing WoW contract preserved
+    assert.equal(typeof m.last, 'number');
+    assert.equal(typeof m.prior, 'number');
+  }
+  assert.equal(typeof body.totalEncounters.yearAgo, 'number');
+  assert.equal(body.totalEncounters.yearAgo, body.metrics.reduce((s, m) => s + m.yearAgo, 0));
+  // encounters-by-specialty rows carry it too [AC-4]
+  for (const row of body.encountersBySpecialty) assert.equal(typeof row.yearAgo, 'number');
+});
+
+// [AC-5] MAD-29: the report is aggregate-only — every metric value is a number and the
+// payload carries no individual identifiers (no email addresses, no MRN/SSN-style ids).
+// (Metric LABELS like "newPatients" are aggregate names, not identifiers — not banned.)
+test('[AC-5] GET /api/reports — aggregate-only, no individual identifiers', async () => {
+  const { status, body } = await getJson('/api/reports');
+  assert.equal(status, 200);
+  for (const m of body.metrics) {
+    for (const k of ['last', 'prior', 'yearAgo']) {
+      if (k in m) assert.equal(typeof m[k], 'number', `${m.key}.${k} is a number`);
+    }
+  }
+  const blob = JSON.stringify(body);
+  assert.ok(!/[\w.+-]+@[\w-]+\.[\w.-]+/.test(blob), 'no email addresses in the report payload');
+  assert.ok(!/\b\d{3}-\d{2}-\d{4}\b/.test(blob), 'no SSN/MRN-style identifiers in the report payload');
+});
+
 test('GET /api/dashboard — default weekday aggregate', async () => {
   const { status, body } = await getJson('/api/dashboard');
   assert.equal(status, 200);

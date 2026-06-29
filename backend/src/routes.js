@@ -181,10 +181,16 @@ router.get('/reports', route('spreadsheet',
     for (const [key, rangeName] of Object.entries(map)) {
       values[key] = await graph.workbookNamedRange(rangeName);
     }
+    // MAD-29: prior-year ranges, when configured → additive yearAgo (YoY). Omitted otherwise.
+    const prevMap = config.graph.prevYearRanges; // { metricKey: rangeName }
+    const prevValues = {};
+    for (const [key, rangeName] of Object.entries(prevMap)) {
+      prevValues[key] = await graph.workbookNamedRange(rangeName);
+    }
     // Audit the workbook READ once per request — item reference + outcome, never cell values.
     const ref = workbookRef();
     workbookEvent('read', { sessionId: currentSession()?.id || 'none', ref: ref?.itemId || 'env', outcome: 'ok' });
-    return T.reportsFromRanges(values, labels);
+    return T.reportsFromRanges(values, labels, prevValues);
   },
 ));
 

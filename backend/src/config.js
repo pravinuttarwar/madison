@@ -46,6 +46,9 @@ export const config = {
     awaitingLookbackDays: Number(env.AWAITING_LOOKBACK_DAYS) || 14,
     spreadsheetPath: env.SPREADSHEET_DRIVE_PATH || '',
     namedRanges: safeJson(env.SPREADSHEET_NAMED_RANGES) || {},
+    // MAD-29: prior-year named ranges { metricKey: rangeName } for the YoY comparison.
+    // When empty, /api/reports stays week-over-week only (no additive yearAgo) — back-compat.
+    prevYearRanges: safeJson(env.SPREADSHEET_PREV_YEAR_RANGES) || {},
     // Customer's designated sender/domain → category lists (MAD-17). Keys are a full
     // sender address or a bare domain; values are management|operational|action-needed.
     // Populated per-deployment via .env so the lists land without a code change; a
