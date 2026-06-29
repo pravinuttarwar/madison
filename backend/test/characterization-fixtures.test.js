@@ -172,6 +172,19 @@ test('GET /api/financials — weekly + daily snapshot through transforms', async
   assert.ok(body.daily.depositYesterday.total > 0);
 });
 
+// [AC-1] Revenue is an ADDITIVE field: accrual Total Income parsed from the QBO
+// ProfitAndLoss report, over the week/MTD windows. The existing weekly/daily contract
+// (asserted above) is unchanged.
+test('[AC-1] GET /api/financials — additive revenue from ProfitAndLoss (accrual Total Income)', async () => {
+  const { status, body } = await getJson('/api/financials');
+  assert.equal(status, 200);
+  assert.ok(body.weekly && body.daily, 'existing weekly/daily contract is preserved');
+  assert.ok(body.revenue, 'revenue field is present');
+  assert.equal(body.revenue.weekly.last, 288400);
+  assert.equal(body.revenue.weekly.prior, 288400);
+  assert.equal(body.revenue.mtd, 288400);
+});
+
 test('GET /api/reports — 12 weekly metrics + encounters by specialty', async () => {
   const { status, body } = await getJson('/api/reports');
   assert.equal(status, 200);

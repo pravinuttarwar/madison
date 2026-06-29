@@ -114,16 +114,42 @@ router.get('/calendar', route('outlook',
 router.get('/tasks', route('microsoftToDo', async () => T.tasksFromGraph(await cached(sk('tasks'), TTL, () => graph.listTodoTasks()))));
 
 // ── financials ─────────────────────────────────────────────────────────────��─
+// Accrual-basis revenue (MAD-23) from the QBO ProfitAndLoss report, over the same
+// week/MTD windows as the deposit tiles. Wrapped so a P&L failure degrades to zeroed
+// revenue rather than 500-ing the whole snapshot — and the catch logs nothing (no
+// financial values / report payloads on any path). ADDITIVE: deposits/variable-spend
+// /net-contribution are unchanged.
+async function revenueFromQbo(now) {
+  try {
+    const p = T.financePeriods(now);
+    const pnl = (range) => qbo.report('ProfitAndLoss', {
+      start_date: range.start,
+      end_date: range.end,
+      accounting_method: 'Accrual',
+    });
+    const [last, prior, mtd] = await Promise.all([pnl(p.lastWeek), pnl(p.priorWeek), pnl(p.mtd)]);
+    return {
+      weekly: { last: T.incomeFromProfitAndLoss(last), prior: T.incomeFromProfitAndLoss(prior) },
+      mtd: T.incomeFromProfitAndLoss(mtd),
+    };
+  } catch {
+    return { weekly: { last: 0, prior: 0 }, mtd: 0 };
+  }
+}
+
 router.get('/financials', route('quickbooks',
   async () => {
     const now = new Date();
     const iso = (d) => d.toISOString().slice(0, 10);
     const from60 = new Date(now.getTime() - 60 * 86_400_000);
-    const [dep, pur] = await Promise.all([
+    const [dep, pur, revenue] = await Promise.all([
       cached(sk('qbo-dep'), TTL, () => qbo.deposits(iso(from60), iso(now))),
       cached(sk('qbo-pur'), TTL, () => qbo.purchases(iso(from60), iso(now))),
+      cached(sk('qbo-rev'), TTL, () => revenueFromQbo(now)),
     ]);
-    return T.financialsFromQbo(dep, pur, config.qbo.fixedAccountIds, now);
+    const fin = T.financialsFromQbo(dep, pur, config.qbo.fixedAccountIds, now);
+    fin.revenue = revenue;
+    return fin;
   },
 ));
 
