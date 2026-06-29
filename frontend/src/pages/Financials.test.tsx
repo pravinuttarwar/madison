@@ -43,6 +43,13 @@ describe('Financials — accrual revenue tile (MAD-23)', () => {
     renderFinancials('weekday');
     expect(await screen.findByText('Revenue (month-to-date)')).toBeTruthy();
   });
+
+  // Pins the tile actually displays the accrual figure (not just its label) — guards the
+  // DTO→tile wiring against the parser-shape hardening. revenue.mtd 542900 → "542.9K USD".
+  it('[AC-3] displays the accrual revenue value, not just the label', async () => {
+    renderFinancials('weekday');
+    expect(await screen.findByText('542.9K USD')).toBeTruthy();
+  });
 });
 
 // MBI-35/38 (AC3): with the sample fallback gone and QuickBooks a real (sandbox) source,
