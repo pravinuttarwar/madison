@@ -311,6 +311,53 @@ export function financialsFromQbo(deposits, purchases, fixedAccountIds, now = ne
   return { weekly, daily };
 }
 
+// ── revenue (QuickBooks ProfitAndLoss) ────────────────────────────────────────
+// MAD-23: accrual-basis revenue = the "Total Income" summary line of the QBO
+// ProfitAndLoss report. Walk the report rows and return the Total Income figure
+// (the last column of the Income section's Summary). Defensive: any missing/empty/
+// malformed report yields 0 — never throws — so the financials snapshot degrades
+// safely rather than 500-ing the whole route.
+export function incomeFromProfitAndLoss(report) {
+  let income = 0;
+  const visit = (rows) => {
+    if (!Array.isArray(rows)) return;
+    for (const row of rows) {
+      const cd = row?.Summary?.ColData;
+      if (Array.isArray(cd) && cd.length && /^total income$/i.test(String(cd[0]?.value || '').trim())) {
+        const amt = Number(cd[cd.length - 1]?.value);
+        if (Number.isFinite(amt)) income = amt;
+      }
+      visit(row?.Rows?.Row);
+    }
+  };
+  visit(report?.Rows?.Row);
+  return income;
+}
+
+// The date ranges for the revenue tiles, mirroring how deposits/variable-spend are
+// presented: last full week vs the prior week (Mon–Sun, for the WoW delta) and
+// month-to-date. Computed in the process (practice) zone — TZ=America/New_York — the
+// same convention as parseLocalDate/localYmd above, so boundaries are ET-correct.
+export function financePeriods(now = new Date()) {
+  const today = new Date(now); today.setHours(0, 0, 0, 0);
+  const dow = today.getDay();                  // 0=Sun … 6=Sat
+  const sinceMonday = dow === 0 ? 6 : dow - 1; // days back to this week's Monday
+  const shift = (base, days) => { const d = new Date(base); d.setDate(base.getDate() + days); return d; };
+
+  const thisMonday = shift(today, -sinceMonday);
+  const lastMonday = shift(thisMonday, -7);
+  const lastSunday = shift(thisMonday, -1);
+  const priorMonday = shift(lastMonday, -7);
+  const priorSunday = shift(lastMonday, -1);
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+
+  return {
+    lastWeek: { start: localYmd(lastMonday), end: localYmd(lastSunday) },
+    priorWeek: { start: localYmd(priorMonday), end: localYmd(priorSunday) },
+    mtd: { start: localYmd(monthStart), end: localYmd(today) },
+  };
+}
+
 // ── weekly report (Excel named ranges) ────────────────────────────────────────
 // rangeValues: { metricKey: [[last, prior]] } — adjust to the customer's sheet layout.
 export function reportsFromRanges(rangeValues, labels) {

@@ -29,6 +29,22 @@ describe('Financials — reflects the global view mode', () => {
   });
 });
 
+// [AC-3] MAD-23: an accrual-basis Revenue tile renders in both view-modes, labelled so
+// the owner sees it differs from the cash-deposits figure (color-blind-safe — text label
+// + icon, never colour alone).
+describe('Financials — accrual revenue tile (MAD-23)', () => {
+  it('[AC-3] renders the last-week Revenue tile in Monday mode with the accrual note', async () => {
+    renderFinancials('monday');
+    expect(await screen.findByText('Revenue (last week)')).toBeTruthy();
+    expect(screen.getAllByText('Accrual basis · differs from deposits').length).toBeGreaterThan(0);
+  });
+
+  it('[AC-3] renders the month-to-date Revenue tile in weekday mode', async () => {
+    renderFinancials('weekday');
+    expect(await screen.findByText('Revenue (month-to-date)')).toBeTruthy();
+  });
+});
+
 // MBI-35/38 (AC3): with the sample fallback gone and QuickBooks a real (sandbox) source,
 // an unreachable backend surfaces the not-connected/Connect state — never sample numbers.
 describe('Financials — graceful when the backend is unreachable (live-only)', () => {

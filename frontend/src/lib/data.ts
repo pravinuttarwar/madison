@@ -41,6 +41,13 @@ export type WeeklyFinancial = {
   topCategory: { name: string; amount: number };
 };
 
+// Accrual-basis revenue (QuickBooks ProfitAndLoss Total Income), MAD-23. Additive to
+// the financials snapshot — last full week vs the prior week (WoW) and month-to-date.
+export type RevenueFinancial = {
+  weekly: { last: number; prior: number };
+  mtd: number;
+};
+
 export type DailyFinancial = {
   depositYesterday: {
     breakdown: { label: string; amount: number }[];

@@ -689,6 +689,8 @@ export const dashboardWeekday: DashboardData = { ...dashboardMonday, view: 'week
 export const financialsFixture: FinancialsData = {
   weekly: dashboardMonday.financialWeek!,
   daily: dashboardMonday.financialDay!,
+  // Accrual revenue (MAD-23) — reads higher than cash deposits by design. Sample only.
+  revenue: { weekly: { last: 288400, prior: 271500 }, mtd: 542900 },
 };
 
 // Signed-in profile (the live /api/me shape). Synthetic.

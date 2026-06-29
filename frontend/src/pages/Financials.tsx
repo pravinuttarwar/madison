@@ -1,4 +1,4 @@
-import { Wallet, TrendingUp, Landmark } from 'lucide-react';
+import { Wallet, TrendingUp, Landmark, Receipt } from 'lucide-react';
 import { useViewMode } from '@/context/view-mode';
 import { Panel, Trend, KpiTile } from '@/components/primitives';
 import { Loading } from '@/components/AsyncState';
@@ -59,7 +59,7 @@ export default function Financials() {
   // A financials error means QuickBooks needs (re)connecting → offer Connect.
   if (error || !data) return <ConnectQuickBooks />;
 
-  const { weekly: WEEKLY_FINANCIAL, daily: DAILY_FINANCIAL } = data;
+  const { weekly: WEEKLY_FINANCIAL, daily: DAILY_FINANCIAL, revenue: REVENUE } = data;
   const dep = WEEKLY_FINANCIAL.totalDeposits;
   const spend = WEEKLY_FINANCIAL.variableSpend;
   const net = WEEKLY_FINANCIAL.netContribution;
@@ -103,6 +103,13 @@ export default function Financials() {
               icon={TrendingUp}
               trend={<Trend delta={pctChange(net.last, net.prior)} unit="%" />}
             />
+            <KpiTile
+              label="Revenue (last week)"
+              value={usd(REVENUE.weekly.last)}
+              sub="Accrual basis · differs from deposits"
+              icon={Receipt}
+              trend={<Trend delta={pctChange(REVENUE.weekly.last, REVENUE.weekly.prior)} unit="%" />}
+            />
           </>
         ) : (
           <>
@@ -121,6 +128,12 @@ export default function Financials() {
               trend={<Trend delta={pctChange(vspend.yesterday.last, vspend.yesterday.prior)} unit="%" goodWhenUp={false} />}
             />
             <KpiTile label="Spend month-to-date" value={usd(vspend.mtd)} sub={`Week-to-date ${usd(vspend.wtd)}`} icon={TrendingUp} />
+            <KpiTile
+              label="Revenue (month-to-date)"
+              value={usd(REVENUE.mtd)}
+              sub="Accrual basis · differs from deposits"
+              icon={Receipt}
+            />
           </>
         )}
       </div>

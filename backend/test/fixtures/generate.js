@@ -107,6 +107,27 @@ export function writeFixtures(dir, now = new Date()) {
   const pur = (deltaDays, amt, acct) => ({ TxnDate: ymd(at(deltaDays)), TotalAmt: amt, AccountRef: { value: acct } });
   w(q, 'purchases.json')({ Purchase: [pur(-1, 14210, '5'), pur(-5, 8000, '5'), pur(-40, 3000, '5')] });
 
+  // ── QuickBooks: ProfitAndLoss report (accrual revenue — MAD-23) ──
+  // The Income section's Summary carries "Total Income" in the last column. The revenue
+  // route reads the same fixture for each window (last week / prior week / MTD).
+  w(q, 'profitandloss.json')({
+    Header: { ReportName: 'ProfitAndLoss', ReportBasis: 'Accrual' },
+    Rows: {
+      Row: [
+        {
+          group: 'Income',
+          type: 'Section',
+          Rows: { Row: [
+            { type: 'Data', ColData: [{ value: 'Patient Services' }, { value: '264500.00' }] },
+            { type: 'Data', ColData: [{ value: 'Ancillary' }, { value: '23900.00' }] },
+          ] },
+          Summary: { ColData: [{ value: 'Total Income' }, { value: '288400.00' }] },
+        },
+        { group: 'COGS', type: 'Section', Summary: { ColData: [{ value: 'Total Cost of Goods Sold' }, { value: '40000.00' }] } },
+      ],
+    },
+  });
+
   // ── Graph: workbook named ranges → [[last, prior]] (drives 12 weekly metrics) ──
   const RANGE_VALUES = {
     NewPatients: [22, 18], MedicalSeen: [284, 271], N1: [187, 192], ChiroSeen: [612, 598],

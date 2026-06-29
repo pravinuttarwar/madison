@@ -36,6 +36,11 @@ export async function query(sql) {
 
 // A named report (e.g. ProfitAndLoss) over a date range.
 export async function report(name, params = {}) {
+  // TEST-ONLY (MBI-34 / MAD-23): resolve from synthetic fixtures (the raw report JSON).
+  if (config.fixturesMode) {
+    if (/ProfitAndLoss/i.test(name)) return loadFixture('qbo', 'profitandloss.json');
+    return {};
+  }
   const token = await qboToken();
   const qs = new URLSearchParams({ ...params, minorversion: '73' }).toString();
   const url = `${base()}/v3/company/${realm()}/reports/${name}?${qs}`;

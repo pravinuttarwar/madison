@@ -1,0 +1,38 @@
+{
+  "issueKey": "MAD-23",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "kind": "contract",
+      "text": "Revenue from QBO ProfitAndLoss (accrual): backend calls qbo.report(ProfitAndLoss, accounting_method=Accrual), parses the Total Income row, and adds it as a new ADDITIVE revenue field on the financials DTO; existing weekly/daily fields unchanged (no removed/renamed fields, no contract break)."
+    },
+    {
+      "id": "AC-2",
+      "kind": "contract",
+      "text": "Periods mirror existing tiles: revenue.weekly = {last, prior} (last full week vs prior week for WoW delta) and revenue.mtd (month-to-date), matching how deposits/variable-spend are presented across Monday (recap) and Weekday (today/MTD) views."
+    },
+    {
+      "id": "AC-3",
+      "text": "Financials page renders a Revenue tile in both view-modes (Monday: last-week revenue + WoW trend; Weekday: revenue MTD), color-blind-safe (label/icon not color alone), with a sub-note that revenue is accrual-basis and differs from cash deposits."
+    },
+    {
+      "id": "AC-4",
+      "text": "Not-connected / upstream-error behavior: QBO not connected -> /api/financials returns 503 source_not_connected (no sample fallback), page shows Connect-QuickBooks state; ProfitAndLoss call failing or returning unparseable/empty report degrades safely (revenue absent/zeroed) without 500-ing the whole financials payload."
+    },
+    {
+      "id": "AC-5",
+      "kind": "timezone",
+      "text": "Timezone-correct period windows: week start, month start, and last-week boundaries derived in the practice timezone (America/New_York) deterministically, pinned by a unit test not the host clock."
+    },
+    {
+      "id": "AC-6",
+      "kind": "audit",
+      "text": "Audit trail (HIPAA): reading /api/financials (incl. new revenue path) or being denied (not connected -> 503) records an audit entry (who/session, path, when, outcome/status) with NO financial values in the log."
+    },
+    {
+      "id": "AC-7",
+      "kind": "app-logging",
+      "text": "Finance-safe logging: an error on the financials/ProfitAndLoss path logs route/ids/references only, never QBO report payloads, account names, or dollar amounts."
+    }
+  ]
+}
