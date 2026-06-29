@@ -79,6 +79,15 @@ Legend: ✅ done · 🟡 prototype/partial (UI real, live data pending) · ⛔ o
 - **[MBI-41](https://connecthealth.atlassian.net/browse/MBI-41) — Removed the Display & Accessibility control.** The
   header `DisplayMenu` (+ its `Seg` helper and the orphaned divider) is gone; the **Color-Vision-Friendly palette stays
   the default**, applied at boot in `main.tsx` via `theme.ts` (no in-app toggle). `theme.ts` left intact.
+- **[MAD-14](https://connecthealth.atlassian.net/browse/MAD-14) — Production environment + secrets vault + TLS** (Phase-1
+  productionization, epic [MAD-1](https://connecthealth.atlassian.net/browse/MAD-1), MAD Sprint 1). Code-side hardening:
+  `security.js` adds **proxy-aware TLS enforcement** (`FORCE_HTTPS=1` → trust-proxy, http→https 308, HSTS; off by default
+  so local dev is untouched) + secure-cookie gating; `config.js` adds a single **`getSecret()` accessor** (the one seam a
+  vault replaces later — app creds stay in `.env` for now); `audit.js` extracts the request logger and **strips the query
+  string** so an OAuth callback's `code`/tokens never land in logs. AC-1..AC-5 pinned by `security/audit/secrets` tests.
+  **Deferred to an ops/infra ticket ([MAD-33](https://connecthealth.atlassian.net/browse/MAD-33)):** production provisioning,
+  live vault wiring, BAA determination (the original Blocker). PR [#20](https://github.com/pravinuttarwar/madison/pull/20)
+  merged; ticket sits in **Testing (owner QA)** — moves to Done after the owner's manual verification.
 
 ### 🟡 Remaining (open in Jira)
 
