@@ -19,7 +19,7 @@ holds the active feature stories. This doc summarizes; the tickets are authorita
 | Calendar: today + week ahead | Calendar (`/calendar`) | ✅ UI done on sample data |
 | Tasks grouped by owner, due/overdue | Tasks (`/tasks`) | ✅ UI done on sample data |
 | Clean QuickBooks snapshot (deposits, variable spend, net contribution, **revenue**, **outstanding A/R**, **cash flow**) | Financials (`/financials`) | 🟡 UI done incl. accrual revenue tile (MAD-23) + outstanding-invoice / A/R aging (MAD-24) + cash-flow overview (MAD-25); live QBO via OAuth (MAD-15); fixed-cost exclusion is config-only |
-| Weekly provider spreadsheet snapshot + WoW deltas | Reports (`/reports`) | 🟡 UI done with the 12 metrics; **workbook connection wired (MAD-26)** — paste/validate/persist a OneDrive/SharePoint link, `/api/reports` reads from it (env fallback); named-range → metric mapping for the practice's real sheets still parked (MBI-22) |
+| Weekly provider spreadsheet snapshot + WoW/YoY deltas | Reports (`/reports`) | 🟡 UI done with the 12 metrics; **workbook connection wired (MAD-26)** — paste/validate/persist a OneDrive/SharePoint link, `/api/reports` reads from it (env fallback); **year-over-year wired (MAD-29)** via additive prior-year ranges; MoM (MAD-28) + named-range → metric mapping for the practice's real sheets still parked (MBI-22) |
 | Color-blind-accessible UI (never color alone) | accessibility primitives + Display menu | ✅ Done — exact dark palette + Color-Vision-Friendly default (MBI-21) |
 | Timezone-correct dates (practice zone, America/New_York) | dashboard view default + date transforms | ✅ Done (MBI-26/27/28) |
 | Mirror the owner's design; drop CureMD, Plaid, AI panel, Projects, Connections, Teams | app shell + composition | ✅ Done |
@@ -150,6 +150,18 @@ Legend: ✅ done · 🟡 prototype/partial (UI real, live data pending) · ⛔ o
   `workbook`/`graph-workbook`/`audit`/`workbook-connection`/`Connections.test.tsx`. PR
   [#34](https://github.com/pravinuttarwar/madison/pull/34) merged; **Testing (owner QA)**. (Named-range → metric
   mapping for the practice's real sheets remains parked under MBI-22, pending the customer's sheet formats.)
+- **[MAD-29](https://connecthealth.atlassian.net/browse/MAD-29) — Year-over-year reporting comparison**
+  (Phase-1 productionization, epic [MAD-1](https://connecthealth.atlassian.net/browse/MAD-1), MAD Sprint 2; SOW
+  Module 4 scope-gap). Adds an **additive** same-period-last-year (`yearAgo`) value to the weekly report, sourced from
+  **prior-year named ranges** on the connected workbook (`<Metric>PrevYear`). When present, each metric + the total +
+  each specialty row gain a year-ago figure and the Reports page shows a **YoY** column/indicators (color-blind-safe
+  `Trend`); when absent the report stays week-over-week **byte-for-byte as before** (back-compat). Net-new:
+  `reportsFromRanges` prior-year support, `config.prevYearRanges` (`SPREADSHEET_PREV_YEAR_RANGES`), `/api/reports`
+  prior-year reads, optional `yearAgo` on the DTO. **Additive — `/api/reports` shape unchanged without prior-year
+  ranges; no DB; not ePHI (aggregate counts).** AC-1..AC-5 pinned by `transforms`/`characterization-fixtures`/
+  `Reports.test.tsx`. PR [#36](https://github.com/pravinuttarwar/madison/pull/36) merged; **Testing (owner QA)**.
+  Go-live data dependency: customer populates the prior-year ranges. The multi-year source-picker + Recharts chart
+  stay parked under MBI-22 (salvage branch `origin/feature/reports-spreadsheet` is the reference).
 
 ### 🟡 Remaining (open in Jira)
 
