@@ -6,7 +6,38 @@ process.env.TZ = 'America/New_York';
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { financialsFromQbo, outstandingInvoicesFromQbo, cashFlowFromQbo, calendarFromGraph, tasksFromGraph, emailsFromGraph } from '../src/transforms.js';
+import { financialsFromQbo, outstandingInvoicesFromQbo, cashFlowFromQbo, calendarFromGraph, tasksFromGraph, emailsFromGraph, reportsFromRanges } from '../src/transforms.js';
+
+// ── MAD-29: year-over-year reporting comparison (thin additive on named ranges) ──
+const RV = { newPatients: [[22, 18]], medicalSeen: [[284, 271]] }; // { key: [[last, prior]] }
+
+test('[AC-1] reportsFromRanges adds yearAgo per metric + a summed total when prior-year ranges are present', () => {
+  const prevYear = { newPatients: [[15]], medicalSeen: [[250]] }; // { key: [[yearAgo]] }
+  const r = reportsFromRanges(RV, {}, prevYear);
+  const byKey = Object.fromEntries(r.metrics.map((m) => [m.key, m]));
+  assert.equal(byKey.newPatients.yearAgo, 15);
+  assert.equal(byKey.medicalSeen.yearAgo, 250);
+  // existing WoW fields untouched
+  assert.equal(byKey.newPatients.last, 22);
+  assert.equal(byKey.newPatients.prior, 18);
+  // total year-ago is the sum
+  assert.equal(r.totalEncounters.yearAgo, 265);
+});
+
+test('[AC-3] reportsFromRanges omits yearAgo entirely when no prior-year ranges (back-compat)', () => {
+  const r = reportsFromRanges(RV, {}); // no third arg
+  for (const m of r.metrics) assert.ok(!('yearAgo' in m), 'no yearAgo on metric');
+  assert.ok(!('yearAgo' in r.totalEncounters), 'no yearAgo on total');
+  // unchanged WoW shape
+  assert.equal(r.totalEncounters.last, 22 + 284);
+});
+
+test('[AC-4] encountersBySpecialty rows carry yearAgo when prior-year is present', () => {
+  const prevYear = { newPatients: [[15]], medicalSeen: [[250]] };
+  const r = reportsFromRanges(RV, {}, prevYear);
+  for (const row of r.encountersBySpecialty) assert.equal(typeof row.yearAgo, 'number');
+  assert.equal(r.encountersBySpecialty[0].yearAgo, 15);
+});
 
 // ── MAD-25: cash-flow overview (derived inflow/outflow/net) ───────────────────
 // now = 2026-06-25 (Thu) ET → financePeriods: lastWeek 06-15..06-21, priorWeek

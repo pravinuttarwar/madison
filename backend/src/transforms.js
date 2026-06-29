@@ -452,17 +452,32 @@ export function financePeriods(now = new Date()) {
 
 // ── weekly report (Excel named ranges) ────────────────────────────────────────
 // rangeValues: { metricKey: [[last, prior]] } — adjust to the customer's sheet layout.
-export function reportsFromRanges(rangeValues, labels) {
+// prevYearValues (MAD-29, optional): { metricKey: [[yearAgo]] } — same-period-last-year
+// values from prior-year named ranges. When provided, each metric/specialty row gains an
+// additive `yearAgo` and totalEncounters gains a summed `yearAgo`. When omitted, the output
+// is byte-for-byte the week-over-week shape as before (no `yearAgo` keys) — back-compat.
+export function reportsFromRanges(rangeValues, labels, prevYearValues) {
+  const hasYoY = prevYearValues && Object.keys(prevYearValues).length > 0;
+  const yearAgoOf = (key) => {
+    const row = (prevYearValues[key] && prevYearValues[key][0]) || [];
+    return Number(row[0]) || 0;
+  };
   const metrics = Object.entries(rangeValues).map(([key, vals]) => {
     const row = (vals && vals[0]) || [];
-    return { key, label: labels[key] || key, last: Number(row[0]) || 0, prior: Number(row[1]) || 0 };
+    const m = { key, label: labels[key] || key, last: Number(row[0]) || 0, prior: Number(row[1]) || 0 };
+    if (hasYoY) m.yearAgo = yearAgoOf(key);
+    return m;
   });
-  const totalLast = sum(metrics, (m) => m.last);
-  const totalPrior = sum(metrics, (m) => m.prior);
+  const totalEncounters = { last: sum(metrics, (m) => m.last), prior: sum(metrics, (m) => m.prior) };
+  if (hasYoY) totalEncounters.yearAgo = sum(metrics, (m) => m.yearAgo || 0);
   return {
     weekNumber: 0,
     metrics,
-    encountersBySpecialty: metrics.slice(0, 6).map((m) => ({ label: m.label, last: m.last, prior: m.prior })),
-    totalEncounters: { last: totalLast, prior: totalPrior },
+    encountersBySpecialty: metrics.slice(0, 6).map((m) => {
+      const row = { label: m.label, last: m.last, prior: m.prior };
+      if (hasYoY) row.yearAgo = m.yearAgo;
+      return row;
+    }),
+    totalEncounters,
   };
 }

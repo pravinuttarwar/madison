@@ -1,0 +1,25 @@
+{
+  "issueKey": "MAD-29",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "Year-ago values in the report: when the connected workbook has prior-year named ranges, /api/reports includes a numeric yearAgo per metric and totalEncounters.yearAgo (their sum), alongside existing last/prior WoW fields"
+    },
+    {
+      "id": "AC-2",
+      "text": "YoY delta in the Reports page: each metric shows a year-over-year change (current vs year-ago, percent + direction) visually distinct from WoW, color-blind-safe (icon/text not color alone)"
+    },
+    {
+      "id": "AC-3",
+      "text": "Graceful absence / back-compat: a workbook with no prior-year ranges omits yearAgo (optional fields); the page renders WoW exactly as today with no YoY column and no error; no breaking change to the DTO"
+    },
+    {
+      "id": "AC-4",
+      "text": "Encounters-by-specialty YoY: each specialty row carries its year-ago comparison consistent with the metric table"
+    },
+    {
+      "id": "AC-5",
+      "text": "Aggregate-only, no PHI: response and logs carry only aggregate counts (no patient/customer identifiers); workbook read audits item reference + outcome only, never cell values (per MAD-26)"
+    }
+  ]
+}
