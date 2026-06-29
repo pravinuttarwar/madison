@@ -91,11 +91,11 @@ router.get('/settings', (_req, res) => {
 });
 
 // ── email ──────────────────────────────────────────────────────────────────��─
-router.get('/email', route('outlook', async () => T.emailsFromGraph(await cached(sk('msgs'), TTL, () => graph.listMessages(25)))));
+router.get('/email', route('outlook', async () => T.emailsFromGraph(await cached(sk('msgs'), TTL, () => graph.listMessages(25)), config.graph.categoryRules)));
 router.get('/email/awaiting', route('outlook', async () => cached(sk('await'), TTL, buildAwaiting)));
 router.get('/email/:id', route('outlook',
   async (req) => {
-    const all = T.emailsFromGraph(await cached(sk('msgs50'), TTL, () => graph.listMessages(50)));
+    const all = T.emailsFromGraph(await cached(sk('msgs50'), TTL, () => graph.listMessages(50)), config.graph.categoryRules);
     return all.find((e) => e.id === req.params.id) || {};
   },
 ));

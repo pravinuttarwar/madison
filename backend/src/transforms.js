@@ -96,7 +96,7 @@ export function classifyCategory(fromAddress, rules = CATEGORY_RULES) {
   return CATEGORY_DEFAULT;
 }
 
-export function emailsFromGraph(messages) {
+export function emailsFromGraph(messages, rules = CATEGORY_RULES) {
   return messages.map((m, i) => {
     const rawPreview = decodeHtmlBody(m.bodyPreview || '');
     const rawBody = decodeHtmlBody(m.body?.content || m.bodyPreview || '');
@@ -106,7 +106,7 @@ export function emailsFromGraph(messages) {
       id: m.id || `e${i}`,
       unread: m.isRead === false,
       important: m.importance === 'high' || Boolean(m.flag && m.flag.flagStatus === 'flagged'),
-      category: classifyCategory(m.from?.emailAddress?.address),
+      category: classifyCategory(m.from?.emailAddress?.address, rules),
       from: m.from?.emailAddress?.name || m.from?.emailAddress?.address || 'Unknown',
       subject: m.subject || '(no subject)',
       preview: cleanDescription(rawPreview),

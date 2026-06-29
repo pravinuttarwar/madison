@@ -112,7 +112,7 @@ test('GET /api/me — owner identity from the Graph profile fixture', async () =
   assert.equal(body.displayName, 'Dr. Romano');
 });
 
-test('GET /api/email — importance/unread flags + valid category through the live classifier', async () => {
+test('[AC-1][AC-2] GET /api/email — full list, importance/unread flags + valid category through the live classifier', async () => {
   const { status, body } = await getJson('/api/email');
   assert.equal(status, 200);
   assert.equal(body.length, 5);

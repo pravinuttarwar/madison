@@ -69,7 +69,7 @@ test('/health does not report a demoMode flag', async () => {
   assert.equal(body.demoMode, undefined);
 });
 
-test('Microsoft routes 401 (not a demo payload) when disconnected, even with DEMO_MODE=1', async () => {
+test('[AC-1] Microsoft routes 401 (not a demo payload) when disconnected, even with DEMO_MODE=1', async () => {
   const { status, body } = await getJson('/api/email');
   assert.equal(status, 401);
   assert.equal(body.error, 'not_authenticated');

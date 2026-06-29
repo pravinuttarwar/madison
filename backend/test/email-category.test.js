@@ -66,7 +66,7 @@ test('emailsFromGraph — every email carries a valid category; defaults to acti
 // change that. Runs on the LIVE path against synthetic upstream fixtures (FIXTURES_DIR,
 // MBI-36 — DEMO_MODE is gone): spawn a real server, capture its stdout, hit /api/email,
 // and assert the audit line is present AND no subject/sender/body string leaked.
-test('GET /api/email — audit-logged read with no PHI/content in logs (safe-logging)', async () => {
+test('[AC-5][AC-6] GET /api/email — audit-logged read with no PHI/content in logs (safe-logging)', async () => {
   const fixturesDir = mkdtempSync(path.join(tmpdir(), 'madison-emailcat-'));
   writeFixtures(fixturesDir, new Date());
   const port = await freePort();

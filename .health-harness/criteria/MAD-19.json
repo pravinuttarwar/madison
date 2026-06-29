@@ -1,0 +1,28 @@
+{
+  "issueKey": "MAD-19",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "GET /api/calendar returns 200 with { today, week }; events carry subject,start,end,location,attendees(response)"
+    },
+    {
+      "id": "AC-2",
+      "kind": "timezone",
+      "text": "Zoneless Graph times read as UTC, rendered in America/New_York; today grouping matches practice local day"
+    },
+    {
+      "id": "AC-3",
+      "text": "Not-connected/rejected Microsoft session -> 401 not_authenticated; UI returns to login, never blank 200"
+    },
+    {
+      "id": "AC-4",
+      "kind": "audit",
+      "text": "Calendar read records audit entry (method path -> status, ms); no bodies, no event subjects/attendees"
+    },
+    {
+      "id": "AC-5",
+      "kind": "app-logging",
+      "text": "Error on calendar path logs path/status references only; never subjects, attendee emails, or PHI"
+    }
+  ]
+}
