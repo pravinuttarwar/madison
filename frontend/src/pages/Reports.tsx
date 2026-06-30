@@ -26,30 +26,47 @@ function SharePointHint() {
 // Paste a OneDrive/SharePoint share-link or drive path; the backend validates read-only
 // reachability and persists only the location. On failure it shows the backend's plain-language
 // reason (what's wrong) — never the raw URL/token.
+// tz-safe: the current calendar year is only the DEFAULT for the year selector (a label the user
+// can change); a one-off ±1 near New Year's is harmless and self-correcting.
+const THIS_YEAR = new Date().getFullYear();
+const YEAR_OPTIONS = [0, 1, 2, 3, 4].map((n) => THIS_YEAR - n); // this year + 4 back
+
 function ReportsConnect({
   connectedName,
   readFailed,
   onConnected,
   onCancel,
   canCancel,
+  connectedYears = [],
 }: {
   connectedName: string | null;
   readFailed: boolean;
   onConnected: () => void;
   onCancel: () => void;
   canCancel: boolean;
+  connectedYears?: number[];
 }) {
   const [input, setInput] = useState('');
+  const [year, setYear] = useState(THIS_YEAR);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // MAD-52 [AC-2]: when the chosen year is already connected, the first Connect click arms an
+  // overwrite confirm instead of replacing silently; a second (Replace) click proceeds.
+  const [confirmingOverwrite, setConfirmingOverwrite] = useState(false);
+  const yearTaken = connectedYears.includes(year);
 
   async function submit() {
     const value = input.trim();
     if (!value || busy) return;
+    if (yearTaken && !confirmingOverwrite) {
+      setConfirmingOverwrite(true); // warn first — don't overwrite the existing year silently
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      await connectWorkbook(value);
+      await connectWorkbook(value, year);
+      setConfirmingOverwrite(false);
       onConnected();
     } catch (e) {
       // ApiError.message carries the backend's plain-language reason — never the raw URL/token.
@@ -98,12 +115,26 @@ function ReportsConnect({
             aria-label="Workbook share link or drive path"
             className="min-w-0 flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground shadow-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
           />
+          {/* MAD-52: which YEAR this workbook covers — connect two years to get the YoY comparison. */}
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            Year
+            <select
+              value={year}
+              onChange={(e) => { setYear(Number(e.target.value)); setConfirmingOverwrite(false); }}
+              aria-label="Year this workbook covers"
+              className="rounded-lg border border-border bg-card px-2 py-2 text-sm text-foreground shadow-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
+            >
+              {YEAR_OPTIONS.map((y) => (
+                <option key={y} value={y}>{y}{connectedYears.includes(y) ? ' • connected' : ''}</option>
+              ))}
+            </select>
+          </label>
           <button
             onClick={submit}
             disabled={busy || !input.trim()}
             className="inline-flex items-center gap-2 rounded-lg border border-transparent bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
           >
-            {busy ? 'Checking…' : connectedName ? 'Connect new workbook' : 'Connect'}
+            {busy ? 'Checking…' : confirmingOverwrite ? `Replace ${year} workbook` : connectedName ? 'Connect new workbook' : 'Connect'}
           </button>
           {canCancel && (
             <button
@@ -114,6 +145,17 @@ function ReportsConnect({
             </button>
           )}
         </div>
+
+        {/* MAD-52 [AC-2]: overwrite warning — the chosen year is already connected. */}
+        {confirmingOverwrite && (
+          <p className="mt-3 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-foreground">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+            <span>
+              A <span className="font-semibold">{year}</span> workbook is already connected. Connecting
+              this one will <span className="font-semibold">replace</span> it. Click "Replace {year} workbook" to continue, or pick another year.
+            </span>
+          </p>
+        )}
 
         {error && (
           <p className="mt-3 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-foreground">
@@ -162,6 +204,7 @@ export default function Reports() {
     return (
       <ReportsConnect
         connectedName={connectedName}
+        connectedYears={(conn && 'years' in conn && conn.years ? conn.years.map((y) => y.year) : [])}
         readFailed={!data && Boolean(connectedName)}
         canCancel={editing && Boolean(data)}
         onCancel={() => setEditing(false)}

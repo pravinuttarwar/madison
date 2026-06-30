@@ -105,14 +105,40 @@ test('[AC-1] POST /api/reports/connection — a share-URL resolves, validates an
 
 test('[AC-4] the connection persisted to disk holds refs only — no cell values', async () => {
   assert.ok(existsSync(workbookConfig), 'the connection file was written');
-  // MAD-27: persistence is now an ARRAY of role-tagged refs (multi-URL). The connected file
-  // is the 'current' role; it carries location refs only — never cell values.
+  // MAD-52: persistence is an ARRAY of year-keyed refs. A connect with no year selected
+  // persists year:null; it carries location refs only — never cell values.
   const arr = JSON.parse(readFileSync(workbookConfig, 'utf8'));
   assert.ok(Array.isArray(arr), 'the store is an array of refs');
-  const cur = arr.find((r) => r.role === 'current');
+  const cur = arr[0];
   assert.equal(cur.driveId, 'drive-1');
   assert.equal(cur.itemId, 'item-9');
   assert.ok(!('cellValues' in cur) && !('values' in cur), 'no cell values persisted');
+});
+
+// MAD-52 [AC-1][AC-6]: POST with a year persists it; GET reports connected years (latest first).
+test('[AC-1][AC-6] POST with a year persists it; GET /reports/connection lists connected years', async () => {
+  await postJson('/api/reports/connection', { input: '/Reports/2026.xlsx', year: 2026 });
+  await postJson('/api/reports/connection', { input: '/Reports/2025.xlsx', year: 2025 });
+  const { body } = await getJson('/api/reports/connection');
+  const years = (body.years || []).map((y) => y.year);
+  assert.deepEqual(years, [2026, 2025], 'connected years, latest first');
+});
+
+// MAD-52 [AC-2]: re-connecting the SAME year overwrites it (one entry per year), never the other.
+test('[AC-2] re-connecting the same year replaces only that year (no duplicate)', async () => {
+  await postJson('/api/reports/connection', { input: '/Reports/2026-v2.xlsx', year: 2026 });
+  const { body } = await getJson('/api/reports/connection');
+  const years = (body.years || []).map((y) => y.year);
+  assert.equal(years.filter((y) => y === 2026).length, 1, '2026 not duplicated');
+  assert.ok(years.includes(2025), '2025 untouched');
+});
+
+// MAD-52 [AC-3]: with two years connected, /api/reports carries the additive yearAgo (YoY).
+test('[AC-3] with current + prior year connected, /api/reports metrics carry yearAgo (YoY)', async () => {
+  const { status, body } = await getJson('/api/reports');
+  assert.equal(status, 200);
+  assert.ok(body.metrics.length > 0);
+  for (const m of body.metrics) assert.equal(typeof m.yearAgo, 'number', `${m.key} has a yearAgo`);
 });
 
 test('[AC-4] GET /api/reports/connection — now reports the connection (not the env fallback)', async () => {

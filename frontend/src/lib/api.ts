@@ -200,25 +200,29 @@ export function getReports(refresh = false): Promise<ReportsData> {
 // ── Weekly-report workbook connection (MAD-26) ───────────────────────────────
 // The source the providers' weekly spreadsheet is read from: a connected OneDrive/
 // SharePoint workbook, the SPREADSHEET_DRIVE_PATH env fallback, or nothing yet.
-export type WorkbookConnection =
-  | { connected: true; name: string; source: 'share-url' | 'drive-path' | 'env'; via: 'connection' | 'env' }
-  | { connected: false };
+// MAD-52: a connected workbook keyed by the year it covers (location + year only, no values).
+export type ConnectedYear = { year: number; name: string };
 
-export type WorkbookConnectResult = { connected: true; name: string; source: 'share-url' | 'drive-path' };
+export type WorkbookConnection =
+  | { connected: true; name: string; source: 'share-url' | 'drive-path' | 'env'; via: 'connection' | 'env'; years?: ConnectedYear[] }
+  | { connected: false; years?: ConnectedYear[] };
+
+export type WorkbookConnectResult = { connected: true; name: string; source: 'share-url' | 'drive-path'; year?: number | null };
 
 export function getWorkbookConnection(): Promise<WorkbookConnection> {
   return fetchJson<WorkbookConnection>('/api/reports/connection');
 }
 
-// Connect a workbook by pasting a share-URL or drive path. On a not-reachable / failed
-// connect the backend returns 422/502 with a plain-language `reason` — surfaced as the
-// thrown ApiError's message so the UI can show it without exposing the raw URL/token.
-export async function connectWorkbook(input: string): Promise<WorkbookConnectResult> {
+// Connect a workbook by pasting a share-URL or drive path. MAD-52: an optional `year` keys the
+// connection (the report uses the latest year as current, the next as the prior-year for YoY). On
+// a not-reachable / failed connect the backend returns 422/502 with a plain-language `reason` —
+// surfaced as the thrown ApiError's message so the UI never exposes the raw URL/token.
+export async function connectWorkbook(input: string, year?: number | null): Promise<WorkbookConnectResult> {
   const res = await fetch(`${config.apiUrl}/api/reports/connection`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ input }),
+    body: JSON.stringify(year != null ? { input, year } : { input }),
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { reason?: string };

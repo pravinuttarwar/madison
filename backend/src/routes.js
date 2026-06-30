@@ -6,7 +6,7 @@ import * as graph from './graph.js';
 import * as qbo from './qbo.js';
 import * as T from './transforms.js';
 import { computeAwaiting } from './awaiting.js';
-import { readWorkbook, workbookRefs, connectWorkbook, WorkbookError } from './workbook.js';
+import { readWorkbook, workbookRefs, resolveYearSources, connectWorkbook, WorkbookError } from './workbook.js';
 import { workbookEvent, workbookUnmappedEvent, tasksEvent } from './audit.js';
 import { graphToken } from './auth.js';
 import { scopesFromAccessToken, GRAPH_SCOPE } from './oauth-graph.js';
@@ -249,13 +249,12 @@ export function reportCacheTtl(refresh) { return refresh ? 0 : REPORT_TTL_MS; }
 router.get('/reports', route('spreadsheet',
   async (req) => cached(sk('reports'), reportCacheTtl(req?.query?.refresh === '1'), async () => {
     const sessionId = currentSession()?.id || 'none';
-    const refs = workbookRefs(); // [{ role, driveId, itemId, name }] — persisted connections
-    const currentRefs = refs.filter((r) => r.role === 'current');
-    const prevYearRefs = refs.filter((r) => r.role === 'prevYear');
-    // Per role: read the connected refs, else fall back to the configured env drive path.
-    const currentSources = currentRefs.length ? currentRefs : [null]; // null → current env path
-    const prevYearSources = prevYearRefs.length
-      ? prevYearRefs
+    // MAD-52: connections are keyed by YEAR — the latest connected year is the current source,
+    // the next-latest is the prior-year (YoY) source. Falls back to the env drive path(s).
+    const { current: currentSrc, prevYear: prevYearSrc } = resolveYearSources(workbookRefs());
+    const currentSources = currentSrc ? [currentSrc] : [null]; // null → current env path
+    const prevYearSources = prevYearSrc
+      ? [prevYearSrc]
       : (config.graph.prevYearSpreadsheetPath ? [{ envPath: config.graph.prevYearSpreadsheetPath }] : []);
 
     // Read ONE workbook source → { current, prior } metric count-maps. We read the metric tabs
@@ -360,21 +359,28 @@ const basename = (p) => String(p || '').split('/').filter(Boolean).pop() || '';
 
 router.get('/reports/connection', (_req, res) => {
   if (!graphConnected()) return res.status(401).json({ error: 'not_authenticated', source: 'spreadsheet' });
+  // MAD-52: report the connected workbooks keyed by YEAR (latest first) so the connect UI can
+  // show what's connected + warn before overwriting a year. Location refs only — no cell values.
+  const years = workbookRefs()
+    .filter((r) => r.year != null)
+    .map((r) => ({ year: Number(r.year), name: r.name }))
+    .sort((a, b) => b.year - a.year);
   const wb = readWorkbook();
-  if (wb) return res.json({ connected: true, name: wb.name, source: wb.source, via: 'connection' });
+  if (wb) return res.json({ connected: true, name: wb.name, source: wb.source, via: 'connection', years });
   if (config.graph.spreadsheetPath) {
-    return res.json({ connected: true, name: basename(config.graph.spreadsheetPath), source: 'env', via: 'env' });
+    return res.json({ connected: true, name: basename(config.graph.spreadsheetPath), source: 'env', via: 'env', years });
   }
-  return res.json({ connected: false });
+  return res.json({ connected: false, years });
 });
 
 router.post('/reports/connection', async (req, res) => {
   if (!graphConnected()) return res.status(401).json({ error: 'not_authenticated', source: 'spreadsheet' });
   const input = (req.body && req.body.input) || '';
   if (!String(input).trim()) return res.status(400).json({ error: 'missing_input' });
-  // MAD-27: an optional role lets the user connect more than one workbook — 'current' (default)
-  // or 'prevYear' (the prior-year file for YoY). An unknown role falls back to 'current'.
-  const role = req.body && req.body.role === 'prevYear' ? 'prevYear' : 'current';
+  // MAD-52: an optional `year` (the year the workbook covers) keys the connection — the report
+  // uses the latest year as current and the next as the prior-year (YoY). A non-numeric year → null.
+  const yearNum = Number(req.body && req.body.year);
+  const year = Number.isInteger(yearNum) && yearNum > 0 ? yearNum : null;
   try {
     const result = await connectWorkbook(input, {
       sessionId: currentSession()?.id || 'none',
@@ -382,7 +388,7 @@ router.post('/reports/connection', async (req, res) => {
       resolveDrivePath: graph.resolveDrivePath,
       workbookReachable: graph.workbookReachable,
       audit: (action, meta) => workbookEvent(action, meta),
-      role,
+      year,
     });
     return res.json(result);
   } catch (err) {
