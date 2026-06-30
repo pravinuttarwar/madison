@@ -20,7 +20,8 @@
     },
     {
       "id": "AC-5",
-      "text": "Month/Week toggle: user toggles Monthly (current month vs prior month summed) and Weekly (latest weekly block vs prior week); each views labels and numbers match the selected period; default Monthly"
+      "text": "Month/Week toggle: user toggles Monthly (current month vs prior month summed) and Weekly (latest weekly block vs prior week); each views labels and numbers match the selected period; default Monthly",
+      "defer": "split to follow-up MAD-51 — Month/Week toggle (weekly-block view) not built in this slice"
     },
     {
       "id": "AC-6",
