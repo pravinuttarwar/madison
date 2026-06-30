@@ -52,6 +52,35 @@ export async function graphToken() {
   return g.accessToken;
 }
 
+// ── Microsoft Graph: app-only (client-credentials) token — NOT per session ────
+// For the multi-owner "tasks by owner" board (MAD-37): the app reads each configured
+// team member's To Do with its OWN Application permissions (Tasks.Read.All), so there is
+// no per-visitor delegated token. Cached at module scope (the app identity is shared, not
+// per-visitor — no PHI, no session data). Requires MS_TENANT_ID (a specific tenant, never
+// 'common', for client-credentials). The app secret stays server-side (config.getSecret).
+let appTok = null;
+export async function appToken() {
+  if (appTok && Date.now() < appTok.expiresAt - 60_000) return appTok.accessToken;
+  const tenant = config.graph.tenantId;
+  if (!tenant) throw new Error('MS_TENANT_ID required for app-only token');
+  const body = new URLSearchParams({
+    client_id: config.graph.clientId,
+    client_secret: config.graph.clientSecret,
+    grant_type: 'client_credentials',
+    scope: 'https://graph.microsoft.com/.default',
+  });
+  const res = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  // Body is NOT included in the throw — a token-endpoint error can echo client detail.
+  if (!res.ok) throw new Error(`App token request failed (${res.status})`);
+  const json = await res.json();
+  appTok = { accessToken: json.access_token, expiresAt: Date.now() + json.expires_in * 1000 };
+  return appTok.accessToken;
+}
+
 // ── QuickBooks Online: refresh-token grant (per session) ──────────────────────
 export async function qboToken() {
   const s = currentSession();

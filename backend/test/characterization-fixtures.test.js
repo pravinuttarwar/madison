@@ -154,11 +154,16 @@ test('GET /api/calendar — today events + week-ahead grouping', async () => {
   assert.ok(Array.isArray(body.week) && body.week.length >= 1 && body.week.length <= 5);
 });
 
-test('GET /api/tasks — owner-grouped tasks with valid status buckets', async () => {
+// [AC-2][AC-7] Single-user fallback (no TASKS_TEAM_USERS configured in FIXTURE_ENV): the
+// route returns the additive `{ multiOwner:false, tasks:[...] }` wrapper — the only shape
+// change — carrying the signed-in person's own To Do, through the live route + transforms.
+test('[AC-2][AC-7] GET /api/tasks — single-user wrapper { multiOwner:false, tasks } with valid status buckets', async () => {
   const { status, body } = await getJson('/api/tasks');
   assert.equal(status, 200);
-  assert.equal(body.length, 5);
-  const statuses = new Set(body.map((t) => t.status));
+  assert.equal(body.multiOwner, false);
+  assert.ok(Array.isArray(body.tasks));
+  assert.equal(body.tasks.length, 5);
+  const statuses = new Set(body.tasks.map((t) => t.status));
   for (const s of statuses) assert.ok(['overdue', 'due-today', 'upcoming', 'done'].includes(s));
   // The four buckets are represented by the fixtures.
   for (const s of ['overdue', 'due-today', 'upcoming', 'done']) assert.ok(statuses.has(s), `missing ${s}`);

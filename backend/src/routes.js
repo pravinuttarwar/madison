@@ -7,7 +7,7 @@ import * as qbo from './qbo.js';
 import * as T from './transforms.js';
 import { computeAwaiting } from './awaiting.js';
 import { readWorkbook, workbookRef, connectWorkbook, WorkbookError } from './workbook.js';
-import { workbookEvent } from './audit.js';
+import { workbookEvent, tasksEvent } from './audit.js';
 
 export const router = Router();
 const TTL = 90_000; // 90s in-memory cache
@@ -113,7 +113,56 @@ router.get('/calendar', route('outlook',
 ));
 
 // ── tasks ──────────────────────────────────────────────────────────────────��─
-router.get('/tasks', route('microsoftToDo', async () => T.tasksFromGraph(await cached(sk('tasks'), TTL, () => graph.listTodoTasks()))));
+// Multi-owner "tasks by owner" when a team is configured (app-only, Tasks.Read.All);
+// otherwise the signed-in person's own To Do (delegated). The DTO carries `multiOwner` as
+// the discriminator: { multiOwner:false, tasks } | { multiOwner:true, owners }.
+const STATUS_ORDER = { overdue: 0, 'due-today': 1, upcoming: 2, done: 3 };
+const TASKS_TEAM_TTL = 5 * 60_000; // 5 min — team task lists don't change second-to-second
+
+// Build the team board: every configured owner fetched in PARALLEL (each owner's lists are
+// parallel too), grouped by REAL owner. An unreadable/unresolvable owner is skipped, not
+// fatal. Each owner read is audited (ok | denied) with only references + a count — never a
+// task title (PHI-adjacent). One owner's tasks never enter another's card.
+async function buildTeamTasks(upns, sessionId) {
+  const owners = (
+    await Promise.all(
+      upns.map(async (upn) => {
+        const u = await graph.resolveUser(upn);
+        if (!u) return null;
+        let tasks = [];
+        try {
+          tasks = T.tasksFromGraph(await graph.userTodoTasks(u.id), new Date(), u.upn);
+          tasksEvent('read', { sessionId, owner: u.id, count: tasks.length, outcome: 'ok' });
+        } catch {
+          tasksEvent('read', { sessionId, owner: u.id, outcome: 'denied' }); // skip unreadable
+        }
+        const open = tasks.filter((t) => t.status !== 'done');
+        return {
+          upn: u.upn,
+          name: u.name,
+          open: open.length,
+          overdue: tasks.filter((t) => t.status === 'overdue').length,
+          dueToday: tasks.filter((t) => t.status === 'due-today').length,
+          tasks: open.sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]).slice(0, 50),
+        };
+      }),
+    )
+  ).filter(Boolean);
+  owners.sort((a, b) => b.overdue - a.overdue || b.open - a.open);
+  return { multiOwner: true, owners };
+}
+
+router.get('/tasks', route('microsoftToDo', async (req) => {
+  const sessionId = currentSession()?.id || 'none';
+  const team = config.tasks.teamUpns;
+  // Team mode needs app creds (client-credentials); fixtures mode bypasses tokens entirely.
+  if (team.length && (config.hasGraphCreds || config.fixturesMode)) {
+    return cached(sk('tasks-team'), req.query.refresh === '1' ? 0 : TASKS_TEAM_TTL, () => buildTeamTasks(team, sessionId));
+  }
+  const tasks = T.tasksFromGraph(await cached(sk('tasks'), TTL, () => graph.listTodoTasks()));
+  tasksEvent('read', { sessionId, owner: 'self', count: tasks.length, outcome: 'ok' });
+  return { multiOwner: false, tasks };
+}));
 
 // ── financials ─────────────────────────────────────────────────────────────��─
 // Accrual-basis revenue (MAD-23) from the QBO ProfitAndLoss report, over the same

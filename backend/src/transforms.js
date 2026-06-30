@@ -221,8 +221,11 @@ export function calendarFromGraph(events) {
   return { today, week };
 }
 
-// ── tasks (Microsoft To Do — single user) ─────────────────────────────────────
-export function tasksFromGraph(todo, now = new Date()) {
+// ── tasks (Microsoft To Do) ───────────────────────────────────────────────────
+// `owner` stamps each task's attribution. Single-user/dashboard pass nothing (the legacy
+// 'DCR' placeholder — unused by the single-user view). The multi-owner board (MAD-37)
+// passes the REAL owner (upn) so tasks carry true attribution, never a hardcoded owner.
+export function tasksFromGraph(todo, now = new Date(), owner = 'DCR') {
   const todayYmd = localYmd(now);
   return todo.map((t, i) => {
     // To Do dues are all-day calendar dates (midnight in some zone). Take the date part
@@ -236,7 +239,7 @@ export function tasksFromGraph(todo, now = new Date()) {
     return {
       id: t.id || `t${i}`,
       title: t.title || '(untitled)',
-      owner: 'DCR', // To Do is per-user; multi-owner needs Planner + an owner map (see ARCHITECTURE.md)
+      owner, // single-user: legacy 'DCR' (unused); team board: the real owner upn (MAD-37)
       due: dueYmd ? parseLocalDate(dueYmd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No date',
       status,
     };

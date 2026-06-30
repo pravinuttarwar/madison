@@ -155,8 +155,22 @@ export function getCalendar(): Promise<CalendarData> {
   return fetchJson<CalendarData>('/api/calendar');
 }
 
-export function getTasks(): Promise<Task[]> {
-  return fetchJson<Task[]>('/api/tasks');
+// MAD-37: the Tasks DTO. `multiOwner` discriminates: the single-user view carries the
+// signed-in person's own To Do in `tasks`; the team "tasks by owner" board carries one
+// `OwnerTasks` per resolvable owner. Additive — the single-user shape is `tasks` as before,
+// now wrapped with `multiOwner:false`.
+export type OwnerTasks = {
+  upn: string;
+  name: string;
+  open: number;
+  overdue: number;
+  dueToday: number;
+  tasks: Task[];
+};
+export type TasksData = { multiOwner: boolean; owners?: OwnerTasks[]; tasks?: Task[] };
+
+export function getTasks(): Promise<TasksData> {
+  return fetchJson<TasksData>('/api/tasks');
 }
 
 export function getFinancials(): Promise<FinancialsData> {
