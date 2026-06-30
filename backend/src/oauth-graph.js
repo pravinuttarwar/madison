@@ -22,3 +22,20 @@ export function buildAuthorizeUrl({ clientId, tenant, redirectUri, scope = GRAPH
   url.searchParams.set('prompt', 'select_account');
   return url.toString();
 }
+
+// Read the GRANTED scopes from a Microsoft access token's claims, WITHOUT exposing the token.
+// `scp` = the space-delimited delegated scopes actually consented for this sign-in; `roles` =
+// application permissions (for an app-only token). Pure + tolerant: a malformed/missing token
+// returns empty arrays, never throws. Only the scope NAMES are surfaced (not secrets) — the
+// token itself is never returned or logged.
+export function scopesFromAccessToken(token) {
+  try {
+    const payload = String(token).split('.')[1];
+    const json = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    const delegated = typeof json.scp === 'string' ? json.scp.split(' ').filter(Boolean) : [];
+    const app = Array.isArray(json.roles) ? json.roles : [];
+    return { delegated, app };
+  } catch {
+    return { delegated: [], app: [] };
+  }
+}

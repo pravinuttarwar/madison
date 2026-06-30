@@ -1,0 +1,17 @@
+{
+  "issueKey": "MAD-42",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "GET /api/auth/scopes returns granted scope names (requested + delegated scp + app roles); the access token is never in the response or logs"
+    },
+    {
+      "id": "AC-2",
+      "text": "Token-safe decode: a malformed/missing token yields empty arrays and never throws; only scope names are surfaced, never the token"
+    },
+    {
+      "id": "AC-3",
+      "text": "Connections page shows the granted Microsoft scopes read-only and a muted note when Sites.Read.All is absent (SharePoint files need it; OneDrive works); no note when present"
+    }
+  ]
+}

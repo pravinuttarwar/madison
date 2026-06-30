@@ -65,3 +65,41 @@ describe('Connections — weekly workbook connection (MAD-26)', () => {
     expect(screen.queryByText(/contoso\.sharepoint\.com/)).toBeNull();
   });
 });
+
+// MAD-42 — granted-scopes readout + SharePoint access hint on the Connections page.
+describe('Connections — granted Microsoft scopes + SharePoint hint (MAD-42)', () => {
+  function stubScopes(delegated: string[]) {
+    vi.stubGlobal('fetch', (req: RequestInfo | URL) => {
+      const url = String(req);
+      const json =
+        url.includes('/api/auth/scopes')
+          ? { requested: ['Mail.Read', 'Files.Read'], delegated, app: [] }
+          : url.includes('/api/sources/status')
+            ? [
+                { id: 'outlook', label: 'Outlook', mode: 'sandbox' },
+                { id: 'microsoftToDo', label: 'Microsoft To Do', mode: 'sandbox' },
+                { id: 'quickbooks', label: 'QuickBooks', mode: 'sandbox' },
+                { id: 'spreadsheet', label: 'Weekly spreadsheet', mode: 'sandbox' },
+              ]
+            : { connected: false };
+      return Promise.resolve({ ok: true, status: 200, statusText: 'OK', json: async () => json });
+    });
+  }
+
+  it('[AC-3] shows the granted scopes readout and a Sites.Read.All hint when it is absent', async () => {
+    stubScopes(['Mail.Read', 'Calendars.Read', 'Tasks.Read', 'Files.Read']);
+    renderConnections();
+    // the granted-access readout renders (distinct from the static requested-scope list)
+    expect(await screen.findByText(/granted to this sign-in/i)).toBeTruthy();
+    // and a muted note that SharePoint files need Sites.Read.All (absent here)
+    await waitFor(() => expect(screen.getByText(/need .*Sites\.Read\.All/i)).toBeTruthy());
+  });
+
+  it('[AC-3] shows NO Sites.Read.All hint when the scope is already granted', async () => {
+    stubScopes(['Mail.Read', 'Files.Read', 'Sites.Read.All']);
+    renderConnections();
+    await screen.findByText(/granted to this sign-in/i);
+    // the warning copy ("need ... Sites.Read.All") must not be present
+    await waitFor(() => expect(screen.queryByText(/need .*Sites\.Read\.All/i)).toBeNull());
+  });
+});

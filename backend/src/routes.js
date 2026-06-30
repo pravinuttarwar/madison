@@ -8,6 +8,8 @@ import * as T from './transforms.js';
 import { computeAwaiting } from './awaiting.js';
 import { readWorkbook, workbookRefs, connectWorkbook, WorkbookError } from './workbook.js';
 import { workbookEvent, workbookUnmappedEvent, tasksEvent } from './audit.js';
+import { graphToken } from './auth.js';
+import { scopesFromAccessToken, GRAPH_SCOPE } from './oauth-graph.js';
 
 export const router = Router();
 const TTL = 90_000; // 90s in-memory cache
@@ -82,6 +84,22 @@ router.get('/me', route('outlook',
     if (name) return { displayName: name, mail: '' };
     try { return await graph.me(); } catch { /* User.Read not granted — that's OK */ }
     return { displayName: '', mail: '' };
+  },
+));
+
+// ── diagnostic: which Microsoft scopes this session was actually GRANTED ───────
+// Decodes the current access token's claims and returns the scope NAMES only — the token
+// itself never leaves the server. `requested` is what we ask Microsoft for; `delegated` is
+// what was actually consented (a subset if an admin trimmed it). Use it to confirm e.g.
+// whether Sites.Read.All is present before pointing at a SharePoint-hosted workbook.
+router.get('/auth/scopes', route('outlook',
+  async () => {
+    const granted = scopesFromAccessToken(await graphToken());
+    return {
+      requested: GRAPH_SCOPE.split(' ').filter(Boolean),
+      delegated: granted.delegated, // actually-granted delegated scopes (scp claim)
+      app: granted.app,             // application roles, if any (app-only token)
+    };
   },
 ));
 
