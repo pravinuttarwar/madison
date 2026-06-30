@@ -227,19 +227,28 @@ export function writeFixtures(dir, now = new Date()) {
 
   // MAD-46: Provider Totals tabs — providers as row labels (same layout). June=current, May=prior;
   // a trailing-space variant ("Bachman " / "Bachman") proves name normalization merges them.
+  // MAD-50: providers are the rows BETWEEN a block's DATE and its TOTAL. "Bachman " (block 1) and
+  // "Bachman" (block 2) both sit BEFORE their TOTALs → still merge (name normalization). A service
+  // tally ("allergy") sits AFTER block 1's TOTAL → it is NOT a provider; it's surfaced as a
+  // "found but not counted" warning, never miscounted.
   const provGrid = (c) => ({
     values: [
       ['', 'Mon', 'Tues', 'Totals'],
       ['DATE', 45663, 45664, ''],
       ['Lisa', c.lisa, 0, c.lisa],
-      ['Bachman ', c.bachman, 0, c.bachman], // trailing space
-      ['TOTAL', 0, 0, 0],
-      ['Bachman', 0, c.bachman2, c.bachman2], // merges with "Bachman "
+      ['Bachman ', c.bachman, 0, c.bachman], // trailing space → merges with "Bachman" below
       ['Mac', c.mac, 0, c.mac],
+      ['TOTAL', 0, 0, 0],
+      ['allergy', c.allergy, 0, c.allergy], // AFTER total → not a provider (warning)
+      ['', '', '', ''],
+      ['', 'Mon', 'Tues', 'Totals'], // block 2
+      ['DATE', 45670, 45671, ''],
+      ['Bachman', 0, c.bachman2, c.bachman2], // no space → merges with "Bachman " above
+      ['TOTAL', 0, 0, 0],
     ],
   });
-  w(usedrange, 'June Provier Totals .json')(provGrid({ lisa: 50, bachman: 30, bachman2: 4, mac: 20 }));
-  w(usedrange, 'May Provider Totals .json')(provGrid({ lisa: 45, bachman: 28, bachman2: 0, mac: 18 }));
+  w(usedrange, 'June Provier Totals .json')(provGrid({ lisa: 50, bachman: 30, bachman2: 4, mac: 20, allergy: 8 }));
+  w(usedrange, 'May Provider Totals .json')(provGrid({ lisa: 45, bachman: 28, bachman2: 0, mac: 18, allergy: 7 }));
 
   // Prior-year file (YoY): one month tab → its values become the additive yearAgo.
   w(g, 'worksheets-prevyear.json')({ value: [{ name: 'June Totals Madison' }, { name: 'microsoft.com:RD' }] });

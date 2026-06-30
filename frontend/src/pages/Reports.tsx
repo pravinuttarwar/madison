@@ -174,12 +174,17 @@ export default function Reports() {
   }
 
   const {
-    weekNumber: WEEK_NUMBER,
+    period: PERIOD = null,
+    warnings: WARNINGS = [],
     metrics: WEEKLY_METRICS,
     encountersBySpecialty: ENCOUNTERS_BY_SPECIALTY,
     totalEncounters: TOTAL_ENCOUNTERS,
     providers: PROVIDERS = [],
   } = data;
+  // MAD-50: the real period label (e.g. "June 2026 vs May 2026"), replacing the old "Week 0".
+  const PERIOD_LABEL = PERIOD?.current
+    ? `${PERIOD.current}${PERIOD.prior ? ` vs ${PERIOD.prior}` : ''}`
+    : 'this period';
   const maxEnc = Math.max(...ENCOUNTERS_BY_SPECIALTY.map((e) => e.last));
   // MAD-46: a per-provider breakdown appears only when provider tabs are connected/readable.
   const maxProv = Math.max(1, ...PROVIDERS.map((p) => p.current));
@@ -192,10 +197,10 @@ export default function Reports() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">Providers' weekly report</h1>
+          <h1 className="text-xl font-semibold text-foreground">Providers' report</h1>
           <p className="text-sm text-muted-foreground">
-            A live snapshot of the weekly spreadsheet — Week {WEEK_NUMBER} vs the prior week. No more
-            waiting for it to be handed over.
+            A live snapshot of the providers' spreadsheet — {PERIOD_LABEL}. No more waiting for it to
+            be handed over.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -220,6 +225,23 @@ export default function Reports() {
         </div>
       </div>
 
+      {/* MAD-50: "found but not counted" — labels the parser saw but excluded (an after-TOTAL
+          row, an unrecognized metric label). Surfaced so nothing is silently dropped; references
+          only, never values. */}
+      {WARNINGS.length > 0 && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+          <div>
+            <p className="font-medium text-foreground">
+              {WARNINGS.length} {WARNINGS.length === 1 ? 'item' : 'items'} found but not counted — review
+            </p>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+              These spreadsheet rows weren't recognized as a metric or provider, so they're excluded
+              from the totals: {WARNINGS.map((w) => w.label).join(', ')}.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Top-line encounters */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

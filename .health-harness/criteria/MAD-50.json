@@ -1,0 +1,35 @@
+{
+  "issueKey": "MAD-50",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "Block-aware provider parsing: providerCountsFromGrid counts ONLY rows between DATE and TOTAL; rows after TOTAL (service tally like allergy, stray labels) are excluded from provider counts"
+    },
+    {
+      "id": "AC-2",
+      "text": "Found-but-not-counted warnings: parser collects labels it does not include (after-TOTAL rows, unrecognized labels); /api/reports returns a warnings list of those labels and the Reports page shows a visible N-items-not-counted note; report still renders (degrade, never throw)"
+    },
+    {
+      "id": "AC-3",
+      "kind": "app-logging",
+      "text": "PHI-safe warnings + audit: warnings and workbook-read audit carry sheet/label references only, never cell values (counts) or patient data"
+    },
+    {
+      "id": "AC-4",
+      "text": "Real period (no Week 0): /api/reports returns the actual period (current month/year + prior period) derived from the selected sheet tab/blocks (not the host clock, zone-independent); header shows e.g. June 2026 vs May 2026, never Week 0"
+    },
+    {
+      "id": "AC-5",
+      "text": "Month/Week toggle: user toggles Monthly (current month vs prior month summed) and Weekly (latest weekly block vs prior week); each views labels and numbers match the selected period; default Monthly",
+      "defer": "split to follow-up MAD-51 — Month/Week toggle (weekly-block view) not built in this slice"
+    },
+    {
+      "id": "AC-6",
+      "text": "Backward-compatible DTO: period/view/warnings are additive; existing metrics/encountersBySpecialty/providers shape preserved; frontend updated in lockstep; weekNumber retained but no longer rendered"
+    },
+    {
+      "id": "AC-7",
+      "text": "Offline gate on synthetic fixtures modeled on real workbook shapes (monthly tabs with weekly blocks, an after-TOTAL service row, dirty labels) pin provider-exclusion, warnings, period, weekly-vs-monthly; no real workbook or staff names committed"
+    }
+  ]
+}

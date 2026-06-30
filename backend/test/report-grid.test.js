@@ -167,7 +167,9 @@ test('[AC-3] mergeCounts sums count-maps across tabs/files', () => {
 // ── [AC-6] DTO byte-compatibility with reportsFromRanges ──────────────────────
 test('[AC-6] reportsFromGrids emits the week-over-week DTO shape (no optional keys)', () => {
   const dto = reportsFromGrids({ current: { med: 20, chiro: 10 }, prior: { med: 18, chiro: 9 } });
-  assert.deepEqual(Object.keys(dto).sort(), ['encountersBySpecialty', 'metrics', 'totalEncounters', 'weekNumber']);
+  // MAD-50: `period` is now an always-present additive field (null when no period meta is supplied).
+  assert.deepEqual(Object.keys(dto).sort(), ['encountersBySpecialty', 'metrics', 'period', 'totalEncounters', 'weekNumber']);
+  assert.equal(dto.period, null);
   const med = dto.metrics.find((m) => m.key === 'med');
   assert.deepEqual(med, { key: 'med', label: 'Medical', last: 20, prior: 18 });
   assert.equal(dto.totalEncounters.last, 30);

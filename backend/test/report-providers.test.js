@@ -26,7 +26,7 @@ const PROVIDER_GRID = [
 ];
 
 test('[AC-1] providerCountsFromGrid sums each provider across stacked blocks; TOTAL + Totals col excluded', () => {
-  const counts = providerCountsFromGrid(PROVIDER_GRID);
+  const { counts } = providerCountsFromGrid(PROVIDER_GRID);
   assert.equal(counts.romano.count, 32);  // (9+6+2) + (9+6) = 17 + 15
   assert.equal(counts.derosa.count, 86);  // 22+23+41
   assert.equal(counts.romano.name, 'Romano');
@@ -35,14 +35,14 @@ test('[AC-1] providerCountsFromGrid sums each provider across stacked blocks; TO
 });
 
 test('[AC-2] case/whitespace variants merge to one provider (Gunn / "Gunn ")', () => {
-  const counts = providerCountsFromGrid(PROVIDER_GRID);
+  const { counts } = providerCountsFromGrid(PROVIDER_GRID);
   assert.equal(counts.gunn.count, 88);   // (24+20+34) + 10 = 78 + 10
   assert.equal(counts.gunn.name, 'Gunn'); // canonical display (trimmed)
 });
 
 test('[AC-4] mergeProviderCounts + providersSection → sorted name/current/prior rows', () => {
   const current = mergeProviderCounts([
-    providerCountsFromGrid(PROVIDER_GRID),
+    providerCountsFromGrid(PROVIDER_GRID).counts,
     { osman: { name: 'Osman', count: 5 } },
   ]);
   const prior = { romano: { name: 'Romano', count: 20 }, gunn: { name: 'Gunn', count: 70 } };
@@ -58,8 +58,8 @@ test('[AC-4] mergeProviderCounts + providersSection → sorted name/current/prio
 });
 
 test('[AC-1] a malformed/empty grid yields no providers, never throws', () => {
-  assert.deepEqual(providerCountsFromGrid(null), {});
-  assert.deepEqual(providerCountsFromGrid([['', 'Mon', 'Totals']]), {});
+  assert.deepEqual(providerCountsFromGrid(null).counts, {});
+  assert.deepEqual(providerCountsFromGrid([['', 'Mon', 'Totals']]).counts, {});
 });
 
 // ── [AC-2] selectProviderTabs matches the real "Provier" misspelling ───────────
@@ -87,7 +87,7 @@ test('[AC-5] a Chiro-style file has no Provider Totals tabs, so its month tabs a
   assert.deepEqual(monthTabs, ['Oct', 'Nov', 'dec', 'Jan 26', 'June 26']);
   // and the chiropractor grid parses by provider
   const chiroGrid = [['', 'Mon', 'Totals'], ['DATE', 46174, ''], ['Romano', 9, 9], ['Gunn', 24, 24]];
-  const counts = providerCountsFromGrid(chiroGrid);
+  const { counts } = providerCountsFromGrid(chiroGrid);
   assert.equal(counts.romano.count, 9);
   assert.equal(counts.gunn.count, 24);
 });

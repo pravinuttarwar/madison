@@ -76,8 +76,16 @@ export type FinancialsData = { weekly: WeeklyFinancial; daily: DailyFinancial; r
 // when provider tabs are connected/readable.
 export type ProviderRow = { name: string; current: number; prior: number };
 
+// MAD-50: a "found but not counted" item — a label the parser saw but excluded (an after-TOTAL
+// row, an unrecognized metric label). Carries the LABEL only (references, never cell values).
+export type ReportWarning = { label: string };
+
 export type ReportsData = {
-  weekNumber: number;
+  weekNumber: number; // DEPRECATED (MAD-50): superseded by `period`; no longer rendered.
+  // MAD-50: the real reporting period (month labels from the selected tabs), e.g.
+  // { current: 'June 2026', prior: 'May 2026' }. Null on older/empty payloads — render a fallback.
+  period?: { current: string; prior: string } | null;
+  warnings?: ReportWarning[]; // additive; absent when nothing was skipped
   metrics: WeeklyMetric[];
   encountersBySpecialty: EncounterRow[];
   totalEncounters: { last: number; prior: number; yearAgo?: number; monthToDate?: number; prevMonth?: number };
