@@ -476,31 +476,340 @@ export function financePeriods(now = new Date()) {
   };
 }
 
-// ── weekly report (Excel named ranges) ────────────────────────────────────────
-// rangeValues: { metricKey: [[last, prior]] } — adjust to the customer's sheet layout.
-// prevYearValues (MAD-29, optional): { metricKey: [[yearAgo]] } — same-period-last-year
-// values from prior-year named ranges. When provided, each metric/specialty row gains an
-// additive `yearAgo` and totalEncounters gains a summed `yearAgo`. When omitted, the output
-// is byte-for-byte the week-over-week shape as before (no `yearAgo` keys) — back-compat.
-// prevYearValues (MAD-29, optional): { metricKey: [[yearAgo]] } → additive `yearAgo`.
-// monthValues (MAD-28, optional): { monthToDate: { metricKey: [[mtd]] }, prevMonth: { metricKey: [[prevMonth]] } }
-//   → additive `monthToDate` + `prevMonth` (true month-over-month). Each comparison is
-//   independent: present only when its ranges are configured; absent → week-over-week shape
-//   unchanged (back-compat). The workbook supplies the period values — no date math here.
-export function reportsFromRanges(rangeValues, labels, prevYearValues, monthValues) {
-  const hasYoY = prevYearValues && Object.keys(prevYearValues).length > 0;
-  const mtdMap = (monthValues && monthValues.monthToDate) || {};
-  const prevMonthMap = (monthValues && monthValues.prevMonth) || {};
-  const hasMoM = Object.keys(mtdMap).length > 0 && Object.keys(prevMonthMap).length > 0;
-  const firstCell = (map, key) => {
-    const row = (map[key] && map[key][0]) || [];
-    return Number(row[0]) || 0;
+
+// ── MAD-27: tolerant workbook GRID parser + normalization (Strategy A) ─────────
+// Replaces the named-range read path. The real workbooks are several multi-tab files of
+// free-typed day-grids with NO named ranges and inconsistent headers — so we read each
+// worksheet's used-range grid (rows = days, first row = headers), normalize the dirty
+// headers to canonical metric keys, sum each metric column, and aggregate across tabs +
+// files. Pure + period-agnostic: callers (routes.js) decide which grids feed which period
+// (current / prior / yearAgo / month) — no date math here, so no timezone concerns.
+
+// Canonical metric order → drives a deterministic DTO (encountersBySpecialty = first 6).
+// Keys/labels mirror the customer's Totals-Madison columns; `newPatients` is parsed from
+// the free-typed "New Patients: N" cells. Add a metric by extending this list + ALIASES.
+export const REPORT_METRICS = [
+  { key: 'med', label: 'Medical' },
+  { key: 'chiro', label: 'Chiro' },
+  { key: 'pod', label: 'Podiatry' },
+  { key: 'pt', label: 'PT / OT' },
+  { key: 'ivMa', label: 'IV / MA' },
+  { key: 'acu', label: 'Acupuncture' },
+  { key: 'mo', label: 'MO' },
+  { key: 'allergy', label: 'Allergy' },
+  { key: 'covid', label: 'Covid' },
+  { key: 'telehealth', label: 'Telehealth' },
+  { key: 'newPatients', label: 'New patients' },
+];
+const METRIC_LABELS = Object.fromEntries(REPORT_METRICS.map((m) => [m.key, m.label]));
+
+// Normalize a raw header to a comparison form: decode &amp;, lowercase, strip punctuation
+// (& / -), collapse whitespace. So "PT&OT", "PT OT", "PT/OT" all reduce to "pt ot" etc.
+function normHeader(raw) {
+  return String(raw == null ? '' : raw)
+    .replace(/&amp;/gi, '&')
+    .toLowerCase()
+    .replace(/[&/\\.\-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Structural / non-metric columns we skip SILENTLY (not surfaced as "unmapped" — they're
+// expected): the date column, totals, and weekday headers.
+const WEEKDAY_HEADERS = new Set([
+  'mon', 'tue', 'tues', 'wed', 'thu', 'thur', 'thurs', 'fri', 'sat', 'sun',
+  'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
+]);
+const IGNORED_HEADERS = new Set(['', 'date', 'total', 'totals', ...WEEKDAY_HEADERS]);
+
+// normalized-header → canonical metric key. Every documented dirty variant resolves here.
+// AC-2: the combined ("iv & ma", "iv and ma") AND split ("iv", "ma") columns ALL map to one
+// `ivMa` key — a single canonical bucket avoids double-counting when a month splits them.
+const METRIC_ALIASES = new Map(Object.entries({
+  med: 'med',
+  chiro: 'chiro',
+  pod: 'pod',
+  pt: 'pt', 'pt ot': 'pt', 'pt and ot': 'pt',
+  iv: 'ivMa', ma: 'ivMa', 'iv ma': 'ivMa', 'ma iv': 'ivMa', 'iv and ma': 'ivMa',
+  acu: 'acu', accu: 'acu',
+  mo: 'mo',
+  allergy: 'allergy', allegy: 'allergy',
+  covid: 'covid', 'covid test': 'covid',
+  telehealth: 'telehealth',
+}));
+
+// Map ONE raw header → a verdict: {ignored} structural, {key} a canonical metric, or
+// {unmapped} an unrecognized column (surfaced for review, never crashes).
+export function mapHeader(raw) {
+  const n = normHeader(raw);
+  if (IGNORED_HEADERS.has(n)) return { ignored: true };
+  const key = METRIC_ALIASES.get(n);
+  return key ? { key } : { unmapped: true };
+}
+
+// From a workbook's worksheet names, keep only the monthly "Totals Madison" metric tabs, in
+// workbook order. Tolerant of the real files' dirtiness ("AugustTotals Madison", trailing
+// spaces) and excludes provider tabs ("... Provider/Provier Totals") and the defined-name /
+// external-link artifact tabs Excel exposes ("microsoft.com:RD", etc.) — AC-1/AC-4.
+export function selectMetricTabs(names) {
+  return (Array.isArray(names) ? names : []).filter((raw) => {
+    const n = String(raw == null ? '' : raw).toLowerCase();
+    if (n.startsWith('microsoft.com:')) return false;
+    if (/provi(d|e)?er/.test(n)) return false;          // "provider"/"provier" totals tabs
+    return /totals?\s*madison/.test(n.replace(/([a-z])(totals)/, '$1 $2'));
+  });
+}
+
+// MAD-46: the "Provider Totals" month tabs (per-provider detail). Excludes the metric "Totals
+// Madison" tabs and the microsoft.com:* artifacts. A file with NO provider tabs but month-named
+// tabs (the Chiro Numbers file) is handled by the route, which falls back to its month tabs.
+export function selectProviderTabs(names) {
+  return (Array.isArray(names) ? names : []).filter((raw) => {
+    const n = String(raw == null ? '' : raw).toLowerCase();
+    if (n.startsWith('microsoft.com:')) return false;
+    return /provi(d|e)?er/.test(n);
+  });
+}
+
+// ── MAD-45: calendar-capped month selection ───────────────────────────────────
+// The connected current-role workbook is the current YEAR, so a tab is "in the future" iff its
+// month is after the current calendar month. We drop those (this is the fix for MAD-41 picking
+// a phantom future month like December over the real current month) BEFORE the latest-with-data
+// scan. The owner maintains nothing; the app still does all the summing.
+export const PRACTICE_TZ = 'America/New_York';
+const MONTH_PREFIXES = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+// Month index (0-11) from a tab name, tolerant of the real files' dirtiness ("Janurary",
+// "AugustTotals Madison"); null when no month name is present (e.g. a provider tab).
+export function monthIndexFromTabName(name) {
+  const n = String(name == null ? '' : name).toLowerCase().replace(/[^a-z]/g, '');
+  for (let i = 0; i < 12; i += 1) if (n.startsWith(MONTH_PREFIXES[i])) return i;
+  return null;
+}
+
+// The month index (0-11) of an instant IN a given IANA zone — explicit, so the month boundary
+// is the PRACTICE's, not the host's. Near month-end the two differ (e.g. 2026-07-01T02:00Z is
+// June in ET) — getting this wrong would show the wrong month for users in another zone (AC-4).
+export function monthInZone(now, tz = PRACTICE_TZ) {
+  const part = new Intl.DateTimeFormat('en-US', { timeZone: tz, month: 'numeric' })
+    .formatToParts(now).find((p) => p.type === 'month');
+  return Number(part.value) - 1;
+}
+
+// Keep only metric tabs whose month is ≤ the current calendar month (in the practice zone) —
+// future months in the current-year file are excluded. Tabs with no recognizable month are
+// kept (we don't guess them away). The current month tab is KEPT even if empty; the
+// latest-with-data scan downstream falls back to the last month that actually has data (AC-3).
+export function capMetricTabsToMonth(tabs, now, tz = PRACTICE_TZ) {
+  const curMonth = monthInZone(now, tz);
+  return (Array.isArray(tabs) ? tabs : []).filter((t) => {
+    const mi = monthIndexFromTabName(t);
+    return mi == null || mi <= curMonth;
+  });
+}
+
+// "New Patients: 31" (and "New Patient: 7", trailing notes) → 31. Non-matching cell → null.
+function newPatientsInCell(cell) {
+  const m = String(cell == null ? '' : cell).match(/new\s+patient[s]?\s*:?\s*(\d+)/i);
+  return m ? Number(m[1]) : null;
+}
+
+const numeric = (v) => (typeof v === 'number' ? v : (v != null && v !== '' && !Number.isNaN(Number(v)) ? Number(v) : null));
+
+// How many cells in an axis map to a known metric — used to detect the label axis (MAD-41).
+function metricMatchCount(cells) {
+  return (Array.isArray(cells) ? cells : []).filter((c) => mapHeader(c).key).length;
+}
+
+// Parse ONE used-range grid (2-D array) into { counts: {metricKey: sum}, unmapped: [{...}] }.
+// ORIENTATION-AWARE (MAD-41): the real workbooks put metrics as ROW LABELS in column A with
+// days across columns (and stacked weekly blocks), while the MAD-27 model put metrics as
+// column HEADERS in row 0. We auto-detect which axis carries the metric labels and sum the
+// value cells along the other axis. Tolerant: blank/non-numeric cells skipped, ragged rows
+// fine, malformed grid → empty counts, never throws (AC-7). `unmapped` carries REFERENCES
+// only (index + label text), never cell values (AC-9).
+export function countsFromGrid(grid) {
+  const counts = {};
+  const unmapped = [];
+  const seenUnmapped = new Set();
+  const rows = Array.isArray(grid) ? grid : [];
+  const add = (key, n) => { counts[key] = (counts[key] || 0) + n; };
+  const surface = (ref) => {
+    const k = String(ref.header || '').toLowerCase();
+    if (seenUnmapped.has(k)) return; // dedupe (stacked blocks repeat the same label)
+    seenUnmapped.add(k); unmapped.push(ref);
   };
-  const metrics = Object.entries(rangeValues).map(([key, vals]) => {
-    const row = (vals && vals[0]) || [];
-    const m = { key, label: labels[key] || key, last: Number(row[0]) || 0, prior: Number(row[1]) || 0 };
-    if (hasYoY) m.yearAgo = firstCell(prevYearValues, key);
-    if (hasMoM) { m.monthToDate = firstCell(mtdMap, key); m.prevMonth = firstCell(prevMonthMap, key); }
+
+  // Detect the label axis: compare metric matches in row 0 (column-header layout) vs column A
+  // (row-label layout). More matches wins; ties favor the header model (MAD-27 back-compat).
+  const headerRow = Array.isArray(rows[0]) ? rows[0] : [];
+  const colA = rows.map((r) => (Array.isArray(r) ? r[0] : undefined));
+  const rowLabelMode = metricMatchCount(colA) > metricMatchCount(headerRow);
+
+  if (rowLabelMode) {
+    // MAD-49: anchor sums to the weekday-headed columns. Every block carries a `Mon..Sun` header
+    // row that names exactly which columns are counts — so a stray value in an out-of-grid column
+    // (a note column, a far-right cell) is NOT summed. Deterministic; no guessing.
+    const dayCols = new Set();
+    rows.forEach((row) => (Array.isArray(row) ? row : []).forEach((cell, c) => {
+      if (WEEKDAY_HEADERS.has(normHeader(cell))) dayCols.add(c);
+    }));
+    const anchored = dayCols.size > 0; // AC-4: only when a weekday-header row exists
+    // Fallback (no day headers): old behavior — sum all but the label col + any Totals column.
+    const totalsCols = new Set([0]);
+    rows.forEach((row) => (Array.isArray(row) ? row : []).forEach((cell, c) => {
+      if (['total', 'totals'].includes(normHeader(cell))) totalsCols.add(c);
+    }));
+    rows.forEach((row, r) => {
+      const v = mapHeader(Array.isArray(row) ? row[0] : '');
+      if (v.ignored) return;            // DATE / TOTAL / day-header / blank rows
+      if (v.unmapped) { surface({ row: r, header: String((row && row[0]) ?? '') }); return; }
+      let total = 0; let saw = false;
+      (Array.isArray(row) ? row : []).forEach((cell, c) => {
+        if (anchored ? !dayCols.has(c) : totalsCols.has(c)) return; // AC-1 / AC-4 fallback
+        const n = numeric(cell);
+        if (n != null) { total += n; saw = true; }
+      });
+      if (saw) add(v.key, total);       // a metric recurring across blocks accumulates (AC-3)
+    });
+  } else {
+    // Column-header layout (MAD-27): metric per column header, days down the rows.
+    const body = rows.slice(1);
+    headerRow.forEach((h, col) => {
+      const v = mapHeader(h);
+      if (v.ignored) return;
+      if (v.unmapped) { surface({ col, header: String(h == null ? '' : h) }); return; }
+      let total = 0; let saw = false;
+      for (const row of body) {
+        const n = numeric(Array.isArray(row) ? row[col] : undefined);
+        if (n != null) { total += n; saw = true; }
+      }
+      if (saw) add(v.key, total);
+    });
+  }
+
+  // newPatients lives as free text anywhere in the grid → scan every cell, sum the numbers.
+  let np = 0; let sawNp = false;
+  for (const row of (Array.isArray(rows) ? rows : [])) {
+    for (const cell of (Array.isArray(row) ? row : [])) {
+      const n = newPatientsInCell(cell);
+      if (n != null) { np += n; sawNp = true; }
+    }
+  }
+  if (sawNp) add('newPatients', np);
+
+  return { counts, unmapped };
+}
+
+// From metric tabs read in workbook order (each { tab, counts }), pick the period maps: the
+// LATEST tab with data is the current period, the previous tab with data is prior. Empty
+// trailing/interleaved tabs are skipped (a year file's future months are blank) — MAD-41 AC-5.
+// Position/data-based only — no date math, so no timezone concern.
+export function pickNonEmptyPeriods(items) {
+  const nonEmpty = (Array.isArray(items) ? items : [])
+    .filter((it) => it && it.counts && Object.keys(it.counts).length > 0);
+  const current = nonEmpty[nonEmpty.length - 1]?.counts || {};
+  const prior = nonEmpty.length >= 2 ? nonEmpty[nonEmpty.length - 2].counts : {};
+  return { current, prior };
+}
+
+// ── MAD-46: per-provider breakdown ────────────────────────────────────────────
+// The Provider Totals tabs and the Chiro file use the same row-label layout, but the row labels
+// are PROVIDER names (staff, not patient PHI). Same structural skips (DATE/TOTAL/day/blank) and
+// Totals-column exclusion as countsFromGrid; we just key by the (normalized) provider name so
+// case/whitespace variants ("Gunn" / "Gunn ") merge to one provider.
+function normProviderName(raw) {
+  const name = String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim();
+  return { key: name.toLowerCase(), name };
+}
+
+// One provider grid → { providerKey: { name, count } } summed across stacked weekly blocks.
+// Tolerant: blank/non-numeric cells skipped, malformed grid → {}, never throws (AC-1).
+export function providerCountsFromGrid(grid) {
+  const out = {};
+  const rows = Array.isArray(grid) ? grid : [];
+  const totalsCols = new Set([0]); // col 0 is the label; any "Totals" column is excluded too
+  rows.forEach((row) => (Array.isArray(row) ? row : []).forEach((cell, c) => {
+    if (['total', 'totals'].includes(normHeader(cell))) totalsCols.add(c);
+  }));
+  for (const row of rows) {
+    if (!Array.isArray(row)) continue;
+    if (IGNORED_HEADERS.has(normHeader(row[0]))) continue; // DATE / TOTAL / day-header / blank
+    const { key, name } = normProviderName(row[0]);
+    if (!key) continue;
+    let total = 0; let saw = false;
+    row.forEach((cell, c) => {
+      if (totalsCols.has(c)) return;
+      const n = numeric(cell);
+      if (n != null) { total += n; saw = true; }
+    });
+    if (saw) {
+      if (!out[key]) out[key] = { name, count: 0 };
+      out[key].count += total;
+    }
+  }
+  return out;
+}
+
+// Merge provider count-maps (across tabs + files) — sum by provider key, keep the display name.
+export function mergeProviderCounts(maps) {
+  const out = {};
+  for (const m of (maps || [])) {
+    for (const [k, v] of Object.entries(m || {})) {
+      if (!out[k]) out[k] = { name: v.name, count: 0 };
+      out[k].count += v.count || 0;
+    }
+  }
+  return out;
+}
+
+// Build the additive `providers` DTO section — [{ name, current, prior }] sorted by current
+// encounters (desc), then name. A provider present in only one period reads 0 for the other.
+export function providersSection(current = {}, prior = {}) {
+  const keys = new Set([...Object.keys(current), ...Object.keys(prior)]);
+  return [...keys]
+    .map((k) => ({
+      name: (current[k] && current[k].name) || (prior[k] && prior[k].name) || k,
+      current: (current[k] && current[k].count) || 0,
+      prior: (prior[k] && prior[k].count) || 0,
+    }))
+    .sort((a, b) => b.current - a.current || a.name.localeCompare(b.name));
+}
+
+// Sum a list of count-maps ({metricKey: n}) into one — aggregation across tabs AND files (AC-3).
+export function mergeCounts(maps) {
+  const out = {};
+  for (const m of (maps || [])) {
+    for (const [k, v] of Object.entries(m || {})) out[k] = (out[k] || 0) + (Number(v) || 0);
+  }
+  return out;
+}
+
+// Build the /api/reports DTO from already-aggregated count-maps per period. Byte-compatible
+// with reportsFromRanges (AC-6): same { weekNumber, metrics[], encountersBySpecialty[],
+// totalEncounters } shape, same additive yearAgo / monthToDate / prevMonth semantics —
+// each present ONLY when its period map is supplied (else the WoW shape, unchanged). A metric
+// row appears when ANY period has a value for it, in REPORT_METRICS order; the optional
+// periods read 0 for an absent key (additive, never reshaping the base contract).
+export function reportsFromGrids(periods, labels = METRIC_LABELS) {
+  const { current = {}, prior = {}, yearAgo, monthToDate, prevMonth } = periods || {};
+  const hasYoY = yearAgo && Object.keys(yearAgo).length > 0;
+  const hasMoM = monthToDate && prevMonth
+    && Object.keys(monthToDate).length > 0 && Object.keys(prevMonth).length > 0;
+
+  // Stable order: known metrics first (REPORT_METRICS), then any extra keys seen in the data.
+  const seen = new Set();
+  for (const map of [current, prior, yearAgo || {}, monthToDate || {}, prevMonth || {}]) {
+    for (const k of Object.keys(map)) seen.add(k);
+  }
+  const order = [...REPORT_METRICS.map((m) => m.key).filter((k) => seen.has(k)),
+    ...[...seen].filter((k) => !METRIC_LABELS[k])];
+
+  const at = (map, key) => Number((map || {})[key]) || 0;
+  const metrics = order.map((key) => {
+    const m = { key, label: labels[key] || key, last: at(current, key), prior: at(prior, key) };
+    if (hasYoY) m.yearAgo = at(yearAgo, key);
+    if (hasMoM) { m.monthToDate = at(monthToDate, key); m.prevMonth = at(prevMonth, key); }
     return m;
   });
   const totalEncounters = { last: sum(metrics, (m) => m.last), prior: sum(metrics, (m) => m.prior) };

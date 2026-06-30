@@ -243,12 +243,43 @@ test('[AC-1][AC-8] GET /api/financials — additive cashFlow (inflow/outflow/net
   assert.ok(m.inflow >= w.inflow.last && m.outflow >= w.outflow.last);
 });
 
-test('GET /api/reports — 12 weekly metrics + encounters by specialty', async () => {
+// MAD-27: /api/reports now reads the tolerant GRID parser over the (dirty) Totals-Madison
+// tabs — 11 canonical metrics (the unmapped "Sprained Wombat" column is excluded, not crashed
+// on), encounters-by-specialty = the first 6, and newPatients parsed from the free-typed cell.
+test('[AC-1][AC-2] GET /api/reports — canonical metrics from the grid parser (unmapped column excluded)', async () => {
   const { status, body } = await getJson('/api/reports');
   assert.equal(status, 200);
-  assert.equal(body.metrics.length, 12);
+  assert.equal(body.metrics.length, 11);
   assert.equal(body.encountersBySpecialty.length, 6);
   assert.ok(body.totalEncounters.last > 0);
+  const byKey = Object.fromEntries(body.metrics.map((m) => [m.key, m]));
+  // June (current) is the latest month tab → last; May → prior (position-based, no date math).
+  assert.equal(byKey.med.last, 120);
+  assert.equal(byKey.med.prior, 110);
+  // the combined "IV & MA" column resolves to the single ivMa bucket (AC-2)
+  assert.equal(byKey.ivMa.last, 40);
+  // newPatients parsed from the free-typed "New Patients: 31" cell
+  assert.equal(byKey.newPatients.last, 31);
+  // the unknown column never becomes a metric
+  assert.ok(!body.metrics.some((m) => /wombat/i.test(m.key) || /wombat/i.test(m.label)));
+});
+
+// MAD-46 — the additive `providers` section: per-provider counts from the Provider Totals tabs
+// (June=current, May=prior), name-normalized (Bachman + "Bachman " merged), sorted by current.
+test('[AC-1][AC-4] GET /api/reports — additive per-provider breakdown (name-normalized, sorted)', async () => {
+  const { status, body } = await getJson('/api/reports');
+  assert.equal(status, 200);
+  assert.ok(Array.isArray(body.providers) && body.providers.length >= 3);
+  const byName = Object.fromEntries(body.providers.map((p) => [p.name, p]));
+  assert.equal(byName.Lisa.current, 50);
+  assert.equal(byName.Lisa.prior, 45);
+  // "Bachman " (30) + "Bachman" (4) merge to one provider → 34
+  assert.equal(byName.Bachman.current, 34);
+  // sorted by current encounters, descending
+  const currents = body.providers.map((p) => p.current);
+  assert.deepEqual(currents, [...currents].sort((a, b) => b - a));
+  // existing metrics DTO is unchanged (additive)
+  assert.equal(body.metrics.length, 11);
 });
 
 // [AC-1] MAD-29: with prior-year ranges configured (FIXTURE_ENV), each metric carries an
@@ -268,22 +299,18 @@ test('[AC-1] GET /api/reports — additive year-ago (YoY) values from prior-year
   for (const row of body.encountersBySpecialty) assert.equal(typeof row.yearAgo, 'number');
 });
 
-// [AC-1] MAD-28: with month-to-date + prior-month ranges configured, each metric carries
-// additive monthToDate + prevMonth, and totalEncounters carries both sums — live route.
-test('[AC-1] GET /api/reports — additive month-over-month (MoM) values from month ranges', async () => {
+// MAD-27/MAD-28: the named-range month source is gone. In the monthly-tab model, last/prior
+// ALREADY express month-over-month, so the separate MoM fields are not double-supplied — they
+// are intentionally ABSENT here. The DTO still SUPPORTS them (reportsFromGrids adds them when a
+// month-granular source is supplied — proven in report-grid.test.js), so MAD-28 consumers keep
+// working; only the redundant live population is dropped (see PR notes for the owner decision).
+test('[AC-6] GET /api/reports — MoM fields intentionally absent (last/prior already are MoM)', async () => {
   const { status, body } = await getJson('/api/reports');
   assert.equal(status, 200);
   for (const m of body.metrics) {
-    assert.equal(typeof m.monthToDate, 'number', `metric ${m.key} has numeric monthToDate`);
-    assert.equal(typeof m.prevMonth, 'number', `metric ${m.key} has numeric prevMonth`);
+    assert.ok(!('monthToDate' in m) && !('prevMonth' in m), `${m.key} carries no redundant MoM fields`);
   }
-  assert.equal(body.totalEncounters.monthToDate, body.metrics.reduce((s, m) => s + m.monthToDate, 0));
-  assert.equal(body.totalEncounters.prevMonth, body.metrics.reduce((s, m) => s + m.prevMonth, 0));
-  // encounters-by-specialty rows carry month values too [AC-4]
-  for (const row of body.encountersBySpecialty) {
-    assert.equal(typeof row.monthToDate, 'number');
-    assert.equal(typeof row.prevMonth, 'number');
-  }
+  assert.ok(!('monthToDate' in body.totalEncounters) && !('prevMonth' in body.totalEncounters));
 });
 
 // [AC-5] MAD-28: the report stays aggregate-only with month fields present — every value

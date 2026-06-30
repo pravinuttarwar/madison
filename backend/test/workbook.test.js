@@ -9,7 +9,7 @@ import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
-  classifyInput, saveWorkbook, readWorkbook, workbookRef, workbookBase,
+  classifyInput, saveWorkbook, readWorkbook, readWorkbooks, workbookRef, workbookRefs, workbookBase,
   connectWorkbook, WorkbookError,
 } from '../src/workbook.js';
 
@@ -66,12 +66,55 @@ test('[AC-4] persistence stores only the location reference and survives a resta
     assert.equal(reloaded.itemId, 'item-9');
     assert.equal(reloaded.name, 'Weekly Report.xlsx');
     assert.equal(reloaded.source, 'share-url');
-    // Drive-path only, never cell values.
+    // Drive-path only, never cell values. Pin the EXACT persisted key set — time-independent
+    // (the older `.includes('22')` check false-failed when the connectedAt timestamp held "22").
     assert.ok(!('cellValues' in reloaded), 'cell values must not be persisted');
-    assert.ok(!JSON.stringify(reloaded).includes('22'), 'no cell values anywhere in the record');
+    assert.deepEqual(Object.keys(reloaded).sort(), ['connectedAt', 'driveId', 'itemId', 'name', 'role', 'source']);
 
     // workbookRef exposes just the item reference reports read from.
     assert.deepEqual(workbookRef(file), { driveId: 'drive-1', itemId: 'item-9' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// MAD-43 [AC-5]: the inline Reports connect reuses this flow — the resolve/validate audit must
+// carry the item reference + outcome only, never the raw share-URL/token (no PHI, no secret).
+test('[AC-5] connect audits resolve + validate by item reference, never the raw URL/token', async () => {
+  const { deps, calls } = mkDeps();
+  await connectWorkbook(SHARE_URL, deps);
+  const byAction = Object.fromEntries(calls.audit.map(([a, m]) => [a, m]));
+  assert.equal(byAction.resolve.ref, 'item-9');
+  assert.equal(byAction.resolve.outcome, 'ok');
+  assert.equal(byAction.validate.outcome, 'ok');
+  const serialized = JSON.stringify(calls.audit);
+  assert.doesNotMatch(serialized, /secrettoken/, 'no raw share-URL token in the audit');
+  assert.doesNotMatch(serialized, /sharepoint\.com/, 'no share host in the audit');
+});
+
+test('[AC-5] multi-URL: roles persist side-by-side as a JSON array of refs (no cell values)', () => {
+  const { file, dir } = tmpConfig();
+  try {
+    // Connect a current-year file, then a prior-year file — different roles, both persisted.
+    saveWorkbook({ driveId: 'd1', itemId: 'cur', name: '2026.xlsx', source: 'share-url' }, file); // role defaults to current
+    saveWorkbook({ driveId: 'd1', itemId: 'py', name: '2025.xlsx', source: 'drive-path', role: 'prevYear' }, file);
+
+    const all = readWorkbooks(file);
+    assert.equal(all.length, 2, 'both roles persisted side-by-side');
+    // workbookRefs exposes every connected ref, tagged by role — what the reports route reads.
+    const byRole = Object.fromEntries(workbookRefs(file).map((r) => [r.role, r]));
+    assert.equal(byRole.current.itemId, 'cur');
+    assert.equal(byRole.prevYear.itemId, 'py');
+    // readWorkbook(role) / workbookRef(role) target one role; default is 'current' (back-compat).
+    assert.equal(readWorkbook(file).itemId, 'cur');
+    assert.equal(workbookRef(file, 'prevYear').itemId, 'py');
+    // re-connecting a role REPLACES it (no duplicate), never clobbering the other role.
+    saveWorkbook({ driveId: 'd1', itemId: 'cur2', name: '2026b.xlsx', source: 'share-url' }, file);
+    assert.equal(readWorkbooks(file).length, 2);
+    assert.equal(workbookRef(file, 'current').itemId, 'cur2');
+    assert.equal(workbookRef(file, 'prevYear').itemId, 'py');
+    // persisted store is location refs only — never cell values.
+    assert.ok(!JSON.stringify(readWorkbooks(file)).match(/cellValues|values":\s*\[\[/));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -86,14 +129,15 @@ test('[AC-4] readWorkbook returns null and workbookRef null when no file exists 
 test('[AC-1] connect via share-URL resolves, validates and persists, returning the workbook name', async () => {
   const { deps, calls } = mkDeps();
   const result = await connectWorkbook(SHARE_URL, deps);
-  assert.deepEqual(result, { connected: true, name: 'Weekly Report.xlsx', source: 'share-url' });
+  // MAD-27: the result + persisted ref now carry a role (default 'current' for multi-URL).
+  assert.deepEqual(result, { connected: true, name: 'Weekly Report.xlsx', source: 'share-url', role: 'current' });
   // Resolved via the SHARES endpoint, then reachability validated, then persisted.
   assert.deepEqual(calls.resolve, [['share', SHARE_URL]]);
   assert.equal(calls.validate.length, 1);
   assert.equal(calls.save.length, 1);
   // Persisted record is location refs only — never cell values.
   const [rec] = calls.save[0];
-  assert.deepEqual(rec, { driveId: 'drive-1', itemId: 'item-9', name: 'Weekly Report.xlsx', source: 'share-url' });
+  assert.deepEqual(rec, { driveId: 'drive-1', itemId: 'item-9', name: 'Weekly Report.xlsx', source: 'share-url', role: 'current' });
 });
 
 test('[AC-2] connect via drive path validates and persists the same way', async () => {

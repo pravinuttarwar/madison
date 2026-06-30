@@ -72,11 +72,16 @@ export type CalendarData = { today: ScheduleItem[]; week: CalendarDay[] };
 
 export type FinancialsData = { weekly: WeeklyFinancial; daily: DailyFinancial; revenue: RevenueFinancial; receivables: ReceivablesFinancial; cashFlow: CashFlowFinancial };
 
+// MAD-46: a per-provider breakdown (staff names, not patient PHI). Additive — present only
+// when provider tabs are connected/readable.
+export type ProviderRow = { name: string; current: number; prior: number };
+
 export type ReportsData = {
   weekNumber: number;
   metrics: WeeklyMetric[];
   encountersBySpecialty: EncounterRow[];
   totalEncounters: { last: number; prior: number; yearAgo?: number; monthToDate?: number; prevMonth?: number };
+  providers?: ProviderRow[];
 };
 
 // The Dashboard is a composed (BFF) view — the backend fans out to the sources it
@@ -178,8 +183,10 @@ export function getFinancials(): Promise<FinancialsData> {
   return fetchJson<FinancialsData>('/api/financials');
 }
 
-export function getReports(): Promise<ReportsData> {
-  return fetchJson<ReportsData>('/api/reports');
+// MAD-48: the report is cached 24h server-side; pass refresh=true (the Refresh button) to
+// bypass the cache and re-read the workbook.
+export function getReports(refresh = false): Promise<ReportsData> {
+  return fetchJson<ReportsData>(`/api/reports${refresh ? '?refresh=1' : ''}`);
 }
 
 // ── Weekly-report workbook connection (MAD-26) ───────────────────────────────
@@ -210,6 +217,15 @@ export async function connectWorkbook(input: string): Promise<WorkbookConnectRes
     throw new ApiError(res.status, '/api/reports/connection', body.reason || 'Could not connect that workbook.');
   }
   return (await res.json()) as WorkbookConnectResult;
+}
+
+// ── MAD-42: granted Microsoft scopes (diagnostic) ────────────────────────────
+// Scope NAMES only — the access token never leaves the backend. `delegated` is what this
+// sign-in was actually granted (the token's scp claim); `requested` is what we ask for.
+export type AuthScopes = { requested: string[]; delegated: string[]; app: string[] };
+
+export function getAuthScopes(): Promise<AuthScopes> {
+  return fetchJson<AuthScopes>('/api/auth/scopes');
 }
 
 export function getDashboard(view: ViewMode): Promise<DashboardData> {

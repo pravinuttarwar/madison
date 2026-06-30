@@ -44,15 +44,12 @@ export const config = {
     user: env.MS_USER || '', // empty → use /me
     awaitingThresholdHours: Number(env.AWAITING_THRESHOLD_HOURS) || 48,
     awaitingLookbackDays: Number(env.AWAITING_LOOKBACK_DAYS) || 14,
+    // MAD-27: the report reads workbook GRIDS (no named ranges). spreadsheetPath is the
+    // current-year file's env drive-path fallback when no connection is persisted;
+    // prevYearSpreadsheetPath is the optional prior-year file for the YoY comparison (when
+    // empty, /api/reports stays week-over-week only — no additive yearAgo, back-compat).
     spreadsheetPath: env.SPREADSHEET_DRIVE_PATH || '',
-    namedRanges: safeJson(env.SPREADSHEET_NAMED_RANGES) || {},
-    // MAD-29: prior-year named ranges { metricKey: rangeName } for the YoY comparison.
-    // When empty, /api/reports stays week-over-week only (no additive yearAgo) — back-compat.
-    prevYearRanges: safeJson(env.SPREADSHEET_PREV_YEAR_RANGES) || {},
-    // MAD-28: month-to-date + prior-month named ranges for the MoM comparison. Both must be
-    // configured for MoM to appear; otherwise /api/reports omits the month fields — back-compat.
-    monthToDateRanges: safeJson(env.SPREADSHEET_MTD_RANGES) || {},
-    prevMonthRanges: safeJson(env.SPREADSHEET_PREV_MONTH_RANGES) || {},
+    prevYearSpreadsheetPath: env.SPREADSHEET_PREV_YEAR_DRIVE_PATH || '',
     // Customer's designated sender/domain → category lists (MAD-17). Keys are a full
     // sender address or a bare domain; values are management|operational|action-needed.
     // Populated per-deployment via .env so the lists land without a code change; a

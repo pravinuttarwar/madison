@@ -6,7 +6,7 @@ process.env.TZ = 'America/New_York';
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { financialsFromQbo, outstandingInvoicesFromQbo, cashFlowFromQbo, calendarFromGraph, tasksFromGraph, emailsFromGraph, reportsFromRanges, summarizeOwnerTasks, OWNER_TASK_CAP_PER_STATUS } from '../src/transforms.js';
+import { financialsFromQbo, outstandingInvoicesFromQbo, cashFlowFromQbo, calendarFromGraph, tasksFromGraph, emailsFromGraph, summarizeOwnerTasks, OWNER_TASK_CAP_PER_STATUS } from '../src/transforms.js';
 
 // ── MAD-37: per-owner task summary for the "tasks by owner" board ──
 // The board's filter counts must be TRUTHFUL: open === overdue + dueToday + upcoming, and
@@ -48,78 +48,6 @@ test('summarizeOwnerTasks: completed/done tasks are excluded from open + counts'
   const s = summarizeOwnerTasks([ownerTask('a', 'overdue'), ownerTask('d', 'done')]);
   assert.equal(s.open, 1);
   assert.equal(s.tasks.length, 1);
-});
-
-// ── MAD-29: year-over-year reporting comparison (thin additive on named ranges) ──
-const RV = { newPatients: [[22, 18]], medicalSeen: [[284, 271]] }; // { key: [[last, prior]] }
-
-test('[AC-1] reportsFromRanges adds yearAgo per metric + a summed total when prior-year ranges are present', () => {
-  const prevYear = { newPatients: [[15]], medicalSeen: [[250]] }; // { key: [[yearAgo]] }
-  const r = reportsFromRanges(RV, {}, prevYear);
-  const byKey = Object.fromEntries(r.metrics.map((m) => [m.key, m]));
-  assert.equal(byKey.newPatients.yearAgo, 15);
-  assert.equal(byKey.medicalSeen.yearAgo, 250);
-  // existing WoW fields untouched
-  assert.equal(byKey.newPatients.last, 22);
-  assert.equal(byKey.newPatients.prior, 18);
-  // total year-ago is the sum
-  assert.equal(r.totalEncounters.yearAgo, 265);
-});
-
-test('[AC-3] reportsFromRanges omits yearAgo entirely when no prior-year ranges (back-compat)', () => {
-  const r = reportsFromRanges(RV, {}); // no third arg
-  for (const m of r.metrics) assert.ok(!('yearAgo' in m), 'no yearAgo on metric');
-  assert.ok(!('yearAgo' in r.totalEncounters), 'no yearAgo on total');
-  // unchanged WoW shape
-  assert.equal(r.totalEncounters.last, 22 + 284);
-});
-
-test('[AC-4] encountersBySpecialty rows carry yearAgo when prior-year is present', () => {
-  const prevYear = { newPatients: [[15]], medicalSeen: [[250]] };
-  const r = reportsFromRanges(RV, {}, prevYear);
-  for (const row of r.encountersBySpecialty) assert.equal(typeof row.yearAgo, 'number');
-  assert.equal(r.encountersBySpecialty[0].yearAgo, 15);
-});
-
-// ── MAD-28: month-over-month (month-to-date vs prior-month total) ──
-const MONTHS = {
-  monthToDate: { newPatients: [[80]], medicalSeen: [[1100]] }, // { key: [[mtd]] }
-  prevMonth: { newPatients: [[95]], medicalSeen: [[1180]] },   // { key: [[prevMonth]] }
-};
-
-test('[AC-1] reportsFromRanges adds monthToDate + prevMonth per metric + summed totals when month ranges are present', () => {
-  const r = reportsFromRanges(RV, {}, undefined, MONTHS);
-  const byKey = Object.fromEntries(r.metrics.map((m) => [m.key, m]));
-  assert.equal(byKey.newPatients.monthToDate, 80);
-  assert.equal(byKey.newPatients.prevMonth, 95);
-  assert.equal(byKey.medicalSeen.monthToDate, 1100);
-  assert.equal(byKey.medicalSeen.prevMonth, 1180);
-  // WoW fields untouched
-  assert.equal(byKey.newPatients.last, 22);
-  // totals are summed
-  assert.equal(r.totalEncounters.monthToDate, 1180);
-  assert.equal(r.totalEncounters.prevMonth, 1275);
-});
-
-test('[AC-3] reportsFromRanges omits month fields when no month ranges (back-compat); YoY stays independent', () => {
-  const r = reportsFromRanges(RV, {}); // neither YoY nor MoM
-  for (const m of r.metrics) {
-    assert.ok(!('monthToDate' in m) && !('prevMonth' in m), 'no month fields on metric');
-  }
-  assert.ok(!('monthToDate' in r.totalEncounters), 'no month total');
-  // YoY without MoM still works and adds no month fields
-  const y = reportsFromRanges(RV, {}, { newPatients: [[15]], medicalSeen: [[250]] });
-  for (const m of y.metrics) assert.ok(!('monthToDate' in m), 'YoY-only adds no month fields');
-});
-
-test('[AC-4] encountersBySpecialty rows carry month values when month ranges are present', () => {
-  const r = reportsFromRanges(RV, {}, undefined, MONTHS);
-  for (const row of r.encountersBySpecialty) {
-    assert.equal(typeof row.monthToDate, 'number');
-    assert.equal(typeof row.prevMonth, 'number');
-  }
-  assert.equal(r.encountersBySpecialty[0].monthToDate, 80);
-  assert.equal(r.encountersBySpecialty[0].prevMonth, 95);
 });
 
 // ── MAD-25: cash-flow overview (derived inflow/outflow/net) ───────────────────

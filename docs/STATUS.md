@@ -19,7 +19,7 @@ holds the active feature stories. This doc summarizes; the tickets are authorita
 | Calendar: today + week ahead | Calendar (`/calendar`) | ✅ UI done on sample data |
 | Tasks grouped by owner, due/overdue | Tasks (`/tasks`) | 🟡 **Multi-owner "tasks by owner" board wired (MAD-37)** — `/api/tasks` reads each configured team member's To Do app-only (`Tasks.Read.All`), grouped server-side by real owner (no hardcoded owner); single-user fallback preserved. Live data pending M365 admin consent for the app-only scope |
 | Clean QuickBooks snapshot (deposits, variable spend, net contribution, **revenue**, **outstanding A/R**, **cash flow**) | Financials (`/financials`) | 🟡 UI done incl. accrual revenue tile (MAD-23) + outstanding-invoice / A/R aging (MAD-24) + cash-flow overview (MAD-25); live QBO via OAuth (MAD-15); fixed-cost exclusion is config-only |
-| Weekly provider spreadsheet snapshot + WoW/MoM/YoY deltas | Reports (`/reports`) | 🟡 UI done with the 12 metrics; **workbook connection wired (MAD-26)** — paste/validate/persist a OneDrive/SharePoint link, `/api/reports` reads from it (env fallback); **WoW + month-over-month (MAD-28) + year-over-year (MAD-29)** all wired via additive named ranges; multi-period source-picker/chart + named-range → metric mapping for the practice's real sheets still parked (MBI-22) |
+| Weekly provider spreadsheet snapshot + WoW/MoM/YoY deltas | Reports (`/reports`) | 🟡 **Tolerant GRID parser over the practice's real workbooks wired (MAD-27)** — `/api/reports` lists each connected workbook's worksheets, selects the monthly "Totals Madison" tabs, reads their used-ranges, normalizes the dirty headers (Med/Chiro/Pod/PT/IV&MA/ACU/MO/Allergy/Covid/Telehealth + free-typed new-patients) to 11 canonical metrics, and aggregates across tabs + files; the named-range read path is **removed**. **Multi-URL connection (MAD-27)** — connect a current + optional prior-year file, persisted as a role-tagged JSON array (no DB, no cell values at rest); **WoW + YoY** wired (prior-year file → additive `yearAgo`); MoM is DTO-supported but not double-populated (last/prior already express month-over-month). Builds on the connection flow from **MAD-26**. UI multi-period source-picker/chart still parked (MBI-22) |
 | Color-blind-accessible UI (never color alone) | accessibility primitives + Display menu | ✅ Done — exact dark palette + Color-Vision-Friendly default (MBI-21) |
 | Timezone-correct dates (practice zone, America/New_York) | dashboard view default + date transforms | ✅ Done (MBI-26/27/28) |
 | Mirror the owner's design; drop CureMD, Plaid, AI panel, Projects, Connections, Teams | app shell + composition | ✅ Done |
@@ -175,6 +175,15 @@ Legend: ✅ done · 🟡 prototype/partial (UI real, live data pending) · ⛔ o
   `Reports.test.tsx`. PR [#38](https://github.com/pravinuttarwar/madison/pull/38) merged; **Testing (owner QA)**.
   Go-live data dependency: customer populates the MTD + prior-month ranges. **With MAD-28 + MAD-29, the SOW Module 4
   WoW/MoM/YoY comparison set is complete** (real-sheet metric mapping + multi-period chart remain parked under MBI-22).
+- **[MAD-40](https://connecthealth.atlassian.net/browse/MAD-40) — Self-host the mockup fonts**
+  (Phase-1 productionization, epic [MAD-1](https://connecthealth.atlassian.net/browse/MAD-1), MAD Sprint 2). The
+  crimson accent + Fraunces/JetBrains-Mono typography already shipped (MBI-21); this removes the **runtime Google
+  Fonts CDN** dependency — the fonts are now bundled and **served from our own origin** via `@fontsource-variable`
+  (imported in `main.tsx`), eliminating a third-party runtime call (HIPAA/privacy posture + offline-reliable
+  shipped artifact). No visual change; the `--font-display`/`--font-mono` tokens now prefer the self-hosted variable
+  faces. **Frontend-only; no API/DTO/DB change; not ePHI.** AC-1..AC-3 pinned by `theme-fonts.test.ts`; `pnpm build`
+  bundles the woff2 locally and `dist/index.html` has no Google Fonts references. (Applying JetBrains Mono across all
+  KPI/metric figures — currently `tabular-nums` only — is a deferred taste decision.)
 
 ### 🟡 Remaining (open in Jira)
 

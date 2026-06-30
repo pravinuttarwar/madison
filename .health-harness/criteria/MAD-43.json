@@ -1,0 +1,26 @@
+{
+  "issueKey": "MAD-43",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "Inline connect on Reports (no nav tab): no-workbook state shows a paste input + Connect action replacing the stale named-ranges pending copy"
+    },
+    {
+      "id": "AC-2",
+      "text": "Connect then report renders + persists: valid reachable link validated read-only, Reports renders metrics, single shared connection survives backend restart"
+    },
+    {
+      "id": "AC-3",
+      "text": "Edit/replace when connected: a Change workbook affordance lets the user edit the link; saving re-validates and updates"
+    },
+    {
+      "id": "AC-4",
+      "text": "Clear specific errors: a bad input shows what is wrong (not reachable / no access / not an Excel workbook / empty); never echoes the raw URL or token"
+    },
+    {
+      "id": "AC-5",
+      "kind": "audit",
+      "text": "HIPAA audit + PHI-safe logging intact: resolve/validate/read audit (item refs, no cell values, no raw URL) from MAD-26/27 holds; logs carry references only"
+    }
+  ]
+}

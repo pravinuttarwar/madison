@@ -50,9 +50,11 @@
   --radius: 0.75rem;
 
   /* Typography — taken from the customer's mockup: Fraunces for display/headings,
-     JetBrains Mono for figures/KPIs. Body stays the default sans for legibility. */
-  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+     JetBrains Mono for figures/KPIs. Body stays the default sans for legibility.
+     Self-hosted via @fontsource (MAD-40): the variable faces register as
+     '… Variable' — listed first, with the plain names + system fallbacks after. */
+  --font-display: 'Fraunces Variable', 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 }
 
 /* ── Mockup treatment: Fraunces display headings + the crimson "glow" accent ───── */

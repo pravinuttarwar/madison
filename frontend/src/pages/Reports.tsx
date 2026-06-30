@@ -1,16 +1,64 @@
-import { RefreshCw, FileSpreadsheet, Clock } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { RefreshCw, FileSpreadsheet, AlertTriangle, Pencil } from 'lucide-react';
 import { Panel, Trend, Bar } from '@/components/primitives';
 import { Loading } from '@/components/AsyncState';
 import { useApi } from '@/hooks/useApi';
-import { getReports, sourceModeFor } from '@/lib/api';
+import { getReports, getWorkbookConnection, connectWorkbook, getAuthScopes, sourceModeFor } from '@/lib/api';
 import { pctChange } from '@/lib/format';
 
 const spreadsheetMode = sourceModeFor('spreadsheet');
 
-// The providers' weekly spreadsheet isn't wired yet (we need the source file + the
-// cell/named-range map). Until then the tab shows an explicit "pending" beat rather
-// than illustrative numbers, so nothing reads as live that isn't.
-function ReportsPending() {
+// MAD-42 — when the granted scopes lack Sites.Read.All, explain why a SharePoint-hosted file
+// won't resolve (OneDrive still works). Renders nothing until the scopes are known.
+function SharePointHint() {
+  const { data } = useApi(getAuthScopes, []);
+  if (!data || data.delegated.length === 0) return null;
+  if (data.delegated.some((s) => /^Sites\.Read/i.test(s))) return null;
+  return (
+    <p className="mt-3 flex items-start gap-1.5 text-[11px] text-muted-foreground">
+      <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-warning" aria-hidden />
+      <span>SharePoint-hosted files need Sites.Read.All (not currently granted). OneDrive workbooks work today.</span>
+    </p>
+  );
+}
+
+// MAD-43 — connect/edit the weekly workbook inline on Reports (no separate Connections tab).
+// Paste a OneDrive/SharePoint share-link or drive path; the backend validates read-only
+// reachability and persists only the location. On failure it shows the backend's plain-language
+// reason (what's wrong) — never the raw URL/token.
+function ReportsConnect({
+  connectedName,
+  readFailed,
+  onConnected,
+  onCancel,
+  canCancel,
+}: {
+  connectedName: string | null;
+  readFailed: boolean;
+  onConnected: () => void;
+  onCancel: () => void;
+  canCancel: boolean;
+}) {
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    const value = input.trim();
+    if (!value || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await connectWorkbook(value);
+      onConnected();
+    } catch (e) {
+      // ApiError.message carries the backend's plain-language reason — never the raw URL/token.
+      setError(e instanceof Error ? e.message : 'Could not connect that workbook.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div>
@@ -21,22 +69,62 @@ function ReportsPending() {
         </p>
       </div>
 
-      <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border bg-card py-16 text-center shadow-sm">
-        <div className="grid h-12 w-12 place-items-center rounded-full bg-primary/10 text-primary">
-          <FileSpreadsheet className="h-6 w-6" aria-hidden />
+      <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
+            <FileSpreadsheet className="h-5 w-5" aria-hidden />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">
+              {connectedName ? 'Change the connected workbook' : 'Connect your weekly spreadsheet'}
+            </p>
+            <p className="mt-1 max-w-xl text-xs leading-relaxed text-muted-foreground">
+              {readFailed && connectedName
+                ? `We're connected to "${connectedName}", but couldn't read it as a report. Paste a different link, or check the file.`
+                : connectedName
+                  ? `Currently reading "${connectedName}". Paste a new OneDrive/SharePoint share-link or drive path to replace it.`
+                  : 'Paste the OneDrive or SharePoint share-link (or drive path) to your providers\' weekly workbook. We confirm we can read it, then read the report live each time — we store only the file\'s location, never its contents.'}
+            </p>
+          </div>
         </div>
-        <div>
-          <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground">
-            <Clock className="h-4 w-4 text-muted-foreground" aria-hidden />
-            Pending implementation
-          </p>
-          <p className="mx-auto mt-1.5 max-w-md text-xs leading-relaxed text-muted-foreground">
-            This view reads your providers' weekly spreadsheet from Microsoft file storage and shows
-            each metric week-over-week — new patients, encounters by specialty, recovery, allergy and
-            more. To wire it up we need the source file and which cells / named ranges map to each
-            metric. Share that and we'll mirror your exact layout here.
-          </p>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && submit()}
+            placeholder="Paste a share link or drive path"
+            aria-label="Workbook share link or drive path"
+            className="min-w-0 flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground shadow-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
+          />
+          <button
+            onClick={submit}
+            disabled={busy || !input.trim()}
+            className="inline-flex items-center gap-2 rounded-lg border border-transparent bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            {busy ? 'Checking…' : connectedName ? 'Connect new workbook' : 'Connect'}
+          </button>
+          {canCancel && (
+            <button
+              onClick={onCancel}
+              className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/50"
+            >
+              Cancel
+            </button>
+          )}
         </div>
+
+        {error && (
+          <p className="mt-3 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-foreground">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden />
+            <span>
+              <span className="font-semibold">Couldn't connect.</span> {error}
+            </span>
+          </p>
+        )}
+
+        <SharePointHint />
       </div>
     </div>
   );
@@ -52,20 +140,49 @@ const CHART_COLORS = [
 ];
 
 export default function Reports() {
-  const { data, loading, error } = useApi(getReports, []);
+  // reloadKey bumps after a (re)connect to refetch; editing shows the connect form over a report.
+  const [reloadKey, setReloadKey] = useState(0);
+  const [editing, setEditing] = useState(false);
+  // MAD-48: the report is cached 24h; the Refresh button forces a re-read via getReports(refresh).
+  const forceRefresh = useRef(false);
+  const { data, loading } = useApi(() => {
+    const r = forceRefresh.current;
+    forceRefresh.current = false;
+    return getReports(r);
+  }, [reloadKey]);
+  const { data: conn } = useApi(getWorkbookConnection, [reloadKey]);
+  const onRefresh = () => { forceRefresh.current = true; setReloadKey((k) => k + 1); };
 
   if (loading) return <Loading label="Loading the weekly report…" />;
-  // The providers' spreadsheet isn't wired yet (workbook connection is a separate step),
-  // so a failed/empty read shows the pending beat rather than a raw error.
-  if (error || !data) return <ReportsPending />;
+
+  const connectedName = conn && conn.connected ? conn.name : null;
+  // No report (not connected, or connected-but-unreadable) OR the user chose to change it →
+  // show the inline connect/edit card (MAD-43). No separate Connections tab.
+  if (!data || editing) {
+    return (
+      <ReportsConnect
+        connectedName={connectedName}
+        readFailed={!data && Boolean(connectedName)}
+        canCancel={editing && Boolean(data)}
+        onCancel={() => setEditing(false)}
+        onConnected={() => {
+          setEditing(false);
+          setReloadKey((k) => k + 1);
+        }}
+      />
+    );
+  }
 
   const {
     weekNumber: WEEK_NUMBER,
     metrics: WEEKLY_METRICS,
     encountersBySpecialty: ENCOUNTERS_BY_SPECIALTY,
     totalEncounters: TOTAL_ENCOUNTERS,
+    providers: PROVIDERS = [],
   } = data;
   const maxEnc = Math.max(...ENCOUNTERS_BY_SPECIALTY.map((e) => e.last));
+  // MAD-46: a per-provider breakdown appears only when provider tabs are connected/readable.
+  const maxProv = Math.max(1, ...PROVIDERS.map((p) => p.current));
   // MAD-29: a year-ago column appears only when the workbook supplies prior-year values.
   const hasYoY = WEEKLY_METRICS.some((m) => m.yearAgo !== undefined);
   // MAD-28: a month-over-month column appears only when the workbook supplies month values.
@@ -81,10 +198,26 @@ export default function Reports() {
             waiting for it to be handed over.
           </p>
         </div>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground">
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-          Snapshot · refreshed each Monday
-        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onRefresh}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50"
+          >
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+            Refresh
+          </button>
+          <button
+            onClick={() => setEditing(true)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50"
+          >
+            <Pencil className="h-3.5 w-3.5" aria-hidden />
+            Change workbook
+          </button>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground">
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+            Snapshot · refreshed each Monday
+          </span>
+        </div>
       </div>
 
 
@@ -197,6 +330,29 @@ export default function Reports() {
           </p>
         </Panel>
       </div>
+
+      {/* MAD-46 — by-provider breakdown (only when provider data is connected) */}
+      {PROVIDERS.length > 0 && (
+        <Panel title="By provider" source="Provider totals" sourceMode={spreadsheetMode}>
+          <ul className="grid gap-3.5 sm:grid-cols-2">
+            {PROVIDERS.map((p, i) => (
+              <li key={p.name}>
+                <div className="mb-1 flex items-center justify-between text-sm">
+                  <span className="font-medium text-foreground">{p.name}</span>
+                  <span className="flex items-center gap-2 tabular-nums text-muted-foreground">
+                    {p.current}
+                    <Trend delta={p.current - p.prior} />
+                  </span>
+                </div>
+                <Bar value={p.current} max={maxProv} colorVar={CHART_COLORS[i % CHART_COLORS.length]} />
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Encounters by provider this month vs last — from your Provider Totals tabs.
+          </p>
+        </Panel>
+      )}
     </div>
   );
 }

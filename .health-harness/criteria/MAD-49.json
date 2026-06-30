@@ -1,0 +1,26 @@
+{
+  "issueKey": "MAD-49",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "Anchor sums to weekday columns: in a row-label month grid with a Mon..Sun header row, each metric sums only columns under a weekday header; cells outside the day grid (notes column, far-right stray like K) are not counted"
+    },
+    {
+      "id": "AC-2",
+      "text": "Covid regression fixed: a Covid test row that is 0 across Mon..Sun but has a stray 4709 in an out-of-grid column parses to covid=0, not 4709"
+    },
+    {
+      "id": "AC-3",
+      "text": "Existing values unchanged (back-compat): current Totals-Madison tabs and the column-header MAD-27 layout still yield the same 11 metric values; only out-of-grid cells are removed"
+    },
+    {
+      "id": "AC-4",
+      "text": "No-weekday-header fallback: a row-label grid with no detectable weekday header row falls back to the prior all-non-Totals summation (no silent zeroing)"
+    },
+    {
+      "id": "AC-5",
+      "kind": "app-logging",
+      "text": "PHI-safe: the stray cell value is never logged or surfaced; unmapped labels stay reference-only (no cell values)"
+    }
+  ]
+}

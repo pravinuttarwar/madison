@@ -10,24 +10,11 @@ import { join } from 'node:path';
 // "latest message is from the owner". Synthetic.
 export const MS_USER = 'owner@madison.example';
 
-// metricKey → workbook named-range name (drives the 12 weekly report metrics).
-const RANGE_NAMES = {
-  newPatients: 'NewPatients', medicalSeen: 'MedicalSeen', n1: 'N1', chiroSeen: 'ChiroSeen',
-  adminCodes: 'AdminCodes', allergyTests: 'AllergyTests', allergyKits: 'AllergyKits',
-  recoveryNew: 'RecoveryNew', recoveryAll: 'RecoveryAll', pod: 'Pod', acu: 'Acu', procedures: 'Procedures',
-};
-
-// MAD-29: prior-year named ranges (same metrics, last year) → drives the YoY comparison.
-const PREV_YEAR_RANGE_NAMES = Object.fromEntries(
-  Object.entries(RANGE_NAMES).map(([k, name]) => [k, `${name}PrevYear`]),
-);
-// MAD-28: month-to-date + prior-month named ranges → drives the MoM comparison.
-const MTD_RANGE_NAMES = Object.fromEntries(
-  Object.entries(RANGE_NAMES).map(([k, name]) => [k, `${name}MTD`]),
-);
-const PREV_MONTH_RANGE_NAMES = Object.fromEntries(
-  Object.entries(RANGE_NAMES).map(([k, name]) => [k, `${name}PrevMonth`]),
-);
+// MAD-27: the report reads workbook GRIDS (no named ranges). Synthetic env drive-paths for
+// the current-year + prior-year files — graph.js fixture routing keys off the '2026'/'2025'
+// marker in the path to serve the right worksheet list + grids. Never a real drive path.
+const CURRENT_WORKBOOK_PATH = '/synthetic/2026 Patient Numbers.xlsx';
+const PREV_YEAR_WORKBOOK_PATH = '/synthetic/2025 Patient Numbers.xlsx';
 
 // MAD-37: synthetic team for the multi-owner "tasks by owner" board. The third UPN has NO
 // user fixture on purpose → resolveUser returns null → it's skipped (proves unreadable
@@ -41,15 +28,11 @@ export const FIXTURE_ENV = {
   // Pin the single-user path for the default characterization run: never inherit a dev's
   // local .env TASKS_TEAM_USERS (real addresses). The team-board test sets it explicitly.
   TASKS_TEAM_USERS: '',
-  SPREADSHEET_NAMED_RANGES: JSON.stringify(RANGE_NAMES),
-  // MAD-29: prior-year ranges → /api/reports adds an additive yearAgo per metric.
-  SPREADSHEET_PREV_YEAR_RANGES: JSON.stringify(PREV_YEAR_RANGE_NAMES),
-  // MAD-28: month-to-date + prior-month ranges → additive monthToDate + prevMonth (MoM).
-  SPREADSHEET_MTD_RANGES: JSON.stringify(MTD_RANGE_NAMES),
-  SPREADSHEET_PREV_MONTH_RANGES: JSON.stringify(PREV_MONTH_RANGE_NAMES),
-  // workbookNamedRange() requires a configured path before it reads (the fixtures seam
-  // ignores the value). Synthetic — never a real drive path.
-  SPREADSHEET_DRIVE_PATH: '/synthetic/Madison Weekly Report.xlsx',
+  // MAD-27: the report reads workbook GRIDS via env drive-path fallback (no connection
+  // persisted in the characterization run). The current-year file feeds last/prior; the
+  // prior-year file feeds the additive yearAgo (YoY). Synthetic — never a real drive path.
+  SPREADSHEET_DRIVE_PATH: CURRENT_WORKBOOK_PATH,
+  SPREADSHEET_PREV_YEAR_DRIVE_PATH: PREV_YEAR_WORKBOOK_PATH,
 };
 
 const DAY = 86_400_000;
@@ -59,8 +42,10 @@ const ymd = (d) => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())
 export function writeFixtures(dir, now = new Date()) {
   const g = join(dir, 'graph');
   const q = join(dir, 'qbo');
-  const names = join(g, 'names');
-  mkdirSync(names, { recursive: true });
+  const usedrange = join(g, 'usedrange');             // MAD-27: current-year tab grids
+  const usedrangePrev = join(g, 'usedrange-prevyear'); // MAD-27: prior-year tab grids
+  mkdirSync(usedrange, { recursive: true });
+  mkdirSync(usedrangePrev, { recursive: true });
   mkdirSync(q, { recursive: true });
   const w = (...parts) => (obj) => writeFileSync(join(...parts), JSON.stringify(obj, null, 2));
 
@@ -201,31 +186,67 @@ export function writeFixtures(dir, now = new Date()) {
     ],
   });
 
-  // ── Graph: workbook named ranges → [[last, prior]] (drives 12 weekly metrics) ──
-  const RANGE_VALUES = {
-    NewPatients: [22, 18], MedicalSeen: [284, 271], N1: [187, 192], ChiroSeen: [612, 598],
-    AdminCodes: [94, 88], AllergyTests: [14, 11], AllergyKits: [9, 12], RecoveryNew: [17, 13],
-    RecoveryAll: [142, 129], Pod: [78, 82], Acu: [56, 61], Procedures: [31, 28],
-  };
-  for (const [name, [last, prior]] of Object.entries(RANGE_VALUES)) {
-    w(names, `${name}.json`)({ values: [[last, prior]] });
-  }
+  // ── Graph: workbook GRIDS (MAD-41 real orientation) — the real Totals-Madison tabs put
+  // METRICS as ROW LABELS in column A, DAYS across columns, a "Totals" column, a "TOTAL"
+  // subtotal row, and (in the real files) stacked weekly blocks. Each metric row's value lands
+  // in the Mon column with the per-metric Totals col = the same value (which the parser must
+  // EXCLUDE, not double-count). An unknown "Sprained Wombat" row label must surface as unmapped.
+  const HEADER_ROW = ['', 'Mon', 'Tues', 'Wed', 'Thur', 'Fri', 'Sat', 'Sun', 'Totals'];
+  const mrow = (label, v) => [label, v, 0, 0, 0, 0, 0, 0, v]; // value in Mon; Totals col = v (excluded)
+  const gridFor = (c) => ({
+    values: [
+      HEADER_ROW,
+      ['DATE', 45663, 45664, 45665, 45666, 45667, 45668, 45669, ''],
+      mrow('Med', c.med), mrow('Chiro', c.chiro), mrow('Pod', c.pod), mrow('PT', c.pt),
+      mrow('IV', c.ivMa), mrow('ACU', c.acu),
+      ['TOTAL', 777, 0, 0, 0, 0, 0, 0, 777], // subtotal row → must be IGNORED, not counted
+      mrow('MO', c.mo), mrow('Allergy', c.allergy), mrow('Covid Test', c.covid), mrow('Telehealth', c.telehealth),
+      ['Sprained Wombat', 9, 0, 0, 0, 0, 0, 0, 9], // unknown row label → surfaced as unmapped
+      [`New Patients: ${c.newPatients}`],
+    ],
+  });
+  const emptyTab = { values: [HEADER_ROW, ['DATE', '', '', '', '', '', '', '', '']] }; // no metric rows
+  const JUNE = { med: 120, chiro: 64, pod: 20, pt: 30, ivMa: 40, acu: 12, mo: 6, allergy: 8, covid: 3, telehealth: 5, newPatients: 31 };
+  const MAY = { med: 110, chiro: 60, pod: 18, pt: 28, ivMa: 36, acu: 10, mo: 5, allergy: 7, covid: 2, telehealth: 4, newPatients: 20 };
+  const PREV_JUNE = { med: 100, chiro: 55, pod: 16, pt: 25, ivMa: 33, acu: 9, mo: 4, allergy: 6, covid: 2, telehealth: 3, newPatients: 18 };
 
-  // MAD-29: prior-year value per metric (a single cell) → drives the additive yearAgo.
-  // Synthetic: ~90% of last-week as the year-ago figure, so YoY deltas are non-trivial.
-  for (const [name, [last]] of Object.entries(RANGE_VALUES)) {
-    w(names, `${name}PrevYear.json`)({ values: [[Math.round(last * 0.9)]] });
-  }
+  // Current-year file: month tabs (May, June populated; July EMPTY — a future month) + provider
+  // / microsoft.com tabs that selectMetricTabs EXCLUDES. The empty July tab must be SKIPPED so
+  // June=current, May=prior (MAD-41 AC-5). Tab names carry the real files' dirtiness.
+  w(g, 'worksheets.json')({
+    value: [
+      { name: 'May Totals Madison' }, { name: 'May Provider Totals ' },
+      { name: 'June Totals Madison' }, { name: 'June Provier Totals ' },
+      { name: 'July Totals Madison' }, { name: 'July Provider Totals ' }, // July empty (future month)
+      { name: 'microsoft.com:RD' },
+    ],
+  });
+  w(usedrange, 'June Totals Madison.json')(gridFor(JUNE));
+  w(usedrange, 'May Totals Madison.json')(gridFor(MAY));
+  w(usedrange, 'July Totals Madison.json')(emptyTab);
 
-  // MAD-28: month-to-date + prior-month totals per metric (single cells) → drive MoM.
-  // Synthetic: MTD ≈ 4× last-week, prior month ≈ 4.3× — so MoM deltas are non-trivial.
-  for (const [name, [last]] of Object.entries(RANGE_VALUES)) {
-    w(names, `${name}MTD.json`)({ values: [[last * 4]] });
-    w(names, `${name}PrevMonth.json`)({ values: [[Math.round(last * 4.3)]] });
-  }
+  // MAD-46: Provider Totals tabs — providers as row labels (same layout). June=current, May=prior;
+  // a trailing-space variant ("Bachman " / "Bachman") proves name normalization merges them.
+  const provGrid = (c) => ({
+    values: [
+      ['', 'Mon', 'Tues', 'Totals'],
+      ['DATE', 45663, 45664, ''],
+      ['Lisa', c.lisa, 0, c.lisa],
+      ['Bachman ', c.bachman, 0, c.bachman], // trailing space
+      ['TOTAL', 0, 0, 0],
+      ['Bachman', 0, c.bachman2, c.bachman2], // merges with "Bachman "
+      ['Mac', c.mac, 0, c.mac],
+    ],
+  });
+  w(usedrange, 'June Provier Totals .json')(provGrid({ lisa: 50, bachman: 30, bachman2: 4, mac: 20 }));
+  w(usedrange, 'May Provider Totals .json')(provGrid({ lisa: 45, bachman: 28, bachman2: 0, mac: 18 }));
 
-  // ── Graph: workbook connection (MAD-26) — drive item a share-URL / drive path resolves to,
-  // and a worksheet list proving read-only reachability. Synthetic refs only (no real drive). ──
+  // Prior-year file (YoY): one month tab → its values become the additive yearAgo.
+  w(g, 'worksheets-prevyear.json')({ value: [{ name: 'June Totals Madison' }, { name: 'microsoft.com:RD' }] });
+  w(usedrangePrev, 'June Totals Madison.json')(gridFor(PREV_JUNE));
+
+  // ── Graph: workbook connection (MAD-26) — drive item a share-URL / drive path resolves to.
+  // Synthetic refs only (no real drive). A connected read addresses item-9 → served the same
+  // current-year worksheets/grids above (graph.js fixture routing defaults to current). ──
   w(g, 'driveitem.json')({ id: 'item-9', name: 'Madison Weekly Report.xlsx', parentReference: { driveId: 'drive-1' } });
-  w(g, 'worksheets.json')({ value: [{ name: 'Week' }] });
 }

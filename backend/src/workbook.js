@@ -14,38 +14,65 @@ function configFile(file) {
   return file || config.workbookConfigPath;
 }
 
-// Read the persisted connection, or null when none exists (→ env-path fallback applies).
-// A missing/corrupt file is treated as "not connected", never an error.
-export function readWorkbook(file) {
+// MAD-27: the report can read MORE than one workbook (e.g. a prior-year file for YoY), so the
+// persisted state is an ARRAY of refs, each tagged with a role ('current' | 'prevYear'). The
+// store stays a small server-side JSON file (NON-PHI location refs only — never cell values),
+// so the backend remains DB-less with no PHI at rest.
+export const DEFAULT_ROLE = 'current';
+
+// All persisted connections as an array. BACK-COMPAT: a legacy single-object file (MAD-26)
+// reads as a one-element array tagged 'current'. Missing/corrupt → [] (→ env fallback).
+export function readWorkbooks(file) {
+  let raw;
   try {
-    return JSON.parse(readFileSync(configFile(file), 'utf8'));
+    raw = JSON.parse(readFileSync(configFile(file), 'utf8'));
   } catch {
-    return null;
+    return [];
   }
+  if (Array.isArray(raw)) return raw;
+  if (raw && raw.driveId) return [{ ...raw, role: raw.role || DEFAULT_ROLE }]; // legacy single object
+  return [];
 }
 
-// Persist ONLY the location reference (driveId/itemId/name/source) — never cell values.
-// Whatever extra keys (e.g. fetched cell values) the caller passes are deliberately dropped.
+// The connection for a role as a flat object, or null. readWorkbook() (no role) returns the
+// 'current' one — back-compat for callers/tests that expect a single connection.
+export function readWorkbook(file, role = DEFAULT_ROLE) {
+  return readWorkbooks(file).find((w) => (w.role || DEFAULT_ROLE) === role) || null;
+}
+
+// Persist ONLY the location reference (driveId/itemId/name/source/role) — never cell values.
+// Upserts by ROLE into the array, so connecting a prior-year file doesn't clobber the current
+// one (and re-connecting a role replaces it). Extra keys (e.g. fetched values) are dropped.
 export function saveWorkbook(ref, file) {
+  const role = ref.role || DEFAULT_ROLE;
   const rec = {
     driveId: ref.driveId,
     itemId: ref.itemId,
     name: ref.name,
     source: ref.source,
+    role,
     // tz-safe: connectedAt is an ISO-8601 UTC stamp for record-keeping only — never parsed
     // back or rendered as a time-of-day, so timezone/DST never enters in.
     connectedAt: new Date().toISOString(),
   };
+  const others = readWorkbooks(file).filter((w) => (w.role || DEFAULT_ROLE) !== role);
   const f = configFile(file);
   mkdirSync(dirname(f), { recursive: true });
-  writeFileSync(f, JSON.stringify(rec, null, 2));
+  writeFileSync(f, JSON.stringify([...others, rec], null, 2));
   return rec;
 }
 
-// The item reference reports read from, or null when nothing is persisted (env fallback).
-export function workbookRef(file) {
-  const wb = readWorkbook(file);
+// The item reference reports read from for a role, or null when nothing is persisted.
+export function workbookRef(file, role = DEFAULT_ROLE) {
+  const wb = readWorkbook(file, role);
   return wb && wb.driveId && wb.itemId ? { driveId: wb.driveId, itemId: wb.itemId } : null;
+}
+
+// Every persisted ref with both ids, tagged by role — what the reports route iterates.
+export function workbookRefs(file) {
+  return readWorkbooks(file)
+    .filter((w) => w.driveId && w.itemId)
+    .map((w) => ({ role: w.role || DEFAULT_ROLE, driveId: w.driveId, itemId: w.itemId, name: w.name }));
 }
 
 // The Graph base segment a workbook read addresses: the connected drive item when a
@@ -86,6 +113,7 @@ export async function connectWorkbook(input, deps) {
   const {
     resolveShareUrl, resolveDrivePath, workbookReachable,
     audit = () => {}, save = saveWorkbook, configFile: file, sessionId = 'none',
+    role = DEFAULT_ROLE,
   } = deps;
   const { kind, value } = classifyInput(input);
 
@@ -107,6 +135,6 @@ export async function connectWorkbook(input, deps) {
   }
   audit('validate', { sessionId, ref: ref.itemId, outcome: 'ok' });
 
-  const rec = save({ driveId: ref.driveId, itemId: ref.itemId, name: ref.name, source: kind }, file);
-  return { connected: true, name: rec.name, source: kind };
+  const rec = save({ driveId: ref.driveId, itemId: ref.itemId, name: ref.name, source: kind, role }, file);
+  return { connected: true, name: rec.name, source: kind, role: rec.role };
 }
