@@ -1,0 +1,31 @@
+{
+  "issueKey": "MAD-46",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "Per-provider parse: Provider Totals month tabs + Chiro Numbers file (providers as row labels, stacked weekly blocks) summed per provider per month via the row-label grid parser; TOTAL/DATE/day-header rows excluded"
+    },
+    {
+      "id": "AC-2",
+      "text": "Provider-name normalization: case/whitespace variants (Gunn/Gunn , Osman/osman) merge to one provider; genuinely different names stay separate"
+    },
+    {
+      "id": "AC-3",
+      "kind": "timezone",
+      "text": "Current vs prior month, calendar-capped (MAD-45), year-aware for the Chiro file year-suffixed tabs; no future/phantom data; current month computed in the practice zone"
+    },
+    {
+      "id": "AC-4",
+      "text": "Additive DTO + By-provider panel: /api/reports adds a providers section (name, current, prior) without changing the metrics DTO; Reports renders a color-blind-safe panel sorted by encounters"
+    },
+    {
+      "id": "AC-5",
+      "text": "Chiro file included (multi-file): its chiropractors are part of the breakdown; externalLinks read as cached values"
+    },
+    {
+      "id": "AC-6",
+      "kind": "audit",
+      "text": "HIPAA audit + PHI-safe logging: read audited (item refs, no cell values); unmapped/parse warnings carry references only, never cell values or the raw URL (provider names are staff, not patient PHI)"
+    }
+  ]
+}

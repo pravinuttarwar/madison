@@ -264,6 +264,24 @@ test('[AC-1][AC-2] GET /api/reports — canonical metrics from the grid parser (
   assert.ok(!body.metrics.some((m) => /wombat/i.test(m.key) || /wombat/i.test(m.label)));
 });
 
+// MAD-46 — the additive `providers` section: per-provider counts from the Provider Totals tabs
+// (June=current, May=prior), name-normalized (Bachman + "Bachman " merged), sorted by current.
+test('[AC-1][AC-4] GET /api/reports — additive per-provider breakdown (name-normalized, sorted)', async () => {
+  const { status, body } = await getJson('/api/reports');
+  assert.equal(status, 200);
+  assert.ok(Array.isArray(body.providers) && body.providers.length >= 3);
+  const byName = Object.fromEntries(body.providers.map((p) => [p.name, p]));
+  assert.equal(byName.Lisa.current, 50);
+  assert.equal(byName.Lisa.prior, 45);
+  // "Bachman " (30) + "Bachman" (4) merge to one provider → 34
+  assert.equal(byName.Bachman.current, 34);
+  // sorted by current encounters, descending
+  const currents = body.providers.map((p) => p.current);
+  assert.deepEqual(currents, [...currents].sort((a, b) => b - a));
+  // existing metrics DTO is unchanged (additive)
+  assert.equal(body.metrics.length, 11);
+});
+
 // [AC-1] MAD-29: with prior-year ranges configured (FIXTURE_ENV), each metric carries an
 // additive yearAgo and totalEncounters.yearAgo is their sum — through the live route.
 test('[AC-1] GET /api/reports — additive year-ago (YoY) values from prior-year named ranges', async () => {

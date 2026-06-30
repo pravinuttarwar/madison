@@ -225,6 +225,22 @@ export function writeFixtures(dir, now = new Date()) {
   w(usedrange, 'May Totals Madison.json')(gridFor(MAY));
   w(usedrange, 'July Totals Madison.json')(emptyTab);
 
+  // MAD-46: Provider Totals tabs — providers as row labels (same layout). June=current, May=prior;
+  // a trailing-space variant ("Bachman " / "Bachman") proves name normalization merges them.
+  const provGrid = (c) => ({
+    values: [
+      ['', 'Mon', 'Tues', 'Totals'],
+      ['DATE', 45663, 45664, ''],
+      ['Lisa', c.lisa, 0, c.lisa],
+      ['Bachman ', c.bachman, 0, c.bachman], // trailing space
+      ['TOTAL', 0, 0, 0],
+      ['Bachman', 0, c.bachman2, c.bachman2], // merges with "Bachman "
+      ['Mac', c.mac, 0, c.mac],
+    ],
+  });
+  w(usedrange, 'June Provier Totals .json')(provGrid({ lisa: 50, bachman: 30, bachman2: 4, mac: 20 }));
+  w(usedrange, 'May Provider Totals .json')(provGrid({ lisa: 45, bachman: 28, bachman2: 0, mac: 18 }));
+
   // Prior-year file (YoY): one month tab → its values become the additive yearAgo.
   w(g, 'worksheets-prevyear.json')({ value: [{ name: 'June Totals Madison' }, { name: 'microsoft.com:RD' }] });
   w(usedrangePrev, 'June Totals Madison.json')(gridFor(PREV_JUNE));

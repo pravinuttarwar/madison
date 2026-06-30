@@ -72,11 +72,16 @@ export type CalendarData = { today: ScheduleItem[]; week: CalendarDay[] };
 
 export type FinancialsData = { weekly: WeeklyFinancial; daily: DailyFinancial; revenue: RevenueFinancial; receivables: ReceivablesFinancial; cashFlow: CashFlowFinancial };
 
+// MAD-46: a per-provider breakdown (staff names, not patient PHI). Additive — present only
+// when provider tabs are connected/readable.
+export type ProviderRow = { name: string; current: number; prior: number };
+
 export type ReportsData = {
   weekNumber: number;
   metrics: WeeklyMetric[];
   encountersBySpecialty: EncounterRow[];
   totalEncounters: { last: number; prior: number; yearAgo?: number; monthToDate?: number; prevMonth?: number };
+  providers?: ProviderRow[];
 };
 
 // The Dashboard is a composed (BFF) view — the backend fans out to the sources it

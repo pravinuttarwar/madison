@@ -136,6 +136,30 @@ const REPORT_WITH_MOM = {
   totalEncounters: { last: 306, prior: 289, monthToDate: 1180, prevMonth: 1275 },
 };
 
+// MAD-46 — the additive "By provider" panel renders when the report carries providers.
+describe('Reports — by-provider breakdown (MAD-46)', () => {
+  it('[AC-4] renders a By provider panel with the provider rows', async () => {
+    stubReports({
+      ...REPORT_WOW_ONLY,
+      providers: [
+        { name: 'Gunn', current: 88, prior: 70 },
+        { name: 'DeRosa', current: 86, prior: 60 },
+      ],
+    });
+    render(<Reports />);
+    expect(await screen.findByText('By provider')).toBeTruthy();
+    expect(screen.getByText('Gunn')).toBeTruthy();
+    expect(screen.getByText('DeRosa')).toBeTruthy();
+  });
+
+  it('[AC-4] omits the By provider panel when there are no providers (additive)', async () => {
+    stubReports(REPORT_WOW_ONLY);
+    render(<Reports />);
+    await screen.findByText(/last week/i);
+    expect(screen.queryByText('By provider')).toBeNull();
+  });
+});
+
 describe('Reports — month-over-month comparison (MAD-28)', () => {
   it('[AC-2] shows a month-over-month column/indicator when month values are present', async () => {
     stubReports(REPORT_WITH_MOM);
