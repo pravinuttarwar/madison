@@ -877,6 +877,7 @@ export function splitWeeklyBlocks(grid) {
 // An Excel date serial → its UTC calendar date. Excel's day 0 is 1899-12-30; we build the instant
 // with Date.UTC and read it back with getUTC* so the calendar day is identical in every timezone.
 function excelSerialToUTCDate(serial) {
+  // tz-safe: pure UTC arithmetic on a data serial (Excel day 0 = 1899-12-30); never reads a wall clock.
   return new Date(Date.UTC(1899, 11, 30) + Math.round(serial) * 86_400_000);
 }
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
