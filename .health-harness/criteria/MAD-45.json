@@ -1,0 +1,31 @@
+{
+  "issueKey": "MAD-45",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "Calendar-capped month selection: tabs for months after the current calendar month excluded; current = latest remaining tab with data, prior = next with data; phantom future-month data never selected"
+    },
+    {
+      "id": "AC-2",
+      "text": "App calculates, zero owner input: sums the selected month grid via the MAD-41 parser from the owner existing monthly tabs, no owner-maintained summary/named ranges"
+    },
+    {
+      "id": "AC-3",
+      "text": "Empty current-month start handled: when the current month tab has no data yet, the latest past month with data is current; never an empty or future month"
+    },
+    {
+      "id": "AC-4",
+      "kind": "timezone",
+      "text": "Timezone-correct month boundary: current month computed in the practice zone America/New_York (e.g. 2026-07-01T02:00Z is June in ET); proven by a DST/offset matrix test"
+    },
+    {
+      "id": "AC-5",
+      "text": "DTO byte-compatible so MAD-43 Reports renders unchanged"
+    },
+    {
+      "id": "AC-6",
+      "kind": "audit",
+      "text": "HIPAA audit + PHI-safe logging: workbook read audited (item reference, no cell values); unmapped columns surfaced by reference only, never cell values or the raw URL"
+    }
+  ]
+}

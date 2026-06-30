@@ -258,11 +258,15 @@ router.get('/reports', route('spreadsheet',
       ? prevYearRefs
       : (config.graph.prevYearSpreadsheetPath ? [{ envPath: config.graph.prevYearSpreadsheetPath }] : []);
 
-    // Read ONE workbook source → { current, prior } metric count-maps. Read the metric tabs
-    // from the LATEST backward, parsing each, and keep the first two that have data — so empty
-    // trailing/future month tabs are skipped (MAD-41 AC-5). Position/data-based; no date math.
-    const readSource = async (src) => {
-      const metricTabs = T.selectMetricTabs(await graph.workbookWorksheetNames(src));
+    // Read ONE workbook source → { current, prior } metric count-maps. We read the metric tabs
+    // from the LATEST backward and keep the first two WITH DATA. For the current-year file we
+    // first CAP to the current calendar month (MAD-45) so a phantom future-month tab (e.g. stray
+    // December entries) can't be picked over the real current month; the prior-year file is NOT
+    // capped (all its months are in the past). The current-month tab is kept even if empty — the
+    // latest-with-data scan then falls back to the last month with data (AC-3).
+    const readSource = async (src, capToMonth) => {
+      let metricTabs = T.selectMetricTabs(await graph.workbookWorksheetNames(src));
+      if (capToMonth) metricTabs = T.capMetricTabsToMonth(metricTabs, new Date()); // current month, practice zone
       const item = (src && src.itemId) || 'env';
       const collected = []; // latest-first: [current, prior]
       for (let i = metricTabs.length - 1; i >= 0 && collected.length < 2; i -= 1) {
@@ -277,12 +281,12 @@ router.get('/reports', route('spreadsheet',
       return { current: collected[0] || {}, prior: collected[1] || {} };
     };
 
-    // Aggregate current/prior across all current sources (files × tabs — AC-3).
-    const currentReads = await Promise.all(currentSources.map(readSource));
+    // Aggregate current/prior across all current sources — capped to the current month (MAD-45).
+    const currentReads = await Promise.all(currentSources.map((src) => readSource(src, true)));
     const current = T.mergeCounts(currentReads.map((r) => r.current));
     const prior = T.mergeCounts(currentReads.map((r) => r.prior));
-    // YoY: the prior-year file's current-period tab → additive yearAgo (omitted when absent).
-    const prevYearReads = await Promise.all(prevYearSources.map(readSource));
+    // YoY: the prior-year file's latest tab → additive yearAgo (NOT capped — it's a past year).
+    const prevYearReads = await Promise.all(prevYearSources.map((src) => readSource(src, false)));
     const yearAgo = T.mergeCounts(prevYearReads.map((r) => r.current));
 
     // Audit the workbook READ once per request — item reference(s) + outcome, never cell values (AC-8).

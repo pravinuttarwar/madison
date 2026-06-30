@@ -537,6 +537,43 @@ export function selectMetricTabs(names) {
   });
 }
 
+// ── MAD-45: calendar-capped month selection ───────────────────────────────────
+// The connected current-role workbook is the current YEAR, so a tab is "in the future" iff its
+// month is after the current calendar month. We drop those (this is the fix for MAD-41 picking
+// a phantom future month like December over the real current month) BEFORE the latest-with-data
+// scan. The owner maintains nothing; the app still does all the summing.
+export const PRACTICE_TZ = 'America/New_York';
+const MONTH_PREFIXES = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+// Month index (0-11) from a tab name, tolerant of the real files' dirtiness ("Janurary",
+// "AugustTotals Madison"); null when no month name is present (e.g. a provider tab).
+export function monthIndexFromTabName(name) {
+  const n = String(name == null ? '' : name).toLowerCase().replace(/[^a-z]/g, '');
+  for (let i = 0; i < 12; i += 1) if (n.startsWith(MONTH_PREFIXES[i])) return i;
+  return null;
+}
+
+// The month index (0-11) of an instant IN a given IANA zone — explicit, so the month boundary
+// is the PRACTICE's, not the host's. Near month-end the two differ (e.g. 2026-07-01T02:00Z is
+// June in ET) — getting this wrong would show the wrong month for users in another zone (AC-4).
+export function monthInZone(now, tz = PRACTICE_TZ) {
+  const part = new Intl.DateTimeFormat('en-US', { timeZone: tz, month: 'numeric' })
+    .formatToParts(now).find((p) => p.type === 'month');
+  return Number(part.value) - 1;
+}
+
+// Keep only metric tabs whose month is ≤ the current calendar month (in the practice zone) —
+// future months in the current-year file are excluded. Tabs with no recognizable month are
+// kept (we don't guess them away). The current month tab is KEPT even if empty; the
+// latest-with-data scan downstream falls back to the last month that actually has data (AC-3).
+export function capMetricTabsToMonth(tabs, now, tz = PRACTICE_TZ) {
+  const curMonth = monthInZone(now, tz);
+  return (Array.isArray(tabs) ? tabs : []).filter((t) => {
+    const mi = monthIndexFromTabName(t);
+    return mi == null || mi <= curMonth;
+  });
+}
+
 // "New Patients: 31" (and "New Patient: 7", trailing notes) → 31. Non-matching cell → null.
 function newPatientsInCell(cell) {
   const m = String(cell == null ? '' : cell).match(/new\s+patient[s]?\s*:?\s*(\d+)/i);
