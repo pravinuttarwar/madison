@@ -21,6 +21,13 @@ const RANGE_NAMES = {
 const PREV_YEAR_RANGE_NAMES = Object.fromEntries(
   Object.entries(RANGE_NAMES).map(([k, name]) => [k, `${name}PrevYear`]),
 );
+// MAD-28: month-to-date + prior-month named ranges → drives the MoM comparison.
+const MTD_RANGE_NAMES = Object.fromEntries(
+  Object.entries(RANGE_NAMES).map(([k, name]) => [k, `${name}MTD`]),
+);
+const PREV_MONTH_RANGE_NAMES = Object.fromEntries(
+  Object.entries(RANGE_NAMES).map(([k, name]) => [k, `${name}PrevMonth`]),
+);
 
 // Env the spawned server needs for the live path to read these fixtures.
 export const FIXTURE_ENV = {
@@ -28,6 +35,9 @@ export const FIXTURE_ENV = {
   SPREADSHEET_NAMED_RANGES: JSON.stringify(RANGE_NAMES),
   // MAD-29: prior-year ranges → /api/reports adds an additive yearAgo per metric.
   SPREADSHEET_PREV_YEAR_RANGES: JSON.stringify(PREV_YEAR_RANGE_NAMES),
+  // MAD-28: month-to-date + prior-month ranges → additive monthToDate + prevMonth (MoM).
+  SPREADSHEET_MTD_RANGES: JSON.stringify(MTD_RANGE_NAMES),
+  SPREADSHEET_PREV_MONTH_RANGES: JSON.stringify(PREV_MONTH_RANGE_NAMES),
   // workbookNamedRange() requires a configured path before it reads (the fixtures seam
   // ignores the value). Synthetic — never a real drive path.
   SPREADSHEET_DRIVE_PATH: '/synthetic/Madison Weekly Report.xlsx',
@@ -171,6 +181,13 @@ export function writeFixtures(dir, now = new Date()) {
   // Synthetic: ~90% of last-week as the year-ago figure, so YoY deltas are non-trivial.
   for (const [name, [last]] of Object.entries(RANGE_VALUES)) {
     w(names, `${name}PrevYear.json`)({ values: [[Math.round(last * 0.9)]] });
+  }
+
+  // MAD-28: month-to-date + prior-month totals per metric (single cells) → drive MoM.
+  // Synthetic: MTD ≈ 4× last-week, prior month ≈ 4.3× — so MoM deltas are non-trivial.
+  for (const [name, [last]] of Object.entries(RANGE_VALUES)) {
+    w(names, `${name}MTD.json`)({ values: [[last * 4]] });
+    w(names, `${name}PrevMonth.json`)({ values: [[Math.round(last * 4.3)]] });
   }
 
   // ── Graph: workbook connection (MAD-26) — drive item a share-URL / drive path resolves to,

@@ -68,6 +68,8 @@ export default function Reports() {
   const maxEnc = Math.max(...ENCOUNTERS_BY_SPECIALTY.map((e) => e.last));
   // MAD-29: a year-ago column appears only when the workbook supplies prior-year values.
   const hasYoY = WEEKLY_METRICS.some((m) => m.yearAgo !== undefined);
+  // MAD-28: a month-over-month column appears only when the workbook supplies month values.
+  const hasMoM = WEEKLY_METRICS.some((m) => m.monthToDate !== undefined && m.prevMonth !== undefined);
 
   return (
     <div className="space-y-5">
@@ -102,6 +104,12 @@ export default function Reports() {
               <Trend delta={pctChange(TOTAL_ENCOUNTERS.last, TOTAL_ENCOUNTERS.yearAgo)} unit="%" />
             </div>
           )}
+          {hasMoM && TOTAL_ENCOUNTERS.monthToDate !== undefined && TOTAL_ENCOUNTERS.prevMonth !== undefined && (
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span>MoM</span>
+              <Trend delta={pctChange(TOTAL_ENCOUNTERS.monthToDate, TOTAL_ENCOUNTERS.prevMonth)} unit="%" />
+            </div>
+          )}
         </div>
         {WEEKLY_METRICS.slice(0, 3).map((m) => (
           <div key={m.key} className="rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -125,6 +133,12 @@ export default function Reports() {
                   <span className="flex items-center gap-2 tabular-nums text-muted-foreground">
                     {e.last}
                     <Trend delta={e.last - e.prior} />
+                    {hasMoM && e.monthToDate !== undefined && e.prevMonth !== undefined && (
+                      <span className="flex items-center gap-1">
+                        <span className="text-[10px] uppercase tracking-wide">MoM</span>
+                        <Trend delta={e.monthToDate - e.prevMonth} />
+                      </span>
+                    )}
                     {hasYoY && e.yearAgo !== undefined && (
                       <span className="flex items-center gap-1">
                         <span className="text-[10px] uppercase tracking-wide">YoY</span>
@@ -149,6 +163,7 @@ export default function Reports() {
                   <th className="py-2 px-3 text-right font-medium">Last week</th>
                   <th className="py-2 px-3 text-right font-medium">Prior</th>
                   <th className="py-2 px-3 text-right font-medium">Change</th>
+                  {hasMoM && <th className="py-2 px-3 text-right font-medium">MoM</th>}
                   {hasYoY && <th className="py-2 pl-3 text-right font-medium">YoY</th>}
                 </tr>
               </thead>
@@ -161,6 +176,11 @@ export default function Reports() {
                     <td className="py-2.5 px-3 text-right">
                       <Trend delta={m.last - m.prior} />
                     </td>
+                    {hasMoM && (
+                      <td className="py-2.5 px-3 text-right">
+                        {m.monthToDate !== undefined && m.prevMonth !== undefined ? <Trend delta={m.monthToDate - m.prevMonth} /> : <span className="text-muted-foreground">—</span>}
+                      </td>
+                    )}
                     {hasYoY && (
                       <td className="py-2.5 pl-3 text-right">
                         {m.yearAgo !== undefined ? <Trend delta={m.last - m.yearAgo} /> : <span className="text-muted-foreground">—</span>}
@@ -172,7 +192,7 @@ export default function Reports() {
             </table>
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
-            Change is the week-over-week count difference{hasYoY ? '; YoY compares against the same period last year' : ''}. We'd
+            Change is the week-over-week count difference{hasMoM ? '; MoM compares month-to-date against the prior month' : ''}{hasYoY ? '; YoY compares against the same period last year' : ''}. We'd
             mirror your exact metric layout and named ranges once you share the source file.
           </p>
         </Panel>
