@@ -34,6 +34,18 @@ export function workbookEvent(action, { sessionId = 'none', ref = 'none', outcom
   log(`audit workbook ${action} session=${sessionId} item=${ref} → ${outcome} @${now()}`);
 }
 
+// Tasks-access audit entry (MAD-37, AC-5/AC-6). Records WHO (session reference) · WHAT
+// (action: read + the OWNER reference — a user id or 'self', never a name) · how many items
+// (count, a number) · WHEN · OUTCOME (ok | denied) for the "tasks by owner" read — the
+// "whose tasks were read, when, with what result" trail. It receives only references and a
+// COUNT: NEVER a task title or any task content (PHI-adjacent), so the audit line is safe to
+// log on every owner read, including a denied/unreadable one. `log` and `now` are injectable.
+// tz-safe: now() is an ISO-8601 UTC audit timestamp for machine ordering — never parsed back
+// or rendered to a user, so timezone/DST never enters in.
+export function tasksEvent(action, { sessionId = 'none', owner = 'none', count = 0, outcome = 'ok' } = {}, log = console.log, now = () => new Date().toISOString()) {
+  log(`audit tasks ${action} session=${sessionId} owner=${owner} count=${count} → ${outcome} @${now()}`);
+}
+
 // Express middleware factory. `log` and `now` are injectable for tests.
 // tz-safe: now() is used only for an elapsed-millisecond duration (end - start); no
 // calendar/user-facing time, so timezone/DST never enters in.

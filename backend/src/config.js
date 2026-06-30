@@ -60,6 +60,18 @@ export const config = {
     categoryRules: safeJson(env.CATEGORY_RULES) || {},
   },
 
+  // MAD-37: multi-owner "tasks by owner" board. teamUpns = the configured team members
+  // (UPNs/emails) whose To Do is read app-only via Tasks.Read.All. This is the ALLOWLIST —
+  // the server only ever reads these owners, never iterates all tenant users (least
+  // privilege over the tenant-wide app scope). Empty → the Tasks page stays single-user
+  // (the signed-in person's own To Do, delegated).
+  tasks: {
+    teamUpns: (env.TASKS_TEAM_USERS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  },
+
   qbo: {
     environment: env.QBO_ENV || 'sandbox',
     clientId: env.QBO_CLIENT_ID || '',

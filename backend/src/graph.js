@@ -1,5 +1,5 @@
 import { config } from './config.js';
-import { graphToken } from './auth.js';
+import { graphToken, appToken } from './auth.js';
 import { loadFixture } from './fixtures.js';
 import { workbookBase, workbookRef } from './workbook.js';
 
@@ -16,6 +16,16 @@ function graphFixture(reqPath) {
   if (reqPath.includes("mailFolders('sentitems')")) return loadFixture('graph', 'sent.json');
   if (reqPath.includes('conversationId eq')) return loadFixture('graph', 'conversation.json');
   if (reqPath.includes('/calendarView')) return loadFixture('graph', 'calendar.json');
+  // MAD-37 app-only owner resolve: /users/{upn}?$select=id,displayName,userPrincipalName.
+  const uResolve = reqPath.match(/^\/users\/([^/?]+)\?\$select=id,displayName/);
+  if (uResolve) return loadFixture('graph', 'users', `${decodeURIComponent(uResolve[1])}.json`);
+  // MAD-37 multi-owner To Do: /users/{id}/todo/lists[/{listId}/tasks]. Serve a PER-OWNER
+  // fixture when one exists (lets a fixture give each owner a distinct task set, so owner
+  // isolation is observable), else fall through to the shared single-user To Do fixtures.
+  const uTasks = reqPath.match(/\/users\/([^/]+)\/todo\/lists\/[^/]+\/tasks/);
+  if (uTasks) { try { return loadFixture('graph', 'users', `${uTasks[1]}-tasks.json`); } catch { /* shared */ } }
+  const uLists = reqPath.match(/\/users\/([^/]+)\/todo\/lists(\?|$)/);
+  if (uLists) { try { return loadFixture('graph', 'users', `${uLists[1]}-lists.json`); } catch { /* shared */ } }
   if (/\/todo\/lists\/[^/]+\/tasks/.test(reqPath)) return loadFixture('graph', 'todo-tasks.json');
   if (reqPath.includes('/todo/lists')) return loadFixture('graph', 'todo-lists.json');
   // MAD-26 workbook connection: share-URL resolve, drive-path resolve, reachability check.
@@ -37,6 +47,55 @@ async function get(path, extraHeaders = {}) {
   });
   if (!res.ok) throw new Error(`Graph GET ${path} → ${res.status}: ${await res.text()}`);
   return res.json();
+}
+
+// ── App-only reads (MAD-37 multi-owner tasks) — the app's Application permissions ──────
+// Read-only GET with the app-only token, used ONLY for the configured team's To Do. In
+// fixtures mode it resolves from the same synthetic fixtures as get(), so the offline gate
+// exercises the real route + transforms without any token/network.
+async function appGet(path) {
+  if (config.fixturesMode) return graphFixture(path);
+  const token = await appToken();
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+  });
+  if (!res.ok) {
+    const err = new Error(`Graph(app) GET ${path} → ${res.status}`); // body omitted (can carry detail)
+    err.status = res.status;
+    throw err;
+  }
+  return res.json();
+}
+
+// Resolve a UPN/email → { id, name, upn } via User.ReadBasic.All (app-only). Cached in
+// memory keyed by UPN — user ids are stable, so each owner resolves once and one owner's
+// resolution never reuses another's. Returns null when the user can't be read (skipped,
+// not fatal).
+const _userCache = new Map();
+export async function resolveUser(upn) {
+  const key = upn.toLowerCase();
+  if (_userCache.has(key)) return _userCache.get(key);
+  let val = null;
+  try {
+    const j = await appGet(`/users/${encodeURIComponent(upn)}?$select=id,displayName,userPrincipalName`);
+    val = { id: j.id, name: j.displayName, upn: j.userPrincipalName };
+  } catch { /* unreadable owner → null */ }
+  if (val) _userCache.set(key, val);
+  return val;
+}
+
+// All of one user's OPEN To Do tasks across their lists (Tasks.Read.All, app-only). The
+// per-list fetches run in PARALLEL. Completed tasks are filtered at the source (we never
+// render them) to keep the payload small.
+export async function userTodoTasks(userId) {
+  const lists = (await appGet(`/users/${userId}/todo/lists`)).value || [];
+  const perList = await Promise.all(
+    lists.map(async (l) => {
+      const r = await appGet(`/users/${userId}/todo/lists/${encodeURIComponent(l.id)}/tasks?$filter=status%20ne%20'completed'&$top=200`);
+      return (r.value || []).map((t) => ({ ...t, _list: l.displayName }));
+    }),
+  );
+  return perList.flat();
 }
 
 // Inbox — important/recent messages.
