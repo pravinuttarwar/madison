@@ -19,6 +19,7 @@ import {
   getSourceStatus,
   getWorkbookConnection,
   connectWorkbook,
+  getAuthScopes,
   type SourceMode,
   type WorkbookConnection,
 } from '@/lib/api';
@@ -82,6 +83,32 @@ function ConnectButton({
     >
       {children}
     </button>
+  );
+}
+
+// MAD-42 — what THIS Microsoft sign-in was actually GRANTED (the token never leaves the
+// backend; only scope names are read). Renders nothing until signed in — the getter returns
+// 401 when not connected, surfaced as an absent state. When Sites.Read.All is missing, it
+// explains why a SharePoint-hosted workbook won't resolve (OneDrive still works).
+function MicrosoftAccess() {
+  const { data } = useApi(getAuthScopes, []);
+  if (!data || data.delegated.length === 0) return null;
+  const hasSites = data.delegated.some((s) => /^Sites\.Read/i.test(s));
+  return (
+    <div className="mt-3 rounded-lg border border-border bg-muted/20 px-3 py-2.5">
+      <div className="text-xs font-semibold text-foreground">Granted to this sign-in</div>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {data.delegated.map((s) => (
+          <code key={s} className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{s}</code>
+        ))}
+      </div>
+      {!hasSites && (
+        <p className="mt-2 flex items-start gap-1.5 text-[11px] text-muted-foreground">
+          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-warning" aria-hidden />
+          <span>SharePoint-hosted files need Sites.Read.All (not currently granted). OneDrive workbooks work today.</span>
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -234,6 +261,9 @@ export default function Connections() {
           <ScopeRow icon={ListChecks} label="Tasks — To Do / Planner" scope="Tasks.Read" />
           <ScopeRow icon={FileSpreadsheet} label="Weekly spreadsheet — OneDrive / SharePoint" scope="Files.Read" />
         </ul>
+
+        {/* MAD-42 — what this sign-in was actually granted + a SharePoint-access hint. */}
+        <MicrosoftAccess />
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <ConnectButton variant="microsoft" onClick={() => setRevealed('microsoft')}>

@@ -211,6 +211,15 @@ export async function connectWorkbook(input: string): Promise<WorkbookConnectRes
   return (await res.json()) as WorkbookConnectResult;
 }
 
+// ── MAD-42: granted Microsoft scopes (diagnostic) ────────────────────────────
+// Scope NAMES only — the access token never leaves the backend. `delegated` is what this
+// sign-in was actually granted (the token's scp claim); `requested` is what we ask for.
+export type AuthScopes = { requested: string[]; delegated: string[]; app: string[] };
+
+export function getAuthScopes(): Promise<AuthScopes> {
+  return fetchJson<AuthScopes>('/api/auth/scopes');
+}
+
 export function getDashboard(view: ViewMode): Promise<DashboardData> {
   return fetchJson<DashboardData>(`/api/dashboard?view=${view}`);
 }

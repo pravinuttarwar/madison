@@ -66,9 +66,10 @@ test('[AC-4] persistence stores only the location reference and survives a resta
     assert.equal(reloaded.itemId, 'item-9');
     assert.equal(reloaded.name, 'Weekly Report.xlsx');
     assert.equal(reloaded.source, 'share-url');
-    // Drive-path only, never cell values.
+    // Drive-path only, never cell values. Pin the EXACT persisted key set — time-independent
+    // (the older `.includes('22')` check false-failed when the connectedAt timestamp held "22").
     assert.ok(!('cellValues' in reloaded), 'cell values must not be persisted');
-    assert.ok(!JSON.stringify(reloaded).includes('22'), 'no cell values anywhere in the record');
+    assert.deepEqual(Object.keys(reloaded).sort(), ['connectedAt', 'driveId', 'itemId', 'name', 'role', 'source']);
 
     // workbookRef exposes just the item reference reports read from.
     assert.deepEqual(workbookRef(file), { driveId: 'drive-1', itemId: 'item-9' });
