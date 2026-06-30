@@ -1,0 +1,43 @@
+{
+  "issueKey": "MAD-27",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "Tolerant grid parser (Strategy A): /api/reports reads free-typed Totals/Provider tabs directly from grids; named-range read path removed"
+    },
+    {
+      "id": "AC-2",
+      "text": "Header normalization/aliasing: header variants resolve to canonical metric/provider keys; unrecognized header skipped and surfaced as unmapped-column reference (no cell values)"
+    },
+    {
+      "id": "AC-3",
+      "text": "Aggregate across files + month-tabs: counts summed across relevant tabs and files, not a single canonical tab"
+    },
+    {
+      "id": "AC-4",
+      "text": "External links read as cached values, never resolved/fetched"
+    },
+    {
+      "id": "AC-5",
+      "text": "Multi-URL connection persisted as JSON (no DB, no cell values at rest), replacing single-connection + named-range config"
+    },
+    {
+      "id": "AC-6",
+      "text": "Output DTO byte-compatible so MAD-28 (MoM) and MAD-29 (YoY) keep working"
+    },
+    {
+      "id": "AC-7",
+      "text": "Graceful degradation: missing tab/empty grid/malformed cell degrades to 0 or omitted, endpoint never throws"
+    },
+    {
+      "id": "AC-8",
+      "kind": "audit",
+      "text": "Audit the workbook read: session/who, action=read + item reference(s), when, outcome, no cell values"
+    },
+    {
+      "id": "AC-9",
+      "kind": "app-logging",
+      "text": "PHI-safe logging: parse-error logs carry sheet/tab names, metric keys, item references only, never raw cell values"
+    }
+  ]
+}
