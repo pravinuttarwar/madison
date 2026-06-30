@@ -1,0 +1,30 @@
+{
+  "issueKey": "MAD-48",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "24h cache: a successful /api/reports read is served from cache on reload within 24h without re-reading the workbook"
+    },
+    {
+      "id": "AC-2",
+      "text": "Force-refresh: GET /api/reports?refresh=1 bypasses the cache, re-reads the workbook, and replaces the cached payload"
+    },
+    {
+      "id": "AC-3",
+      "text": "Per-session cache: each visitor session caches its report separately (session-scoped key); never cross-served"
+    },
+    {
+      "id": "AC-4",
+      "text": "Errors not cached: a failed/empty read (401/not-set-up/upstream error) caches nothing; a later request re-attempts"
+    },
+    {
+      "id": "AC-5",
+      "kind": "audit",
+      "text": "Audit only on the actual read: a cache hit emits no workbook-read audit; the read audit fires only on a real upstream read (miss or refresh)"
+    },
+    {
+      "id": "AC-6",
+      "text": "Refresh button on Reports re-fetches with refresh=1 and updates the view"
+    }
+  ]
+}

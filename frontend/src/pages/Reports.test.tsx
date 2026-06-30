@@ -136,6 +136,25 @@ const REPORT_WITH_MOM = {
   totalEncounters: { last: 306, prior: 289, monthToDate: 1180, prevMonth: 1275 },
 };
 
+// MAD-48 — the Refresh button forces a server re-read via /api/reports?refresh=1.
+describe('Reports — refresh button (MAD-48)', () => {
+  it('[AC-6] clicking Refresh re-fetches the report with refresh=1', async () => {
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', (req: RequestInfo | URL) => {
+      const url = String(req);
+      urls.push(url);
+      if (url.includes('/api/reports/connection')) return Promise.resolve({ ok: true, status: 200, json: async () => ({ connected: true, name: 'Weekly.xlsx', via: 'connection' }) });
+      if (url.includes('/api/auth/scopes')) return Promise.resolve({ ok: true, status: 200, json: async () => ({ requested: [], delegated: [], app: [] }) });
+      return Promise.resolve({ ok: true, status: 200, json: async () => REPORT_WOW_ONLY });
+    });
+    render(<Reports />);
+    await screen.findByText(/last week/i);
+    expect(urls.some((u) => u.includes('/api/reports?refresh=1'))).toBe(false); // not on first load
+    fireEvent.click(screen.getByRole('button', { name: /refresh/i }));
+    await waitFor(() => expect(urls.some((u) => u.includes('/api/reports?refresh=1'))).toBe(true));
+  });
+});
+
 // MAD-46 — the additive "By provider" panel renders when the report carries providers.
 describe('Reports — by-provider breakdown (MAD-46)', () => {
   it('[AC-4] renders a By provider panel with the provider rows', async () => {

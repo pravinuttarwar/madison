@@ -246,8 +246,15 @@ router.get('/financials', route('quickbooks',
 // tabs AND files. Period tabs are chosen by POSITION (latest = current, previous = prior) — no
 // date math, so no timezone concerns. A connected prior-year workbook supplies the additive
 // year-ago values (YoY). The DTO shape is unchanged (back-compat — AC-6).
+// MAD-48: the report is the slow path (lists worksheets + many used-range reads), and the data
+// changes ~daily at most — so cache the payload for 24h per session, with a ?refresh=1 bypass
+// (a Refresh button). The whole producer is cached, so a cache HIT does no upstream read and
+// emits no spurious workbook-read audit (the audit lives inside the producer).
+export const REPORT_TTL_MS = 24 * 60 * 60 * 1000; // tz-safe: a fixed cache duration, not a calendar time
+export function reportCacheTtl(refresh) { return refresh ? 0 : REPORT_TTL_MS; }
+
 router.get('/reports', route('spreadsheet',
-  async () => {
+  async (req) => cached(sk('reports'), reportCacheTtl(req?.query?.refresh === '1'), async () => {
     const sessionId = currentSession()?.id || 'none';
     const refs = workbookRefs(); // [{ role, driveId, itemId, name }] — persisted connections
     const currentRefs = refs.filter((r) => r.role === 'current');
@@ -324,7 +331,7 @@ router.get('/reports', route('spreadsheet',
     const dto = T.reportsFromGrids({ current, prior, yearAgo: Object.keys(yearAgo).length ? yearAgo : undefined });
     if (providers.length) dto.providers = providers; // additive section (MAD-46)
     return dto;
-  },
+  }),
 ));
 
 // ── weekly-report workbook CONNECTION (MAD-26: paste → resolve → validate → persist) ──

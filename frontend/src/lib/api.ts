@@ -182,8 +182,10 @@ export function getFinancials(): Promise<FinancialsData> {
   return fetchJson<FinancialsData>('/api/financials');
 }
 
-export function getReports(): Promise<ReportsData> {
-  return fetchJson<ReportsData>('/api/reports');
+// MAD-48: the report is cached 24h server-side; pass refresh=true (the Refresh button) to
+// bypass the cache and re-read the workbook.
+export function getReports(refresh = false): Promise<ReportsData> {
+  return fetchJson<ReportsData>(`/api/reports${refresh ? '?refresh=1' : ''}`);
 }
 
 // ── Weekly-report workbook connection (MAD-26) ───────────────────────────────
