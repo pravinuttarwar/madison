@@ -34,6 +34,17 @@ export function workbookEvent(action, { sessionId = 'none', ref = 'none', outcom
   log(`audit workbook ${action} session=${sessionId} item=${ref} → ${outcome} @${now()}`);
 }
 
+// Workbook parse-warning entry (MAD-27, AC-9). When the grid parser meets columns it can't
+// map to a known metric, it surfaces them HERE — PHI-safe: only the WORKBOOK item reference,
+// the SHEET/tab name, and the column INDEXES. NEVER cell values (a day's count, the free-typed
+// "New Patients: N" note) and never the typed header text, so it's safe on every report read.
+// `log` and `now` are injectable for tests.
+// tz-safe: now() is an ISO-8601 UTC audit timestamp for machine ordering — never parsed back or
+// rendered to a user, so timezone/DST never enters in.
+export function workbookUnmappedEvent({ sessionId = 'none', ref = 'none', sheet = 'none', columns = [] } = {}, log = console.warn, now = () => new Date().toISOString()) {
+  log(`audit workbook unmapped session=${sessionId} item=${ref} sheet="${sheet}" columns=${columns.join(',') || 'none'} @${now()}`);
+}
+
 // Tasks-access audit entry (MAD-37, AC-5/AC-6). Records WHO (session reference) · WHAT
 // (action: read + the OWNER reference — a user id or 'self', never a name) · how many items
 // (count, a number) · WHEN · OUTCOME (ok | denied) for the "tasks by owner" read — the

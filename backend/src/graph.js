@@ -30,10 +30,18 @@ function graphFixture(reqPath) {
   if (reqPath.includes('/todo/lists')) return loadFixture('graph', 'todo-lists.json');
   // MAD-26 workbook connection: share-URL resolve, drive-path resolve, reachability check.
   if (reqPath.includes('/shares/')) return loadFixture('graph', 'driveitem.json');
-  if (reqPath.includes('/workbook/worksheets')) return loadFixture('graph', 'worksheets.json');
+  // MAD-27 grid reads: a single tab's used-range grid — matched BEFORE the worksheet list
+  // (its path also contains '/workbook/worksheets'). The '2025' marker selects the prior-year
+  // file's grids/list; everything else is the current-year file.
+  const ur = reqPath.match(/\/workbook\/worksheets\/([^/]+)\/usedRange/);
+  if (ur) {
+    const dir = reqPath.includes('2025') ? 'usedrange-prevyear' : 'usedrange';
+    return loadFixture('graph', dir, `${decodeURIComponent(ur[1])}.json`);
+  }
+  if (reqPath.includes('/workbook/worksheets')) {
+    return loadFixture('graph', reqPath.includes('2025') ? 'worksheets-prevyear.json' : 'worksheets.json');
+  }
   if (reqPath.includes('/drive/root:') && reqPath.includes('$select=id,name')) return loadFixture('graph', 'driveitem.json');
-  const nr = reqPath.match(/\/workbook\/names\/([^/]+)\/range/);
-  if (nr) return loadFixture('graph', 'names', `${decodeURIComponent(nr[1])}.json`);
   if (reqPath.startsWith('/me?$select=displayName')) return loadFixture('graph', 'me.json');
   if (reqPath.includes('/messages')) return loadFixture('graph', 'messages.json');
   throw new Error(`No graph fixture for path: ${reqPath}`);
@@ -208,12 +216,33 @@ export async function workbookReachable({ driveId, itemId }) {
   return true;
 }
 
-// Weekly spreadsheet — read a named range's values (2-D array). Reads address the CONNECTED
-// drive item (MAD-26) when one is persisted, else fall back to the SPREADSHEET_DRIVE_PATH env.
-export async function workbookNamedRange(name) {
-  const base = workbookBase(workbookRef(), root(), config.graph.spreadsheetPath);
-  const json = await get(
-    `${base}/workbook/names/${encodeURIComponent(name)}/range?$select=values`,
-  );
+// MAD-27 — tolerant GRID reads (replaces the named-range path). The real workbooks have no
+// named ranges: we list the worksheets and read each tab's used-range grid, then parse +
+// normalize in transforms.js. A source descriptor selects the workbook: {driveId,itemId}
+// addresses a specific connected item (multi-file, MAD-27); {envPath} a configured drive path
+// (e.g. the prior-year fallback); null → the connected 'current' item, else the current env path.
+function baseFor(src) {
+  if (src && src.driveId && src.itemId) return workbookBase(src, root(), '');
+  if (src && src.envPath) return workbookBase(null, root(), src.envPath);
+  return workbookBase(workbookRef(), root(), config.graph.spreadsheetPath);
+}
+
+// Worksheet names for a workbook, in workbook order (used to find the monthly metric tabs).
+export async function workbookWorksheetNames(src) {
+  const json = await get(`${baseFor(src)}/workbook/worksheets?$select=name`);
+  return (json.value || []).map((w) => w.name);
+}
+
+// The used-range request address for a worksheet. valuesOnly=true makes Graph return the
+// CACHED cell values and NOT resolve external links (AC-4) — the Chiro workbook has
+// externalLinks we must read as cached, never fetch. Pure + exported so the guarantee is
+// unit-testable without a network call.
+export function usedRangeAddress(base, sheetName) {
+  return `${base}/workbook/worksheets/${encodeURIComponent(sheetName)}/usedRange(valuesOnly=true)?$select=values`;
+}
+
+// One worksheet's used-range values as a 2-D grid (cached values only — see usedRangeAddress).
+export async function workbookUsedRange(sheetName, src) {
+  const json = await get(usedRangeAddress(baseFor(src), sheetName));
   return json.values || [];
 }

@@ -105,10 +105,14 @@ test('[AC-1] POST /api/reports/connection — a share-URL resolves, validates an
 
 test('[AC-4] the connection persisted to disk holds refs only — no cell values', async () => {
   assert.ok(existsSync(workbookConfig), 'the connection file was written');
-  const rec = JSON.parse(readFileSync(workbookConfig, 'utf8'));
-  assert.equal(rec.driveId, 'drive-1');
-  assert.equal(rec.itemId, 'item-9');
-  assert.ok(!('cellValues' in rec) && !('values' in rec), 'no cell values persisted');
+  // MAD-27: persistence is now an ARRAY of role-tagged refs (multi-URL). The connected file
+  // is the 'current' role; it carries location refs only — never cell values.
+  const arr = JSON.parse(readFileSync(workbookConfig, 'utf8'));
+  assert.ok(Array.isArray(arr), 'the store is an array of refs');
+  const cur = arr.find((r) => r.role === 'current');
+  assert.equal(cur.driveId, 'drive-1');
+  assert.equal(cur.itemId, 'item-9');
+  assert.ok(!('cellValues' in cur) && !('values' in cur), 'no cell values persisted');
 });
 
 test('[AC-4] GET /api/reports/connection — now reports the connection (not the env fallback)', async () => {
@@ -119,10 +123,11 @@ test('[AC-4] GET /api/reports/connection — now reports the connection (not the
   assert.equal(body.name, 'Madison Weekly Report.xlsx');
 });
 
-test('[AC-5] GET /api/reports — reads the 12 metrics from the connected workbook', async () => {
+test('[AC-5] GET /api/reports — reads the grid metrics from the connected workbook', async () => {
   const { status, body } = await getJson('/api/reports');
   assert.equal(status, 200);
-  assert.equal(body.metrics.length, 12);
+  // MAD-27: a connected workbook is read via the grid parser → the 11 canonical metrics.
+  assert.equal(body.metrics.length, 11);
   assert.equal(body.encountersBySpecialty.length, 6);
   assert.ok(body.totalEncounters.last > 0);
 });

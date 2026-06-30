@@ -6,8 +6,8 @@ import * as graph from './graph.js';
 import * as qbo from './qbo.js';
 import * as T from './transforms.js';
 import { computeAwaiting } from './awaiting.js';
-import { readWorkbook, workbookRef, connectWorkbook, WorkbookError } from './workbook.js';
-import { workbookEvent, tasksEvent } from './audit.js';
+import { readWorkbook, workbookRefs, connectWorkbook, WorkbookError } from './workbook.js';
+import { workbookEvent, workbookUnmappedEvent, tasksEvent } from './audit.js';
 
 export const router = Router();
 const TTL = 90_000; // 90s in-memory cache
@@ -222,36 +222,54 @@ router.get('/financials', route('quickbooks',
 ));
 
 // ── weekly report (spreadsheet) ───────────────────────────────────────────────
+// MAD-27: tolerant GRID parser over the real workbooks (Strategy A) — replaces the named-range
+// path. We list each connected workbook's worksheets, select the monthly "Totals Madison"
+// metric tabs, read their used-range grids, normalize the dirty headers, and aggregate across
+// tabs AND files. Period tabs are chosen by POSITION (latest = current, previous = prior) — no
+// date math, so no timezone concerns. A connected prior-year workbook supplies the additive
+// year-ago values (YoY). The DTO shape is unchanged (back-compat — AC-6).
 router.get('/reports', route('spreadsheet',
   async () => {
-    const map = config.graph.namedRanges; // { metricKey: rangeName }
-    const labels = {}; // optional: metricKey → label
-    const values = {};
-    for (const [key, rangeName] of Object.entries(map)) {
-      values[key] = await graph.workbookNamedRange(rangeName);
-    }
-    // MAD-29: prior-year ranges, when configured → additive yearAgo (YoY). Omitted otherwise.
-    const prevMap = config.graph.prevYearRanges; // { metricKey: rangeName }
-    const prevValues = {};
-    for (const [key, rangeName] of Object.entries(prevMap)) {
-      prevValues[key] = await graph.workbookNamedRange(rangeName);
-    }
-    // MAD-28: month-to-date + prior-month ranges, when configured → additive MoM. Omitted otherwise.
-    const readMap = async (rangeMap) => {
-      const out = {};
-      for (const [key, rangeName] of Object.entries(rangeMap)) {
-        out[key] = await graph.workbookNamedRange(rangeName);
-      }
-      return out;
+    const sessionId = currentSession()?.id || 'none';
+    const refs = workbookRefs(); // [{ role, driveId, itemId, name }] — persisted connections
+    const currentRefs = refs.filter((r) => r.role === 'current');
+    const prevYearRefs = refs.filter((r) => r.role === 'prevYear');
+    // Per role: read the connected refs, else fall back to the configured env drive path.
+    const currentSources = currentRefs.length ? currentRefs : [null]; // null → current env path
+    const prevYearSources = prevYearRefs.length
+      ? prevYearRefs
+      : (config.graph.prevYearSpreadsheetPath ? [{ envPath: config.graph.prevYearSpreadsheetPath }] : []);
+
+    // Read ONE workbook source → { current, prior } metric count-maps from its period tabs.
+    const readSource = async (src) => {
+      const metricTabs = T.selectMetricTabs(await graph.workbookWorksheetNames(src));
+      const { current, prior } = T.pickPeriodTabs(metricTabs);
+      const item = (src && src.itemId) || 'env';
+      const tabCounts = async (tab) => {
+        if (!tab) return {};
+        const parsed = T.countsFromGrid(await graph.workbookUsedRange(tab, src));
+        // AC-9: surface unmapped columns PHI-safely — item + sheet + column indexes, no values.
+        if (parsed.unmapped.length) {
+          workbookUnmappedEvent({ sessionId, ref: item, sheet: tab, columns: parsed.unmapped.map((u) => u.col) });
+        }
+        return parsed.counts;
+      };
+      return { current: await tabCounts(current), prior: await tabCounts(prior) };
     };
-    const monthValues = {
-      monthToDate: await readMap(config.graph.monthToDateRanges),
-      prevMonth: await readMap(config.graph.prevMonthRanges),
-    };
-    // Audit the workbook READ once per request — item reference + outcome, never cell values.
-    const ref = workbookRef();
-    workbookEvent('read', { sessionId: currentSession()?.id || 'none', ref: ref?.itemId || 'env', outcome: 'ok' });
-    return T.reportsFromRanges(values, labels, prevValues, monthValues);
+
+    // Aggregate current/prior across all current sources (files × tabs — AC-3).
+    const currentReads = await Promise.all(currentSources.map(readSource));
+    const current = T.mergeCounts(currentReads.map((r) => r.current));
+    const prior = T.mergeCounts(currentReads.map((r) => r.prior));
+    // YoY: the prior-year file's current-period tab → additive yearAgo (omitted when absent).
+    const prevYearReads = await Promise.all(prevYearSources.map(readSource));
+    const yearAgo = T.mergeCounts(prevYearReads.map((r) => r.current));
+
+    // Audit the workbook READ once per request — item reference(s) + outcome, never cell values (AC-8).
+    const items = [...currentSources, ...prevYearSources].map((s) => (s && s.itemId) || 'env').join(',') || 'env';
+    workbookEvent('read', { sessionId, ref: items, outcome: 'ok' });
+
+    return T.reportsFromGrids({ current, prior, yearAgo: Object.keys(yearAgo).length ? yearAgo : undefined });
   },
 ));
 
@@ -274,6 +292,9 @@ router.post('/reports/connection', async (req, res) => {
   if (!graphConnected()) return res.status(401).json({ error: 'not_authenticated', source: 'spreadsheet' });
   const input = (req.body && req.body.input) || '';
   if (!String(input).trim()) return res.status(400).json({ error: 'missing_input' });
+  // MAD-27: an optional role lets the user connect more than one workbook — 'current' (default)
+  // or 'prevYear' (the prior-year file for YoY). An unknown role falls back to 'current'.
+  const role = req.body && req.body.role === 'prevYear' ? 'prevYear' : 'current';
   try {
     const result = await connectWorkbook(input, {
       sessionId: currentSession()?.id || 'none',
@@ -281,6 +302,7 @@ router.post('/reports/connection', async (req, res) => {
       resolveDrivePath: graph.resolveDrivePath,
       workbookReachable: graph.workbookReachable,
       audit: (action, meta) => workbookEvent(action, meta),
+      role,
     });
     return res.json(result);
   } catch (err) {
