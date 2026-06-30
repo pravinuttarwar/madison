@@ -634,6 +634,52 @@ export function pickNonEmptyPeriods(items) {
   return { current, prior };
 }
 
+// ── MAD-44: deterministic read of a designated "Command Center" summary tab ───
+// The owner maintains one fixed-layout table — metric label | this period | last period |
+// [year ago]. We read those exact cells: NO orientation detection, NO tab-selection, NO month
+// guessing, NO date math. Determinism comes from the controlled input, not a cleverer parser.
+
+// label → canonical metric key, recognizing the published labels (Medical / PT / OT / IV / MA /
+// Acupuncture …), the canonical keys, AND the dirty-grid alias set. Built once from REPORT_METRICS.
+const SUMMARY_LABEL_MAP = (() => {
+  const m = new Map(METRIC_ALIASES); // 'med'→med, 'pt ot'→pt, 'iv ma'→ivMa, …
+  for (const { key, label } of REPORT_METRICS) {
+    m.set(normHeader(label), key); // 'medical'→med, 'podiatry'→pod, 'acupuncture'→acu, 'new patients'→newPatients
+    m.set(normHeader(key), key);   // 'med'→med
+  }
+  return m;
+})();
+
+// Non-metric rows in a summary (the header row, blanks, a totals row) — skipped silently.
+const SUMMARY_IGNORED = new Set(['', 'metric', 'metrics', 'label', 'total', 'totals']);
+
+function mapSummaryLabel(raw) {
+  const n = normHeader(raw);
+  if (SUMMARY_IGNORED.has(n)) return { ignored: true };
+  const key = SUMMARY_LABEL_MAP.get(n);
+  return key ? { key } : { unmapped: true };
+}
+
+// Parse the summary grid into { current, prior, yearAgo } count-maps + the unmapped labels.
+// Each metric row contributes one value per column straight from the cell — the owner controls
+// the period, so current/prior need no inference. Tolerant: a malformed grid yields empty maps,
+// never throws (AC-1). `unmapped` carries the row LABEL reference only (a metric name the owner
+// typed, never a cell value) for PHI-safe surfacing (AC-2/AC-6).
+export function summaryPeriods(grid) {
+  const current = {}; const prior = {}; const yearAgo = {}; const unmapped = [];
+  for (const row of (Array.isArray(grid) ? grid : [])) {
+    if (!Array.isArray(row)) continue;
+    const v = mapSummaryLabel(row[0]);
+    if (v.ignored) continue;
+    if (v.unmapped) { unmapped.push({ label: String(row[0] == null ? '' : row[0]) }); continue; }
+    const cur = numeric(row[1]); const pri = numeric(row[2]); const ya = numeric(row[3]);
+    if (cur != null) current[v.key] = cur;
+    if (pri != null) prior[v.key] = pri;
+    if (ya != null) yearAgo[v.key] = ya;
+  }
+  return { current, prior, yearAgo, unmapped };
+}
+
 // Sum a list of count-maps ({metricKey: n}) into one — aggregation across tabs AND files (AC-3).
 export function mergeCounts(maps) {
   const out = {};

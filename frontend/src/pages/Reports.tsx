@@ -76,11 +76,15 @@ function ReportsConnect({
           </div>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">
-              {connectedName ? 'Change the connected workbook' : 'Connect your weekly spreadsheet'}
+              {readFailed && connectedName
+                ? 'Add a "Command Center" summary tab'
+                : connectedName
+                  ? 'Change the connected workbook'
+                  : 'Connect your weekly spreadsheet'}
             </p>
             <p className="mt-1 max-w-xl text-xs leading-relaxed text-muted-foreground">
               {readFailed && connectedName
-                ? `We're connected to "${connectedName}", but couldn't read it as a report. Paste a different link, or check the file.`
+                ? `We're connected to "${connectedName}", but it has no "Command Center" tab to read. Add a worksheet named Command Center with one row per metric and the columns: Metric · This period · Last period · (optional) Year ago. Tip: use formulas so it stays up to date.`
                 : connectedName
                   ? `Currently reading "${connectedName}". Paste a new OneDrive/SharePoint share-link or drive path to replace it.`
                   : 'Paste the OneDrive or SharePoint share-link (or drive path) to your providers\' weekly workbook. We confirm we can read it, then read the report live each time — we store only the file\'s location, never its contents.'}

@@ -1,0 +1,30 @@
+{
+  "issueKey": "MAD-44",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "Deterministic read of the Summary tab (configurable name, default Command Center) laid out metric-label|this-period|last-period; metrics + current/prior come directly from those cells; no orientation detection, no tab-selection, no month/date guessing"
+    },
+    {
+      "id": "AC-2",
+      "text": "Label mapping with no silent mis-assignment: rows map to canonical metrics via published labels; header row or unrecognized label skipped and surfaced as a reference (logged), never mis-assigned"
+    },
+    {
+      "id": "AC-3",
+      "text": "Optional year-ago column: a 4th value column adds additive yearAgo per metric + totalEncounters.yearAgo; absent means period-over-period only (DTO back-compat)"
+    },
+    {
+      "id": "AC-4",
+      "text": "Clear not-set-up state: with no readable summary tab, Reports shows an actionable add-a-Command-Center-tab message with the layout, never phantom numbers or a raw error"
+    },
+    {
+      "id": "AC-5",
+      "text": "DTO byte-compatible so MAD-43 Reports renders unchanged; no date math / month-by-tab selection (owner controls the period) so no timezone concern"
+    },
+    {
+      "id": "AC-6",
+      "kind": "audit",
+      "text": "HIPAA audit + PHI-safe logging: workbook read audited (item reference, no cell values); unmapped labels logged by reference only, never cell values or the raw URL"
+    }
+  ]
+}

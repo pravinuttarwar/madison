@@ -5,6 +5,25 @@ import Reports from '@/pages/Reports';
 afterEach(cleanup);
 beforeEach(() => vi.unstubAllGlobals());
 
+// MAD-44 — workbook connected but no "Command Center" summary tab → a clear setup message
+// (the layout to add), NOT phantom numbers and NOT a raw error.
+describe('Reports — not-set-up summary state (MAD-44)', () => {
+  it('[AC-4] shows the "add a Command Center summary tab" setup message with the layout', async () => {
+    vi.stubGlobal('fetch', (req: RequestInfo | URL) => {
+      const url = String(req);
+      // connected workbook, but the report read fails (no summary tab → 502)
+      if (url.includes('/api/reports/connection')) return Promise.resolve({ ok: true, status: 200, json: async () => ({ connected: true, name: 'Weekly.xlsx', via: 'connection' }) });
+      if (url.includes('/api/auth/scopes')) return Promise.resolve({ ok: true, status: 200, json: async () => ({ requested: [], delegated: ['Files.Read'], app: [] }) });
+      return Promise.resolve({ ok: false, status: 502, statusText: 'Bad Gateway', json: async () => ({ error: 'upstream_failed' }) });
+    });
+    render(<Reports />);
+    expect(await screen.findByText(/Add a .*Command Center.* summary tab/i)).toBeTruthy();
+    // names the columns the owner must add — actionable, not a raw error
+    expect(screen.getByText(/This period.*Last period/i)).toBeTruthy();
+    expect(screen.queryByText(/named ranges/i)).toBeNull();
+  });
+});
+
 // MAD-43 — when no workbook is connected, Reports shows an inline CONNECT card (paste link),
 // not a dead "pending" beat. Replaces the old MBI-37 pending state.
 describe('Reports — inline connect when not connected (MAD-43)', () => {

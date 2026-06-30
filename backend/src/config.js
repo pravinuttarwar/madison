@@ -50,6 +50,9 @@ export const config = {
     // empty, /api/reports stays week-over-week only — no additive yearAgo, back-compat).
     spreadsheetPath: env.SPREADSHEET_DRIVE_PATH || '',
     prevYearSpreadsheetPath: env.SPREADSHEET_PREV_YEAR_DRIVE_PATH || '',
+    // MAD-44: the owner-maintained summary worksheet /api/reports reads deterministically
+    // (metric label | this period | last period | [year ago]). Configurable; default below.
+    summaryTab: env.SPREADSHEET_SUMMARY_TAB || 'Command Center',
     // Customer's designated sender/domain → category lists (MAD-17). Keys are a full
     // sender address or a bare domain; values are management|operational|action-needed.
     // Populated per-deployment via .env so the lists land without a code change; a

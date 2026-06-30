@@ -240,54 +240,34 @@ router.get('/financials', route('quickbooks',
 ));
 
 // ── weekly report (spreadsheet) ───────────────────────────────────────────────
-// MAD-27: tolerant GRID parser over the real workbooks (Strategy A) — replaces the named-range
-// path. We list each connected workbook's worksheets, select the monthly "Totals Madison"
-// metric tabs, read their used-range grids, normalize the dirty headers, and aggregate across
-// tabs AND files. Period tabs are chosen by POSITION (latest = current, previous = prior) — no
-// date math, so no timezone concerns. A connected prior-year workbook supplies the additive
-// year-ago values (YoY). The DTO shape is unchanged (back-compat — AC-6).
+// MAD-44: DETERMINISTIC read of the owner-maintained "Command Center" summary tab — a fixed
+// table: metric label | this period | last period | [year ago]. We read those exact cells —
+// NO orientation detection, NO tab-selection, NO month/date guessing (the owner controls the
+// period, so no date math → no timezone concern). When the summary tab isn't present, the route
+// signals not-configured so the UI shows a setup prompt — never phantom numbers. (The MAD-41
+// tolerant grid parser stays in transforms.js but is no longer the live source.)
 router.get('/reports', route('spreadsheet',
   async () => {
     const sessionId = currentSession()?.id || 'none';
-    const refs = workbookRefs(); // [{ role, driveId, itemId, name }] — persisted connections
-    const currentRefs = refs.filter((r) => r.role === 'current');
-    const prevYearRefs = refs.filter((r) => r.role === 'prevYear');
-    // Per role: read the connected refs, else fall back to the configured env drive path.
-    const currentSources = currentRefs.length ? currentRefs : [null]; // null → current env path
-    const prevYearSources = prevYearRefs.length
-      ? prevYearRefs
-      : (config.graph.prevYearSpreadsheetPath ? [{ envPath: config.graph.prevYearSpreadsheetPath }] : []);
+    const src = workbookRefs().find((r) => r.role === 'current') || null; // connected workbook, else env path
+    const item = (src && src.itemId) || 'env';
 
-    // Read ONE workbook source → { current, prior } metric count-maps. Read the metric tabs
-    // from the LATEST backward, parsing each, and keep the first two that have data — so empty
-    // trailing/future month tabs are skipped (MAD-41 AC-5). Position/data-based; no date math.
-    const readSource = async (src) => {
-      const metricTabs = T.selectMetricTabs(await graph.workbookWorksheetNames(src));
-      const item = (src && src.itemId) || 'env';
-      const collected = []; // latest-first: [current, prior]
-      for (let i = metricTabs.length - 1; i >= 0 && collected.length < 2; i -= 1) {
-        const tab = metricTabs[i];
-        const parsed = T.countsFromGrid(await graph.workbookUsedRange(tab, src));
-        // AC-8/9: surface unmapped labels PHI-safely — item + sheet + index references, no values.
-        if (parsed.unmapped.length) {
-          workbookUnmappedEvent({ sessionId, ref: item, sheet: tab, columns: parsed.unmapped.map((u) => u.col ?? u.row) });
-        }
-        if (Object.keys(parsed.counts).length > 0) collected.push(parsed.counts); // skip empty tabs
-      }
-      return { current: collected[0] || {}, prior: collected[1] || {} };
-    };
+    // Find the designated summary worksheet by name (case/space-tolerant).
+    const want = config.graph.summaryTab.trim().toLowerCase();
+    const summaryName = (await graph.workbookWorksheetNames(src)).find(
+      (n) => String(n).trim().toLowerCase() === want,
+    );
+    if (!summaryName) {
+      workbookEvent('read', { sessionId, ref: item, outcome: 'denied' }); // audited even when denied (AC-6)
+      throw new Error('summary_not_configured'); // → the UI's "add a summary tab" state (AC-4)
+    }
 
-    // Aggregate current/prior across all current sources (files × tabs — AC-3).
-    const currentReads = await Promise.all(currentSources.map(readSource));
-    const current = T.mergeCounts(currentReads.map((r) => r.current));
-    const prior = T.mergeCounts(currentReads.map((r) => r.prior));
-    // YoY: the prior-year file's current-period tab → additive yearAgo (omitted when absent).
-    const prevYearReads = await Promise.all(prevYearSources.map(readSource));
-    const yearAgo = T.mergeCounts(prevYearReads.map((r) => r.current));
-
-    // Audit the workbook READ once per request — item reference(s) + outcome, never cell values (AC-8).
-    const items = [...currentSources, ...prevYearSources].map((s) => (s && s.itemId) || 'env').join(',') || 'env';
-    workbookEvent('read', { sessionId, ref: items, outcome: 'ok' });
+    const { current, prior, yearAgo, unmapped } = T.summaryPeriods(await graph.workbookUsedRange(summaryName, src));
+    // AC-2/AC-6: surface unmapped labels PHI-safely — metric-name references only, never cell values.
+    if (unmapped.length) {
+      workbookUnmappedEvent({ sessionId, ref: item, sheet: summaryName, columns: unmapped.map((u) => u.label) });
+    }
+    workbookEvent('read', { sessionId, ref: item, outcome: 'ok' });
 
     return T.reportsFromGrids({ current, prior, yearAgo: Object.keys(yearAgo).length ? yearAgo : undefined });
   },

@@ -210,15 +210,35 @@ export function writeFixtures(dir, now = new Date()) {
   const MAY = { med: 110, chiro: 60, pod: 18, pt: 28, ivMa: 36, acu: 10, mo: 5, allergy: 7, covid: 2, telehealth: 4, newPatients: 20 };
   const PREV_JUNE = { med: 100, chiro: 55, pod: 16, pt: 25, ivMa: 33, acu: 9, mo: 4, allergy: 6, covid: 2, telehealth: 3, newPatients: 18 };
 
-  // Current-year file: month tabs (May, June populated; July EMPTY — a future month) + provider
-  // / microsoft.com tabs that selectMetricTabs EXCLUDES. The empty July tab must be SKIPPED so
-  // June=current, May=prior (MAD-41 AC-5). Tab names carry the real files' dirtiness.
+  // Current-year file: the owner-maintained "Command Center" SUMMARY tab (MAD-44) that
+  // /api/reports reads deterministically, alongside the monthly Totals/provider/microsoft.com
+  // tabs (now only exercised by the MAD-41 grid-parser unit tests, not the live route).
   w(g, 'worksheets.json')({
     value: [
+      { name: 'Command Center' }, // MAD-44 summary tab — the deterministic live source
       { name: 'May Totals Madison' }, { name: 'May Provider Totals ' },
       { name: 'June Totals Madison' }, { name: 'June Provier Totals ' },
-      { name: 'July Totals Madison' }, { name: 'July Provider Totals ' }, // July empty (future month)
+      { name: 'July Totals Madison' }, { name: 'July Provider Totals ' },
       { name: 'microsoft.com:RD' },
+    ],
+  });
+  // MAD-44 summary: metric label | this period | last period | year ago. The values match the
+  // old grid expectations (June=this, May=last, prior-June=year-ago) so the contract is stable.
+  w(usedrange, 'Command Center.json')({
+    values: [
+      ['Metric', 'This period', 'Last period', 'Year ago'],
+      ['Medical', 120, 110, 100],
+      ['Chiro', 64, 60, 55],
+      ['Podiatry', 20, 18, 16],
+      ['PT / OT', 30, 28, 25],
+      ['IV / MA', 40, 36, 33],
+      ['Acupuncture', 12, 10, 9],
+      ['MO', 6, 5, 4],
+      ['Allergy', 8, 7, 6],
+      ['Covid', 3, 2, 2],
+      ['Telehealth', 5, 4, 3],
+      ['Sprained Wombat', 9, 9, 9], // unknown label → surfaced as unmapped, never counted
+      ['New patients', 31, 20, 18],
     ],
   });
   w(usedrange, 'June Totals Madison.json')(gridFor(JUNE));
