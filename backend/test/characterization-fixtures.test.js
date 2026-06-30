@@ -269,6 +269,7 @@ test('[AC-1][AC-2] GET /api/reports — canonical metrics from the grid parser (
 test('[AC-4] GET /api/reports — real month period (June vs May), never "Week 0"', async () => {
   const { status, body } = await getJson('/api/reports');
   assert.equal(status, 200);
+  // tz-safe: asserts the practice-zone year (matches periodFromTabs); month is data-driven (June/May).
   const year = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric' }).format(new Date());
   assert.deepEqual(body.period, { current: `June ${year}`, prior: `May ${year}` });
 });

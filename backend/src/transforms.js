@@ -614,7 +614,9 @@ export function capMetricTabsToMonth(tabs, now, tz = PRACTICE_TZ) {
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
 export function periodFromTabs(currentTab, priorTab, now = new Date(), tz = PRACTICE_TZ) {
-  // tz: calendar YEAR in the practice zone for the label (month is data-driven from the tab name).
+  // tz-safe: the label's MONTH is data-driven (from the tab name), not the clock; only the calendar
+  // YEAR is read from `now`, and it's pinned to the practice zone (America/New_York) like all of the
+  // report's date logic — so the period is zone-independent for users in any host/browser zone.
   const year = new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric' }).format(now);
   const label = (tab) => {
     const mi = monthIndexFromTabName(tab);

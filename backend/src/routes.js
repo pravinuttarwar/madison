@@ -295,6 +295,8 @@ router.get('/reports', route('spreadsheet',
     const prior = T.mergeCounts(currentReads.map((r) => r.prior));
     // MAD-50: the real period (month labels) comes from the first source that yielded a current tab.
     const periodLead = currentReads.find((r) => r.currentTab) || {};
+    // tz-safe: period month comes from the tab name (data); `new Date()` only supplies the calendar
+    // year, which periodFromTabs pins to the practice zone — zone-independent for the user.
     const period = T.periodFromTabs(periodLead.currentTab, periodLead.priorTab, new Date());
     const metricUnmapped = currentReads.flatMap((r) => r.unmapped || []);
     // YoY: the prior-year file's latest tab → additive yearAgo (NOT capped — it's a past year).
