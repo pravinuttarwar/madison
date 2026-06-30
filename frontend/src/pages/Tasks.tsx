@@ -50,11 +50,13 @@ function FilterChips({ filter, setFilter, counts }: { filter: Filter; setFilter:
 function OwnerBoard({ owners }: { owners: OwnerTasks[] }) {
   const [filter, setFilter] = useState<Filter>('all');
   const match = (t: Task) => filter === 'all' || t.status === filter;
+  // Counts come from the owners' FULL per-status totals (incl. o.upcoming) — never derived
+  // from the capped `tasks` list — so the chips reconcile: All = Overdue + Due-today + Upcoming.
   const counts: Record<Filter, number> = {
     all: owners.reduce((s, o) => s + o.open, 0),
     overdue: owners.reduce((s, o) => s + o.overdue, 0),
     'due-today': owners.reduce((s, o) => s + o.dueToday, 0),
-    upcoming: owners.reduce((s, o) => s + o.tasks.filter((t) => t.status === 'upcoming').length, 0),
+    upcoming: owners.reduce((s, o) => s + o.upcoming, 0),
   };
   return (
     <div className="space-y-5">

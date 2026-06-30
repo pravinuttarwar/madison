@@ -6,7 +6,49 @@ process.env.TZ = 'America/New_York';
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { financialsFromQbo, outstandingInvoicesFromQbo, cashFlowFromQbo, calendarFromGraph, tasksFromGraph, emailsFromGraph, reportsFromRanges } from '../src/transforms.js';
+import { financialsFromQbo, outstandingInvoicesFromQbo, cashFlowFromQbo, calendarFromGraph, tasksFromGraph, emailsFromGraph, reportsFromRanges, summarizeOwnerTasks, OWNER_TASK_CAP_PER_STATUS } from '../src/transforms.js';
+
+// ── MAD-37: per-owner task summary for the "tasks by owner" board ──
+// The board's filter counts must be TRUTHFUL: open === overdue + dueToday + upcoming, and
+// each count is over the owner's FULL task set — never the (capped) displayed list. The
+// displayed `tasks` is capped PER STATUS so every filter still has real items to show
+// (the earlier flat overdue-first cap dropped a busy owner's upcoming tasks entirely).
+const ownerTask = (id, status) => ({ id, title: `t-${id}`, owner: 'x', due: 'Jan 1', status });
+
+test('[AC-1] summarizeOwnerTasks: counts are full + reconcile (open = overdue + dueToday + upcoming)', () => {
+  const tasks = [ownerTask('a', 'overdue'), ownerTask('b', 'overdue'), ownerTask('c', 'due-today'), ownerTask('d', 'upcoming'), ownerTask('e', 'upcoming'), ownerTask('f', 'upcoming')];
+  const s = summarizeOwnerTasks(tasks);
+  assert.equal(s.overdue, 2);
+  assert.equal(s.dueToday, 1);
+  assert.equal(s.upcoming, 3);
+  assert.equal(s.open, 6);
+  assert.equal(s.open, s.overdue + s.dueToday + s.upcoming); // the reconcile invariant
+  assert.equal(s.tasks.length, 6); // small owner → all shown
+});
+
+test('[AC-2] summarizeOwnerTasks: counts stay FULL while the displayed list caps PER STATUS (upcoming never dropped)', () => {
+  const cap = OWNER_TASK_CAP_PER_STATUS;
+  const tasks = [
+    ...Array.from({ length: cap + 5 }, (_, i) => ownerTask(`o${i}`, 'overdue')), // busy: >cap overdue
+    ...Array.from({ length: 3 }, (_, i) => ownerTask(`u${i}`, 'upcoming')), // 3 upcoming
+  ];
+  const s = summarizeOwnerTasks(tasks);
+  // Counts are the FULL totals, not the capped display.
+  assert.equal(s.overdue, cap + 5);
+  assert.equal(s.upcoming, 3);
+  assert.equal(s.open, cap + 8);
+  // Displayed list caps overdue at the per-status cap but KEEPS all 3 upcoming → the
+  // Upcoming filter shows real items even for a heavily-overdue owner.
+  assert.equal(s.tasks.filter((x) => x.status === 'overdue').length, cap);
+  assert.equal(s.tasks.filter((x) => x.status === 'upcoming').length, 3);
+  assert.ok(s.open > s.tasks.length, 'truncation is visible (open exceeds displayed) → "Showing X of Y"');
+});
+
+test('summarizeOwnerTasks: completed/done tasks are excluded from open + counts', () => {
+  const s = summarizeOwnerTasks([ownerTask('a', 'overdue'), ownerTask('d', 'done')]);
+  assert.equal(s.open, 1);
+  assert.equal(s.tasks.length, 1);
+});
 
 // ── MAD-29: year-over-year reporting comparison (thin additive on named ranges) ──
 const RV = { newPatients: [[22, 18]], medicalSeen: [[284, 271]] }; // { key: [[last, prior]] }

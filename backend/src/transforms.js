@@ -246,6 +246,29 @@ export function tasksFromGraph(todo, now = new Date(), owner = 'DCR') {
   });
 }
 
+// ── tasks by owner — per-owner summary (MAD-37) ───────────────────────────────
+// Shape one owner's tasks into the board DTO. Counts (open/overdue/dueToday/upcoming) are
+// over the FULL set so the filter chips are truthful and reconcile (open = overdue +
+// dueToday + upcoming; completed tasks are excluded). The displayed `tasks` is capped PER
+// STATUS — not a flat overdue-first slice — so a heavily-overdue owner's due-today/upcoming
+// items are still present and that filter shows real rows. When the display is capped,
+// `open > tasks.length`, which the UI surfaces as "Showing X of Y".
+export const OWNER_TASK_CAP_PER_STATUS = 50;
+const OWNER_STATUS_ORDER = ['overdue', 'due-today', 'upcoming'];
+export function summarizeOwnerTasks(tasks, cap = OWNER_TASK_CAP_PER_STATUS) {
+  const open = tasks.filter((t) => t.status !== 'done');
+  const byStatus = (s) => open.filter((t) => t.status === s);
+  const buckets = OWNER_STATUS_ORDER.map(byStatus);
+  return {
+    open: open.length,
+    overdue: buckets[0].length,
+    dueToday: buckets[1].length,
+    upcoming: buckets[2].length,
+    // status-ordered, each bucket capped so every filter has items to show.
+    tasks: buckets.flatMap((b) => b.slice(0, cap)),
+  };
+}
+
 // ── financials (QuickBooks) ───────────────────────────────────────────────────
 function sum(arr, f) {
   return arr.reduce((a, x) => a + (f(x) || 0), 0);

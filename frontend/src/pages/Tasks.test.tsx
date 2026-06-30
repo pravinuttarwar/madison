@@ -54,11 +54,11 @@ describe('Tasks — renders both DTO shapes (MAD-37 AC-3)', () => {
     stubTasks({
       multiOwner: true,
       owners: [
-        { upn: 'alice@clinic.test', name: 'Alice Adams', open: 2, overdue: 1, dueToday: 0, tasks: [
+        { upn: 'alice@clinic.test', name: 'Alice Adams', open: 2, overdue: 1, dueToday: 0, upcoming: 1, tasks: [
           { id: 'a1', title: 'Alice overdue A', owner: 'alice@clinic.test', due: 'Jun 27', status: 'overdue' },
           { id: 'a2', title: 'Alice upcoming', owner: 'alice@clinic.test', due: 'Jul 4', status: 'upcoming' },
         ] },
-        { upn: 'bob@clinic.test', name: 'Bob Brown', open: 1, overdue: 0, dueToday: 0, tasks: [
+        { upn: 'bob@clinic.test', name: 'Bob Brown', open: 1, overdue: 0, dueToday: 0, upcoming: 1, tasks: [
           { id: 'b1', title: 'Bob upcoming', owner: 'bob@clinic.test', due: 'Jul 5', status: 'upcoming' },
         ] },
       ],
@@ -69,6 +69,10 @@ describe('Tasks — renders both DTO shapes (MAD-37 AC-3)', () => {
     expect(screen.getByText('Bob Brown')).toBeTruthy();
     expect(screen.getByText('Alice overdue A')).toBeTruthy();
     expect(screen.getByText('Bob upcoming')).toBeTruthy();
+    // Filter chips reconcile: All(3) = Overdue(1) + Due-today(0) + Upcoming(2) — the
+    // Upcoming count uses the owners' full `upcoming`, not the capped task lists.
+    expect(screen.getByRole('button', { name: /^All/ }).textContent).toContain('3');
+    expect(screen.getByRole('button', { name: /^Upcoming/ }).textContent).toContain('2');
   });
 
   it('[AC-3] multiOwner:false → single-user list, no crash, not the team board', async () => {

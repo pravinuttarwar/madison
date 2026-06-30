@@ -116,13 +116,14 @@ router.get('/calendar', route('outlook',
 // Multi-owner "tasks by owner" when a team is configured (app-only, Tasks.Read.All);
 // otherwise the signed-in person's own To Do (delegated). The DTO carries `multiOwner` as
 // the discriminator: { multiOwner:false, tasks } | { multiOwner:true, owners }.
-const STATUS_ORDER = { overdue: 0, 'due-today': 1, upcoming: 2, done: 3 };
 const TASKS_TEAM_TTL = 5 * 60_000; // 5 min — team task lists don't change second-to-second
 
 // Build the team board: every configured owner fetched in PARALLEL (each owner's lists are
 // parallel too), grouped by REAL owner. An unreadable/unresolvable owner is skipped, not
 // fatal. Each owner read is audited (ok | denied) with only references + a count — never a
-// task title (PHI-adjacent). One owner's tasks never enter another's card.
+// task title (PHI-adjacent). One owner's tasks never enter another's card. Per-owner counts
+// + the capped display list come from the pure summarizeOwnerTasks (counts are FULL/truthful;
+// see transforms.js) so the board's filter chips reconcile (open = overdue+dueToday+upcoming).
 async function buildTeamTasks(upns, sessionId) {
   const owners = (
     await Promise.all(
@@ -136,15 +137,7 @@ async function buildTeamTasks(upns, sessionId) {
         } catch {
           tasksEvent('read', { sessionId, owner: u.id, outcome: 'denied' }); // skip unreadable
         }
-        const open = tasks.filter((t) => t.status !== 'done');
-        return {
-          upn: u.upn,
-          name: u.name,
-          open: open.length,
-          overdue: tasks.filter((t) => t.status === 'overdue').length,
-          dueToday: tasks.filter((t) => t.status === 'due-today').length,
-          tasks: open.sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]).slice(0, 50),
-        };
+        return { upn: u.upn, name: u.name, ...T.summarizeOwnerTasks(tasks) };
       }),
     )
   ).filter(Boolean);

@@ -89,11 +89,14 @@ test('[AC-1][AC-7] GET /api/tasks — multi-owner board, one card per resolvable
   assert.ok(!JSON.stringify(body).includes('DCR'), 'no hardcoded DCR owner');
 
   const alice = body.owners[0];
-  assert.deepEqual(Object.keys(alice).sort(), ['dueToday', 'name', 'open', 'overdue', 'tasks', 'upn']);
+  assert.deepEqual(Object.keys(alice).sort(), ['dueToday', 'name', 'open', 'overdue', 'tasks', 'upcoming', 'upn']);
   assert.equal(alice.upn, 'alice@clinic.test');
   assert.equal(alice.overdue, 2);
   assert.equal(alice.dueToday, 1);
+  assert.equal(alice.upcoming, 1);
   assert.equal(alice.open, 4); // 2 overdue + 1 due-today + 1 upcoming
+  // Counts RECONCILE: open = overdue + dueToday + upcoming (the filter chips must add up).
+  assert.equal(alice.open, alice.overdue + alice.dueToday + alice.upcoming);
   // tasks within a card are status-ordered (overdue first).
   assert.equal(alice.tasks[0].status, 'overdue');
   for (const t of alice.tasks) assert.ok(['overdue', 'due-today', 'upcoming'].includes(t.status));

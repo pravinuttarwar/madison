@@ -165,6 +165,7 @@ export type OwnerTasks = {
   open: number;
   overdue: number;
   dueToday: number;
+  upcoming: number; // full count (not derived from the capped `tasks`) so the chips reconcile
   tasks: Task[];
 };
 export type TasksData = { multiOwner: boolean; owners?: OwnerTasks[]; tasks?: Task[] };
