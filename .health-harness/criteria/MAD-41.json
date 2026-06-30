@@ -1,0 +1,38 @@
+{
+  "issueKey": "MAD-41",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "Row-label orientation: metric names in column A, days as columns; sum day cells per metric into canonical keys producing the existing DTO"
+    },
+    {
+      "id": "AC-2",
+      "text": "Orientation auto-detect: both column-A row-label layout and row-0 header layout parse correctly (real files + MAD-27 header model)"
+    },
+    {
+      "id": "AC-3",
+      "text": "Stacked weekly blocks aggregated: a metric recurring across stacked weekly blocks is summed into the month total, none missed"
+    },
+    {
+      "id": "AC-4",
+      "text": "Skip subtotal/structural rows + Totals column: TOTAL rows, day-header rows, blanks, and the Totals column excluded (no double-count)"
+    },
+    {
+      "id": "AC-5",
+      "text": "Latest-tab-with-data selection: latest non-empty metric tab is current, previous non-empty is prior; empty trailing tabs skipped; no date math"
+    },
+    {
+      "id": "AC-6",
+      "text": "DTO unchanged + fixtures re-pinned to real (row-label, stacked-block) orientation"
+    },
+    {
+      "id": "AC-7",
+      "text": "Graceful degradation: unreadable/blank/odd tab degrades to empty/0, endpoint never throws"
+    },
+    {
+      "id": "AC-8",
+      "kind": "audit",
+      "text": "HIPAA audit + PHI-safe logging intact: workbook-read audit (item refs, no cell values) and unmapped-column log (sheet+column refs, never cell values) remain in force"
+    }
+  ]
+}

@@ -5,8 +5,83 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   mapHeader, countsFromGrid, mergeCounts, reportsFromGrids, REPORT_METRICS,
-  selectMetricTabs, pickPeriodTabs,
+  selectMetricTabs, pickNonEmptyPeriods,
 } from '../src/transforms.js';
+
+// ── MAD-41: REAL sheet orientation — metrics are ROW LABELS (col A), days are COLUMNS,
+// a Totals column, a TOTAL subtotal row, and multiple weekly blocks stacked vertically.
+const ROW_LABEL_GRID = [
+  ['',      'Mon', 'Tues', 'Wed', 'Thur', 'Fri', 'Sat', 'Sun', 'Totals'],
+  ['DATE',  45663, 45664, 45665, 45666, 45667, 45668, 45669, ''],
+  ['Med',   10, 12, 8, 9, 11, 0, 0, 50],     // Totals col (50) must be EXCLUDED, not summed
+  ['Chiro', 5, 6, 4, 3, 2, 0, 0, 20],
+  ['ACU',   1, 2, 1, 0, 0, 0, 0, 4],
+  ['IV',    2, 1, 0, 0, 0, 0, 0, 3],         // → ivMa
+  ['TOTAL', 18, 21, 13, 12, 13, 0, 0, 77],   // subtotal row → IGNORED (else double-count)
+  ['MO',    1, 1, 0, 0, 0, 0, 0, 2],
+  ['',      '', '', '', '', '', '', '', ''],  // blank separator
+  ['',      'Mon', 'Tues', 'Wed', 'Thur', 'Fri', 'Sat', 'Sun', 'Totals'], // BLOCK 2
+  ['DATE',  45670, 45671, '', '', '', '', '', ''],
+  ['Med',   20, 0, 0, 0, 0, 0, 0, 20],        // same metric, next week → must aggregate
+  ['Allergy', 3, 0, 0, 0, 0, 0, 0, 3],
+  ['Osman', 5, 0, 0, 0, 0, 0, 0, 5],          // provider row label → unmapped, not counted
+  ['New Patients: 7'],
+];
+
+test('[AC-1][AC-3][AC-4] row-label grid: sum day cells per metric across stacked blocks, exclude TOTAL row + Totals column', () => {
+  const { counts } = countsFromGrid(ROW_LABEL_GRID);
+  assert.equal(counts.med, 70);     // block1 (10+12+8+9+11)=50 + block2 (20)=20 = 70 (Totals col excluded)
+  assert.equal(counts.chiro, 20);
+  assert.equal(counts.acu, 4);
+  assert.equal(counts.ivMa, 3);
+  assert.equal(counts.mo, 2);
+  assert.equal(counts.allergy, 3);
+  assert.equal(counts.newPatients, 7);
+  // the TOTAL subtotal row (77 in its Totals col, 18/21/… in day cols) is never summed into a metric
+  assert.ok(!('total' in counts));
+});
+
+test('[AC-2] orientation auto-detect: header-oriented grids still parse (back-compat with MAD-27)', () => {
+  // DIRTY_GRID is header-oriented (metrics in row 0) — must still read the same as before.
+  const { counts } = countsFromGrid(DIRTY_GRID);
+  assert.equal(counts.med, 17);
+  assert.equal(counts.ivMa, 10);
+});
+
+test('[AC-4] row-label: an unknown row label is surfaced (not counted), never throws', () => {
+  const { counts, unmapped } = countsFromGrid(ROW_LABEL_GRID);
+  assert.ok(!('osman' in counts), 'provider row label is not a metric');
+  assert.ok(unmapped.some((u) => /osman/i.test(u.header)), 'unknown row label surfaced');
+});
+
+test('[AC-8] row-label unmapped surfacing carries references only (row index + label), never day-cell values', () => {
+  const { unmapped } = countsFromGrid(ROW_LABEL_GRID);
+  const osman = unmapped.find((u) => /osman/i.test(u.header));
+  assert.ok(osman, 'unknown row label surfaced');
+  assert.equal(typeof osman.row, 'number');      // a row-index reference, not a value
+  // the surfaced ref carries no day-cell value (e.g. Osman's "5") — PHI-safe (AC-8/AC-9)
+  assert.ok(!('value' in osman));
+  assert.equal(JSON.stringify(osman).includes('"5"'), false);
+});
+
+// ── [AC-5] latest-non-empty period selection ──────────────────────────────────
+test('[AC-5] pickNonEmptyPeriods: latest tab WITH data is current, previous-with-data is prior (empties skipped)', () => {
+  const items = [
+    { tab: 'Apr', counts: { med: 5 } },
+    { tab: 'May', counts: { med: 9 } },
+    { tab: 'Jun', counts: { med: 12 } }, // latest non-empty → current
+    { tab: 'Jul', counts: {} },          // empty trailing tab → skipped
+    { tab: 'Aug', counts: {} },
+  ];
+  assert.deepEqual(pickNonEmptyPeriods(items), {
+    current: { med: 12 }, prior: { med: 9 },
+  });
+  // only one non-empty → current only, prior empty
+  assert.deepEqual(pickNonEmptyPeriods([{ tab: 'Jan', counts: { med: 1 } }, { tab: 'Feb', counts: {} }]),
+    { current: { med: 1 }, prior: {} });
+  // nothing populated → both empty (graceful)
+  assert.deepEqual(pickNonEmptyPeriods([{ tab: 'X', counts: {} }]), { current: {}, prior: {} });
+});
 import { usedRangeAddress } from '../src/graph.js';
 
 // ── [AC-4] external links are read as CACHED values, never resolved ────────────
@@ -138,12 +213,3 @@ test('[AC-1] selectMetricTabs keeps only Totals-Madison tabs (tolerant of misspe
   assert.ok(!tabs.some((t) => /provi|microsoft\.com:/i.test(t)));
 });
 
-test('[AC-3] pickPeriodTabs takes the last two metric tabs in workbook order (current, prior)', () => {
-  assert.deepEqual(
-    pickPeriodTabs(['January Totals Madison', 'February Totals Madison', 'December Totals Madison']),
-    { current: 'December Totals Madison', prior: 'February Totals Madison' },
-  );
-  // a single tab → current only, no prior
-  assert.deepEqual(pickPeriodTabs(['January Totals Madison']), { current: 'January Totals Madison', prior: null });
-  assert.deepEqual(pickPeriodTabs([]), { current: null, prior: null });
-});

@@ -186,34 +186,44 @@ export function writeFixtures(dir, now = new Date()) {
     ],
   });
 
-  // ── Graph: workbook GRIDS (MAD-27) — the real files are dirty free-typed day-grids with
-  // no named ranges. Each tab's used-range is a 2-D grid: row 0 = headers (mixed case/spacing,
-  // a COMBINED "IV & MA" column, and an unknown "Sprained Wombat" column that must surface as
-  // unmapped), then day rows, then a free-typed "New Patients: N" cell. Single day row per tab
-  // → the column sum equals the per-metric count, so the expectations are easy to reason about.
-  const HEADERS = ['DATE', 'Med', 'Chiro', 'Pod', 'PT', 'IV & MA', 'Accu', 'MO', 'Allergy', 'Covid Test', 'Telehealth', 'Sprained Wombat'];
+  // ── Graph: workbook GRIDS (MAD-41 real orientation) — the real Totals-Madison tabs put
+  // METRICS as ROW LABELS in column A, DAYS across columns, a "Totals" column, a "TOTAL"
+  // subtotal row, and (in the real files) stacked weekly blocks. Each metric row's value lands
+  // in the Mon column with the per-metric Totals col = the same value (which the parser must
+  // EXCLUDE, not double-count). An unknown "Sprained Wombat" row label must surface as unmapped.
+  const HEADER_ROW = ['', 'Mon', 'Tues', 'Wed', 'Thur', 'Fri', 'Sat', 'Sun', 'Totals'];
+  const mrow = (label, v) => [label, v, 0, 0, 0, 0, 0, 0, v]; // value in Mon; Totals col = v (excluded)
   const gridFor = (c) => ({
     values: [
-      HEADERS,
-      ['Mon', c.med, c.chiro, c.pod, c.pt, c.ivMa, c.acu, c.mo, c.allergy, c.covid, c.telehealth, 7],
+      HEADER_ROW,
+      ['DATE', 45663, 45664, 45665, 45666, 45667, 45668, 45669, ''],
+      mrow('Med', c.med), mrow('Chiro', c.chiro), mrow('Pod', c.pod), mrow('PT', c.pt),
+      mrow('IV', c.ivMa), mrow('ACU', c.acu),
+      ['TOTAL', 777, 0, 0, 0, 0, 0, 0, 777], // subtotal row → must be IGNORED, not counted
+      mrow('MO', c.mo), mrow('Allergy', c.allergy), mrow('Covid Test', c.covid), mrow('Telehealth', c.telehealth),
+      ['Sprained Wombat', 9, 0, 0, 0, 0, 0, 0, 9], // unknown row label → surfaced as unmapped
       [`New Patients: ${c.newPatients}`],
     ],
   });
+  const emptyTab = { values: [HEADER_ROW, ['DATE', '', '', '', '', '', '', '', '']] }; // no metric rows
   const JUNE = { med: 120, chiro: 64, pod: 20, pt: 30, ivMa: 40, acu: 12, mo: 6, allergy: 8, covid: 3, telehealth: 5, newPatients: 31 };
   const MAY = { med: 110, chiro: 60, pod: 18, pt: 28, ivMa: 36, acu: 10, mo: 5, allergy: 7, covid: 2, telehealth: 4, newPatients: 20 };
   const PREV_JUNE = { med: 100, chiro: 55, pod: 16, pt: 25, ivMa: 33, acu: 9, mo: 4, allergy: 6, covid: 2, telehealth: 3, newPatients: 18 };
 
-  // Current-year file: two month tabs (→ June=current, May=prior) + provider/microsoft.com
-  // tabs that selectMetricTabs must EXCLUDE. Tab names carry the real files' dirtiness.
+  // Current-year file: month tabs (May, June populated; July EMPTY — a future month) + provider
+  // / microsoft.com tabs that selectMetricTabs EXCLUDES. The empty July tab must be SKIPPED so
+  // June=current, May=prior (MAD-41 AC-5). Tab names carry the real files' dirtiness.
   w(g, 'worksheets.json')({
     value: [
       { name: 'May Totals Madison' }, { name: 'May Provider Totals ' },
       { name: 'June Totals Madison' }, { name: 'June Provier Totals ' },
+      { name: 'July Totals Madison' }, { name: 'July Provider Totals ' }, // July empty (future month)
       { name: 'microsoft.com:RD' },
     ],
   });
   w(usedrange, 'June Totals Madison.json')(gridFor(JUNE));
   w(usedrange, 'May Totals Madison.json')(gridFor(MAY));
+  w(usedrange, 'July Totals Madison.json')(emptyTab);
 
   // Prior-year file (YoY): one month tab → its values become the additive yearAgo.
   w(g, 'worksheets-prevyear.json')({ value: [{ name: 'June Totals Madison' }, { name: 'microsoft.com:RD' }] });
