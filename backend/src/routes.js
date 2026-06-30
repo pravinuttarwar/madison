@@ -334,6 +334,65 @@ router.get('/reports', route('spreadsheet',
       providerSkipped = provReads.flatMap((r) => r.skipped || []);
     } catch { providers = []; } // additive — a provider-read failure never breaks the metrics report
 
+    // MAD-51: the WEEKLY view — split each current source's metric tabs into their stacked weekly
+    // blocks (latest-first across tabs), taking the latest block as the current week and the
+    // previous block as the prior week. Providers are summed per week the same way. Additive: the
+    // `weekly` section is built only when a current week block exists; a failure degrades to no
+    // weekly section, never breaking the monthly report.
+    const readWeeklyBlocks = async (src, counter) => {
+      let tabs = T.selectMetricTabs(await graph.workbookWorksheetNames(src));
+      tabs = T.capMetricTabsToMonth(tabs, new Date());
+      const blocks = []; // latest-first: [current, prior]
+      for (let i = tabs.length - 1; i >= 0 && blocks.length < 2; i -= 1) {
+        const wbs = T.splitWeeklyBlocks(await graph.workbookUsedRange(tabs[i], src));
+        for (let b = wbs.length - 1; b >= 0 && blocks.length < 2; b -= 1) {
+          const counts = counter(wbs[b].rows);
+          if (Object.keys(counts).length > 0) blocks.push({ serials: wbs[b].dateSerials, counts });
+        }
+      }
+      return blocks;
+    };
+    const readWeeklyProviderBlocks = async (src) => {
+      const names = await graph.workbookWorksheetNames(src);
+      let provTabs = T.selectProviderTabs(names);
+      if (!provTabs.length) {
+        provTabs = names.filter((n) => T.monthIndexFromTabName(n) != null && !String(n).toLowerCase().startsWith('microsoft.com:'));
+      }
+      provTabs = T.capMetricTabsToMonth(provTabs, new Date());
+      const blocks = []; // latest-first: [current, prior]
+      for (let i = provTabs.length - 1; i >= 0 && blocks.length < 2; i -= 1) {
+        const wbs = T.splitWeeklyBlocks(await graph.workbookUsedRange(provTabs[i], src));
+        for (let b = wbs.length - 1; b >= 0 && blocks.length < 2; b -= 1) {
+          const counts = T.providerCountsFromGrid(wbs[b].rows).counts;
+          if (Object.keys(counts).length > 0) blocks.push(counts);
+        }
+      }
+      return blocks;
+    };
+    let weekly = null;
+    try {
+      const weekReads = await Promise.all(currentSources.map((src) => readWeeklyBlocks(src, (rows) => T.countsFromGrid(rows).counts)));
+      const curBlocks = weekReads.map((b) => b[0]).filter(Boolean);
+      const priorBlocks = weekReads.map((b) => b[1]).filter(Boolean);
+      if (curBlocks.length) {
+        let wProviders = [];
+        try {
+          const provWeek = await Promise.all(currentSources.map(readWeeklyProviderBlocks));
+          wProviders = T.providersSection(
+            T.mergeProviderCounts(provWeek.map((b) => b[0]).filter(Boolean)),
+            T.mergeProviderCounts(provWeek.map((b) => b[1]).filter(Boolean)),
+          );
+        } catch { wProviders = []; }
+        weekly = T.weeklyReportSection({
+          current: T.mergeCounts(curBlocks.map((b) => b.counts)),
+          prior: T.mergeCounts(priorBlocks.map((b) => b.counts)),
+          currentSerials: curBlocks[0]?.serials || [],
+          priorSerials: priorBlocks[0]?.serials || [],
+          providers: wProviders,
+        });
+      }
+    } catch { weekly = null; } // additive — a weekly-read failure never breaks the monthly report
+
     // Audit the workbook READ once per request — item reference(s) + outcome, never cell values (AC-8).
     const items = [...currentSources, ...prevYearSources].map((s) => (s && s.itemId) || 'env').join(',') || 'env';
     workbookEvent('read', { sessionId, ref: items, outcome: 'ok' });
@@ -344,6 +403,7 @@ router.get('/reports', route('spreadsheet',
       { period }, // MAD-50: real month period (replaces the hardcoded "Week 0")
     );
     if (providers.length) dto.providers = providers; // additive section (MAD-46)
+    if (weekly) dto.weekly = weekly; // additive weekly-block view (MAD-51); absent when no week block
     // MAD-50: "found but not counted" — unrecognized metric labels + after-TOTAL provider rows,
     // surfaced for review. Labels/references only, never cell values (AC-3). Additive; absent when empty.
     const warnings = T.reportWarnings(metricUnmapped, providerSkipped);

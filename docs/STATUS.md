@@ -184,6 +184,19 @@ Legend: ✅ done · 🟡 prototype/partial (UI real, live data pending) · ⛔ o
   faces. **Frontend-only; no API/DTO/DB change; not ePHI.** AC-1..AC-3 pinned by `theme-fonts.test.ts`; `pnpm build`
   bundles the woff2 locally and `dist/index.html` has no Google Fonts references. (Applying JetBrains Mono across all
   KPI/metric figures — currently `tabular-nums` only — is a deferred taste decision.)
+- **[MAD-51](https://connecthealth.atlassian.net/browse/MAD-51) — Reports: Month / Week period toggle (weekly-block view)**
+  (Phase-1 productionization, epic [MAD-1](https://connecthealth.atlassian.net/browse/MAD-1), MAD Sprint 2). Builds the
+  **weekly** half of the Month/Week toggle on top of MAD-50's monthly correctness. The monthly tabs hold stacked
+  **weekly blocks** (`DATE → rows → TOTAL`); `splitWeeklyBlocks` slices a tab into its blocks so each week sums
+  independently (metrics **and** providers), and `/api/reports` carries an **additive `weekly` section** (latest block =
+  current week vs the prior block) labeled **"Week of Jun 22 vs Jun 15"** — derived from the block's Excel DATE serials
+  via **UTC components** (zone-independent, no TZ conversion). The Reports page gains a **Month | Week** toggle (default
+  Month); selecting a view swaps the numbers **and** the inner-card labels (retiring the stale "Last week"/
+  "week-over-week" labels on monthly data). Also fixes a latent bug: a `"New Patients: N"` row is counted via the
+  free-text scan, so it's no longer surfaced as a "found but not counted" warning. **Additive — the monthly DTO shape
+  is byte-unchanged; weekly absent when no block; no DB; not ePHI (aggregate counts).** AC-1..AC-6 pinned by
+  `reports-weekly`/`reports-weekly-route`/`Reports.test.tsx`; full gate green (backend 207 + frontend 114). Breaking
+  change: none.
 
 ### 🟡 Remaining (open in Jira)
 

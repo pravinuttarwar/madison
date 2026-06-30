@@ -193,16 +193,28 @@ export function writeFixtures(dir, now = new Date()) {
   // EXCLUDE, not double-count). An unknown "Sprained Wombat" row label must surface as unmapped.
   const HEADER_ROW = ['', 'Mon', 'Tues', 'Wed', 'Thur', 'Fri', 'Sat', 'Sun', 'Totals'];
   const mrow = (label, v) => [label, v, 0, 0, 0, 0, 0, 0, v]; // value in Mon; Totals col = v (excluded)
+  // MAD-51: the real tabs hold STACKED WEEKLY blocks (header → DATE serials → rows → TOTAL). Each
+  // month splits across two weeks (prior = Jun 15, current = Jun 22) whose columns SUM to the
+  // monthly value — so the monthly rollup (MAD-50) is byte-identical while the weekly view (MAD-51)
+  // can pick a single block. Excel serials: 46188 = 2026-06-15, 46195 = 2026-06-22.
+  const W1_SERIALS = [46188, 46189, 46190, 46191, 46192, 46193, 46194]; // week of Jun 15 (prior)
+  const W2_SERIALS = [46195, 46196, 46197, 46198, 46199, 46200, 46201]; // week of Jun 22 (current)
+  const splitWk = (v) => { const w2 = Math.floor(v * 0.4); return [v - w2, w2]; }; // [prior, current]
+  const pickWk = (c, idx) => Object.fromEntries(Object.entries(c).map(([k, v]) => [k, splitWk(v)[idx]]));
+  const weekBlock = (serials, c) => [
+    HEADER_ROW,
+    ['DATE', ...serials, ''],
+    mrow('Med', c.med), mrow('Chiro', c.chiro), mrow('Pod', c.pod), mrow('PT', c.pt),
+    mrow('IV', c.ivMa), mrow('ACU', c.acu),
+    ['TOTAL', 777, 0, 0, 0, 0, 0, 0, 777], // subtotal row → must be IGNORED, not counted
+    mrow('MO', c.mo), mrow('Allergy', c.allergy), mrow('Covid Test', c.covid), mrow('Telehealth', c.telehealth),
+    ['Sprained Wombat', 9, 0, 0, 0, 0, 0, 0, 9], // unknown row label → surfaced as unmapped
+    [`New Patients: ${c.newPatients}`],
+  ];
   const gridFor = (c) => ({
     values: [
-      HEADER_ROW,
-      ['DATE', 45663, 45664, 45665, 45666, 45667, 45668, 45669, ''],
-      mrow('Med', c.med), mrow('Chiro', c.chiro), mrow('Pod', c.pod), mrow('PT', c.pt),
-      mrow('IV', c.ivMa), mrow('ACU', c.acu),
-      ['TOTAL', 777, 0, 0, 0, 0, 0, 0, 777], // subtotal row → must be IGNORED, not counted
-      mrow('MO', c.mo), mrow('Allergy', c.allergy), mrow('Covid Test', c.covid), mrow('Telehealth', c.telehealth),
-      ['Sprained Wombat', 9, 0, 0, 0, 0, 0, 0, 9], // unknown row label → surfaced as unmapped
-      [`New Patients: ${c.newPatients}`],
+      ...weekBlock(W1_SERIALS, pickWk(c, 0)), // prior week (Jun 15)
+      ...weekBlock(W2_SERIALS, pickWk(c, 1)), // current week (Jun 22, latest)
     ],
   });
   const emptyTab = { values: [HEADER_ROW, ['DATE', '', '', '', '', '', '', '', '']] }; // no metric rows

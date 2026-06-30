@@ -185,6 +185,9 @@ export default function Reports() {
   // reloadKey bumps after a (re)connect to refetch; editing shows the connect form over a report.
   const [reloadKey, setReloadKey] = useState(0);
   const [editing, setEditing] = useState(false);
+  // MAD-51: Month (default) vs Week period view. Only offered when the report carries a `weekly`
+  // block section; selecting it swaps the numbers AND the labels to the weekly period.
+  const [view, setView] = useState<'month' | 'week'>('month');
   // MAD-48: the report is cached 24h; the Refresh button forces a re-read via getReports(refresh).
   const forceRefresh = useRef(false);
   const { data, loading } = useApi(() => {
@@ -216,17 +219,31 @@ export default function Reports() {
     );
   }
 
+  // MAD-51: the weekly-block view is additive — present only when the workbook had a weekly block.
+  // The toggle is shown only then; if absent, we stay on the monthly view as before.
+  const WEEKLY = data.weekly && view === 'week' ? data.weekly : null;
+  const showToggle = Boolean(data.weekly);
+  // The ACTIVE view drives every number + period below: the weekly block when Week is selected,
+  // else the monthly rollup. `warnings` always come from the monthly parse (source-level).
+  const active = WEEKLY ?? data;
+  const isWeek = Boolean(WEEKLY);
   const {
     period: PERIOD = null,
-    warnings: WARNINGS = [],
     metrics: WEEKLY_METRICS,
     encountersBySpecialty: ENCOUNTERS_BY_SPECIALTY,
     totalEncounters: TOTAL_ENCOUNTERS,
     providers: PROVIDERS = [],
-  } = data;
-  // MAD-50: the real period label (e.g. "June 2026 vs May 2026"), replacing the old "Week 0".
+  } = active;
+  const WARNINGS = data.warnings ?? [];
+  // View-aware labels — the inner cards now read the SELECTED period, never a hardcoded "week"
+  // (MAD-51 retires the stale "Last week"/"week-over-week" labels on monthly data). The base
+  // last-vs-prior comparison is named by period noun, distinct from the MoM/YoY columns.
+  const periodNoun = isWeek ? 'week' : 'month';
+  const PRIMARY_LABEL = isWeek ? 'This week' : 'This month';
+  // MAD-50: the real period label. For the weekly view, "Week of Jun 22 vs Jun 15" (drop the
+  // redundant "Week of " on the prior side).
   const PERIOD_LABEL = PERIOD?.current
-    ? `${PERIOD.current}${PERIOD.prior ? ` vs ${PERIOD.prior}` : ''}`
+    ? `${PERIOD.current}${PERIOD.prior ? ` vs ${isWeek ? PERIOD.prior.replace(/^Week of /, '') : PERIOD.prior}` : ''}`
     : 'this period';
   const maxEnc = Math.max(...ENCOUNTERS_BY_SPECIALTY.map((e) => e.last));
   // MAD-46: a per-provider breakdown appears only when provider tabs are connected/readable.
@@ -247,6 +264,23 @@ export default function Reports() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* MAD-51: Month | Week period toggle — only when the report carries a weekly block. */}
+          {showToggle && (
+            <div className="inline-flex rounded-full border border-border bg-card p-0.5 text-xs font-medium" role="group" aria-label="Reporting period">
+              {(['month', 'week'] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  aria-pressed={view === v}
+                  className={`rounded-full px-3 py-1 capitalize transition-colors ${
+                    view === v ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted/50'
+                  }`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          )}
           <button
             onClick={onRefresh}
             className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50"
@@ -352,13 +386,13 @@ export default function Reports() {
         </Panel>
 
         {/* Full 12-metric table */}
-        <Panel title="Weekly metrics" source="12 metrics" className="lg:col-span-3">
+        <Panel title={`${isWeek ? 'Weekly' : 'Monthly'} metrics`} source="12 metrics" className="lg:col-span-3">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <th className="py-2 pr-3 font-medium">Metric</th>
-                  <th className="py-2 px-3 text-right font-medium">Last week</th>
+                  <th className="py-2 px-3 text-right font-medium">{PRIMARY_LABEL}</th>
                   <th className="py-2 px-3 text-right font-medium">Prior</th>
                   <th className="py-2 px-3 text-right font-medium">Change</th>
                   {hasMoM && <th className="py-2 px-3 text-right font-medium">MoM</th>}
@@ -390,7 +424,7 @@ export default function Reports() {
             </table>
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
-            Change is the week-over-week count difference{hasMoM ? '; MoM compares month-to-date against the prior month' : ''}{hasYoY ? '; YoY compares against the same period last year' : ''}. We'd
+            Change is the count difference vs the prior {periodNoun}{hasMoM ? '; MoM compares month-to-date against the prior month' : ''}{hasYoY ? '; YoY compares against the same period last year' : ''}. We'd
             mirror your exact metric layout and named ranges once you share the source file.
           </p>
         </Panel>
@@ -414,7 +448,7 @@ export default function Reports() {
             ))}
           </ul>
           <p className="mt-3 text-xs text-muted-foreground">
-            Encounters by provider this month vs last — from your Provider Totals tabs.
+            Encounters by provider this {periodNoun} vs last — from your Provider Totals tabs.
           </p>
         </Panel>
       )}

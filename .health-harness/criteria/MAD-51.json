@@ -1,0 +1,30 @@
+{
+  "issueKey": "MAD-51",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "Given a month tab with multiple stacked weekly blocks (DATE→rows→TOTAL), when parsed for the weekly view, then per-block metric sums are computed independently (the latest block differs from the whole-month sum); latest block = current week, the previous block = prior week (across the tab boundary when the latest tab has one block)."
+    },
+    {
+      "id": "AC-2",
+      "text": "Given a Provider Totals grid with multiple weekly blocks, when parsed for the weekly view, then per-block provider counts are computed (current vs prior week) and after-TOTAL rows (a service tally) are still excluded/warned, never miscounted as a provider."
+    },
+    {
+      "id": "AC-3",
+      "kind": "timezone",
+      "text": "Given a block DATE row of Excel date serials, when the weekly period label is derived, then it reads \"Week of Jun 22 vs Jun 15\" computed from the serials via UTC components — identical under any host/browser timezone (proven under a hostile clock)."
+    },
+    {
+      "id": "AC-4",
+      "text": "Given two or more weekly blocks with data, when GET /api/reports is read, then the payload carries an additive weekly section ({period, metrics, encountersBySpecialty, totalEncounters, providers}) and the existing monthly shape is unchanged."
+    },
+    {
+      "id": "AC-5",
+      "text": "Given a workbook with no recognizable weekly block (no DATE-serial row), when GET /api/reports is read, then the weekly section is absent and the monthly report still returns normally (no error)."
+    },
+    {
+      "id": "AC-6",
+      "text": "Given the report has a weekly section, when the page renders, then a Month | Week toggle appears defaulting to Month; selecting Week swaps numbers and labels to the weekly period (This week / Prior week), Month restores the monthly numbers and labels; when weekly is absent no toggle shows."
+    }
+  ]
+}
