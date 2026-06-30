@@ -171,8 +171,11 @@ export default function Reports() {
     metrics: WEEKLY_METRICS,
     encountersBySpecialty: ENCOUNTERS_BY_SPECIALTY,
     totalEncounters: TOTAL_ENCOUNTERS,
+    providers: PROVIDERS = [],
   } = data;
   const maxEnc = Math.max(...ENCOUNTERS_BY_SPECIALTY.map((e) => e.last));
+  // MAD-46: a per-provider breakdown appears only when provider tabs are connected/readable.
+  const maxProv = Math.max(1, ...PROVIDERS.map((p) => p.current));
   // MAD-29: a year-ago column appears only when the workbook supplies prior-year values.
   const hasYoY = WEEKLY_METRICS.some((m) => m.yearAgo !== undefined);
   // MAD-28: a month-over-month column appears only when the workbook supplies month values.
@@ -313,6 +316,29 @@ export default function Reports() {
           </p>
         </Panel>
       </div>
+
+      {/* MAD-46 — by-provider breakdown (only when provider data is connected) */}
+      {PROVIDERS.length > 0 && (
+        <Panel title="By provider" source="Provider totals" sourceMode={spreadsheetMode}>
+          <ul className="grid gap-3.5 sm:grid-cols-2">
+            {PROVIDERS.map((p, i) => (
+              <li key={p.name}>
+                <div className="mb-1 flex items-center justify-between text-sm">
+                  <span className="font-medium text-foreground">{p.name}</span>
+                  <span className="flex items-center gap-2 tabular-nums text-muted-foreground">
+                    {p.current}
+                    <Trend delta={p.current - p.prior} />
+                  </span>
+                </div>
+                <Bar value={p.current} max={maxProv} colorVar={CHART_COLORS[i % CHART_COLORS.length]} />
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Encounters by provider this month vs last — from your Provider Totals tabs.
+          </p>
+        </Panel>
+      )}
     </div>
   );
 }

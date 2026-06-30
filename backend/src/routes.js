@@ -289,11 +289,41 @@ router.get('/reports', route('spreadsheet',
     const prevYearReads = await Promise.all(prevYearSources.map((src) => readSource(src, false)));
     const yearAgo = T.mergeCounts(prevYearReads.map((r) => r.current));
 
+    // MAD-46: per-provider breakdown — read the Provider Totals tabs (or, for the Chiro file
+    // which has no such tabs, its month tabs) from each current source, capped to the current
+    // month, latest-with-data. Additive; failures degrade to an empty list (never break the report).
+    const readProviders = async (src) => {
+      const names = await graph.workbookWorksheetNames(src);
+      let provTabs = T.selectProviderTabs(names);
+      if (!provTabs.length) {
+        // Chiro Numbers: no "Provider Totals" tabs — its month tabs ARE the provider data.
+        provTabs = names.filter((n) => T.monthIndexFromTabName(n) != null && !String(n).toLowerCase().startsWith('microsoft.com:'));
+      }
+      provTabs = T.capMetricTabsToMonth(provTabs, new Date());
+      const item = (src && src.itemId) || 'env';
+      const collected = []; // latest-first: [current, prior]
+      for (let i = provTabs.length - 1; i >= 0 && collected.length < 2; i -= 1) {
+        const counts = T.providerCountsFromGrid(await graph.workbookUsedRange(provTabs[i], src));
+        if (Object.keys(counts).length > 0) collected.push(counts);
+      }
+      return { current: collected[0] || {}, prior: collected[1] || {}, item };
+    };
+    let providers = [];
+    try {
+      const provReads = await Promise.all(currentSources.map(readProviders));
+      providers = T.providersSection(
+        T.mergeProviderCounts(provReads.map((r) => r.current)),
+        T.mergeProviderCounts(provReads.map((r) => r.prior)),
+      );
+    } catch { providers = []; } // additive — a provider-read failure never breaks the metrics report
+
     // Audit the workbook READ once per request — item reference(s) + outcome, never cell values (AC-8).
     const items = [...currentSources, ...prevYearSources].map((s) => (s && s.itemId) || 'env').join(',') || 'env';
     workbookEvent('read', { sessionId, ref: items, outcome: 'ok' });
 
-    return T.reportsFromGrids({ current, prior, yearAgo: Object.keys(yearAgo).length ? yearAgo : undefined });
+    const dto = T.reportsFromGrids({ current, prior, yearAgo: Object.keys(yearAgo).length ? yearAgo : undefined });
+    if (providers.length) dto.providers = providers; // additive section (MAD-46)
+    return dto;
   },
 ));
 

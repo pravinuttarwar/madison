@@ -532,8 +532,19 @@ export function selectMetricTabs(names) {
   return (Array.isArray(names) ? names : []).filter((raw) => {
     const n = String(raw == null ? '' : raw).toLowerCase();
     if (n.startsWith('microsoft.com:')) return false;
-    if (/provi(d|e)er/.test(n)) return false;          // "provider"/"provier" totals tabs
+    if (/provi(d|e)?er/.test(n)) return false;          // "provider"/"provier" totals tabs
     return /totals?\s*madison/.test(n.replace(/([a-z])(totals)/, '$1 $2'));
+  });
+}
+
+// MAD-46: the "Provider Totals" month tabs (per-provider detail). Excludes the metric "Totals
+// Madison" tabs and the microsoft.com:* artifacts. A file with NO provider tabs but month-named
+// tabs (the Chiro Numbers file) is handled by the route, which falls back to its month tabs.
+export function selectProviderTabs(names) {
+  return (Array.isArray(names) ? names : []).filter((raw) => {
+    const n = String(raw == null ? '' : raw).toLowerCase();
+    if (n.startsWith('microsoft.com:')) return false;
+    return /provi(d|e)?er/.test(n);
   });
 }
 
@@ -669,6 +680,69 @@ export function pickNonEmptyPeriods(items) {
   const current = nonEmpty[nonEmpty.length - 1]?.counts || {};
   const prior = nonEmpty.length >= 2 ? nonEmpty[nonEmpty.length - 2].counts : {};
   return { current, prior };
+}
+
+// ── MAD-46: per-provider breakdown ────────────────────────────────────────────
+// The Provider Totals tabs and the Chiro file use the same row-label layout, but the row labels
+// are PROVIDER names (staff, not patient PHI). Same structural skips (DATE/TOTAL/day/blank) and
+// Totals-column exclusion as countsFromGrid; we just key by the (normalized) provider name so
+// case/whitespace variants ("Gunn" / "Gunn ") merge to one provider.
+function normProviderName(raw) {
+  const name = String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim();
+  return { key: name.toLowerCase(), name };
+}
+
+// One provider grid → { providerKey: { name, count } } summed across stacked weekly blocks.
+// Tolerant: blank/non-numeric cells skipped, malformed grid → {}, never throws (AC-1).
+export function providerCountsFromGrid(grid) {
+  const out = {};
+  const rows = Array.isArray(grid) ? grid : [];
+  const totalsCols = new Set([0]); // col 0 is the label; any "Totals" column is excluded too
+  rows.forEach((row) => (Array.isArray(row) ? row : []).forEach((cell, c) => {
+    if (['total', 'totals'].includes(normHeader(cell))) totalsCols.add(c);
+  }));
+  for (const row of rows) {
+    if (!Array.isArray(row)) continue;
+    if (IGNORED_HEADERS.has(normHeader(row[0]))) continue; // DATE / TOTAL / day-header / blank
+    const { key, name } = normProviderName(row[0]);
+    if (!key) continue;
+    let total = 0; let saw = false;
+    row.forEach((cell, c) => {
+      if (totalsCols.has(c)) return;
+      const n = numeric(cell);
+      if (n != null) { total += n; saw = true; }
+    });
+    if (saw) {
+      if (!out[key]) out[key] = { name, count: 0 };
+      out[key].count += total;
+    }
+  }
+  return out;
+}
+
+// Merge provider count-maps (across tabs + files) — sum by provider key, keep the display name.
+export function mergeProviderCounts(maps) {
+  const out = {};
+  for (const m of (maps || [])) {
+    for (const [k, v] of Object.entries(m || {})) {
+      if (!out[k]) out[k] = { name: v.name, count: 0 };
+      out[k].count += v.count || 0;
+    }
+  }
+  return out;
+}
+
+// Build the additive `providers` DTO section — [{ name, current, prior }] sorted by current
+// encounters (desc), then name. A provider present in only one period reads 0 for the other.
+export function providersSection(current = {}, prior = {}) {
+  const keys = new Set([...Object.keys(current), ...Object.keys(prior)]);
+  return [...keys]
+    .map((k) => ({
+      name: (current[k] && current[k].name) || (prior[k] && prior[k].name) || k,
+      current: (current[k] && current[k].count) || 0,
+      prior: (prior[k] && prior[k].count) || 0,
+    }))
+    .sort((a, b) => b.current - a.current || a.name.localeCompare(b.name));
 }
 
 // Sum a list of count-maps ({metricKey: n}) into one — aggregation across tabs AND files (AC-3).
