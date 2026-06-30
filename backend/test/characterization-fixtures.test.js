@@ -264,6 +264,30 @@ test('[AC-1][AC-2] GET /api/reports — canonical metrics from the grid parser (
   assert.ok(!body.metrics.some((m) => /wombat/i.test(m.key) || /wombat/i.test(m.label)));
 });
 
+// MAD-50 [AC-4] the report carries the REAL period (month labels from the selected tabs),
+// not the hardcoded "Week 0". June is the latest current-month tab → current; May → prior.
+test('[AC-4] GET /api/reports — real month period (June vs May), never "Week 0"', async () => {
+  const { status, body } = await getJson('/api/reports');
+  assert.equal(status, 200);
+  const year = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric' }).format(new Date());
+  assert.deepEqual(body.period, { current: `June ${year}`, prior: `May ${year}` });
+});
+
+// MAD-50 [AC-2][AC-3] "found but not counted" warnings surface the after-TOTAL provider row
+// (allergy) AND the unmapped metric label (Sprained Wombat) — as LABELS only, never cell values.
+test('[AC-2][AC-3] GET /api/reports — not-counted warnings carry labels only, no values', async () => {
+  const { status, body } = await getJson('/api/reports');
+  assert.equal(status, 200);
+  assert.ok(Array.isArray(body.warnings) && body.warnings.length >= 2);
+  const labels = body.warnings.map((w) => w.label.toLowerCase());
+  assert.ok(labels.includes('allergy'), 'after-TOTAL provider-tab row surfaced');
+  assert.ok(labels.some((l) => /wombat/.test(l)), 'unmapped metric label surfaced');
+  // references only — each warning is exactly { label }, no positions/counts
+  for (const w of body.warnings) assert.deepEqual(Object.keys(w), ['label']);
+  // no provider-tab cell value (e.g. allergy's 8) leaks into the warning payload
+  assert.ok(!/\b8\b/.test(JSON.stringify(body.warnings)));
+});
+
 // MAD-46 — the additive `providers` section: per-provider counts from the Provider Totals tabs
 // (June=current, May=prior), name-normalized (Bachman + "Bachman " merged), sorted by current.
 test('[AC-1][AC-4] GET /api/reports — additive per-provider breakdown (name-normalized, sorted)', async () => {

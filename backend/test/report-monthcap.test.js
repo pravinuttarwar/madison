@@ -72,7 +72,7 @@ test('[AC-2] the selected month grid is summed by the app (no owner-maintained s
 // ── [AC-5] the capped/parsed path feeds the unchanged report DTO ───────────────
 test('[AC-5] reportsFromGrids over the selected counts yields the byte-compatible DTO (MAD-43 renders it)', () => {
   const dto = reportsFromGrids({ current: countsFromGrid(MONTH_GRID).counts, prior: { med: 25, chiro: 12 } });
-  assert.deepEqual(Object.keys(dto).sort(), ['encountersBySpecialty', 'metrics', 'totalEncounters', 'weekNumber']);
+  assert.deepEqual(Object.keys(dto).sort(), ['encountersBySpecialty', 'metrics', 'period', 'totalEncounters', 'weekNumber']);
   const med = dto.metrics.find((m) => m.key === 'med');
   assert.equal(med.last, 30);
   assert.equal(med.prior, 25);

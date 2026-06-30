@@ -179,6 +179,31 @@ describe('Reports — by-provider breakdown (MAD-46)', () => {
   });
 });
 
+// MAD-50 — real period label (no "Week 0") + "found but not counted" warnings note.
+describe('Reports — period label + not-counted warnings (MAD-50)', () => {
+  it('[AC-4] renders the real period (e.g. "June 2026 vs May 2026"), never "Week 0"', async () => {
+    stubReports({ ...REPORT_WOW_ONLY, period: { current: 'June 2026', prior: 'May 2026' } });
+    render(<Reports />);
+    expect(await screen.findByText(/June 2026 vs May 2026/)).toBeTruthy();
+    expect(screen.queryByText(/Week 0/)).toBeNull();
+  });
+
+  it('[AC-2] shows a "found but not counted" note listing the skipped labels', async () => {
+    stubReports({ ...REPORT_WOW_ONLY, period: { current: 'June 2026', prior: 'May 2026' }, warnings: [{ label: 'allergy' }, { label: 'Sprained Wombat' }] });
+    render(<Reports />);
+    expect(await screen.findByText(/found but not counted/i)).toBeTruthy();
+    expect(screen.getByText(/allergy/)).toBeTruthy();
+    expect(screen.getByText(/Sprained Wombat/)).toBeTruthy();
+  });
+
+  it('[AC-2] omits the note when there are no warnings (additive)', async () => {
+    stubReports({ ...REPORT_WOW_ONLY, period: { current: 'June 2026', prior: 'May 2026' } });
+    render(<Reports />);
+    await screen.findByText(/June 2026/);
+    expect(screen.queryByText(/found but not counted/i)).toBeNull();
+  });
+});
+
 describe('Reports — month-over-month comparison (MAD-28)', () => {
   it('[AC-2] shows a month-over-month column/indicator when month values are present', async () => {
     stubReports(REPORT_WITH_MOM);

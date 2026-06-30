@@ -608,6 +608,24 @@ export function capMetricTabsToMonth(tabs, now, tz = PRACTICE_TZ) {
   });
 }
 
+// MAD-50: the human-readable PERIOD for the report header. The month comes from the SELECTED tab
+// name (data, not a clock — so it's zone-independent); only the calendar YEAR is taken from `now`
+// in the practice zone (the tab names carry no year). Replaces the meaningless hardcoded "Week 0".
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+export function periodFromTabs(currentTab, priorTab, now = new Date(), tz = PRACTICE_TZ) {
+  // tz: calendar YEAR in the practice zone for the label (month is data-driven from the tab name).
+  const year = new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric' }).format(now);
+  const label = (tab) => {
+    const mi = monthIndexFromTabName(tab);
+    return mi == null ? '' : `${MONTH_NAMES[mi]} ${year}`;
+  };
+  return {
+    current: label(currentTab) || `${MONTH_NAMES[monthInZone(now, tz)]} ${year}`,
+    prior: label(priorTab),
+  };
+}
+
 // "New Patients: 31" (and "New Patient: 7", trailing notes) → 31. Non-matching cell → null.
 function newPatientsInCell(cell) {
   const m = String(cell == null ? '' : cell).match(/new\s+patient[s]?\s*:?\s*(\d+)/i);
@@ -723,31 +741,66 @@ function normProviderName(raw) {
   return { key: name.toLowerCase(), name };
 }
 
-// One provider grid → { providerKey: { name, count } } summed across stacked weekly blocks.
-// Tolerant: blank/non-numeric cells skipped, malformed grid → {}, never throws (AC-1).
+// One provider grid → { counts: { providerKey: { name, count } }, skipped: [{ label }] }.
+// MAD-50: providers are the labeled rows BETWEEN a block's DATE row and its TOTAL row. Rows
+// AFTER the TOTAL (a service tally like "allergy", stray notes) are NOT providers — they are
+// collected into `skipped` (LABEL only, never values — AC-3) so the report can warn "found but
+// not counted" rather than silently miscounting them as a provider (AC-1/AC-2). Fallback: a grid
+// with no TOTAL marker at all (a differently shaped sheet) counts every labeled row, as before,
+// so we never silently drop a real provider. Tolerant: malformed grid → empty, never throws.
 export function providerCountsFromGrid(grid) {
   const out = {};
+  const skipped = [];
+  const seenSkip = new Set();
   const rows = Array.isArray(grid) ? grid : [];
   const totalsCols = new Set([0]); // col 0 is the label; any "Totals" column is excluded too
   rows.forEach((row) => (Array.isArray(row) ? row : []).forEach((cell, c) => {
     if (['total', 'totals'].includes(normHeader(cell))) totalsCols.add(c);
   }));
+  const hasTotalRow = rows.some((row) => Array.isArray(row) && ['total', 'totals'].includes(normHeader(row[0])));
+  let inZone = !hasTotalRow; // no TOTAL markers → whole grid is provider rows (legacy fallback)
+  const noteSkip = (label) => {
+    const k = String(label).toLowerCase().trim();
+    if (!k || seenSkip.has(k)) return;
+    seenSkip.add(k); skipped.push({ label: String(label).trim() });
+  };
   for (const row of rows) {
     if (!Array.isArray(row)) continue;
-    if (IGNORED_HEADERS.has(normHeader(row[0]))) continue; // DATE / TOTAL / day-header / blank
-    const { key, name } = normProviderName(row[0]);
-    if (!key) continue;
+    const label0 = normHeader(row[0]);
+    if (label0 === 'date') { inZone = true; continue; }       // enter the provider zone
+    if (['total', 'totals'].includes(label0)) { inZone = false; continue; } // leave it at TOTAL
+    if (IGNORED_HEADERS.has(label0)) continue;                // blank / day-header
     let total = 0; let saw = false;
     row.forEach((cell, c) => {
       if (totalsCols.has(c)) return;
       const n = numeric(cell);
       if (n != null) { total += n; saw = true; }
     });
-    if (saw) {
-      if (!out[key]) out[key] = { name, count: 0 };
-      out[key].count += total;
-    }
+    if (!saw) continue;                       // a label with no data → nothing to count or warn
+    if (!inZone) { noteSkip(row[0]); continue; } // after TOTAL → found but NOT counted → warn
+    const { key, name } = normProviderName(row[0]);
+    if (!key) continue;
+    if (!out[key]) out[key] = { name, count: 0 };
+    out[key].count += total;
   }
+  return { counts: out, skipped };
+}
+
+// MAD-50: build the report's "found but not counted" warning list from the metric-tab unmapped
+// labels (countsFromGrid `unmapped`) + the provider-tab skipped labels (after-TOTAL rows). It
+// carries LABELS only — never row/col positions or cell values (AC-3, PHI-safe) — de-duped by
+// normalized label so a label recurring across stacked blocks/tabs shows once.
+export function reportWarnings(metricUnmapped = [], providerSkipped = []) {
+  const out = [];
+  const seen = new Set();
+  const add = (label) => {
+    const raw = String(label == null ? '' : label).trim();
+    const k = raw.toLowerCase();
+    if (!k || seen.has(k)) return;
+    seen.add(k); out.push({ label: raw });
+  };
+  for (const u of (Array.isArray(metricUnmapped) ? metricUnmapped : [])) add(u && u.header);
+  for (const s of (Array.isArray(providerSkipped) ? providerSkipped : [])) add(s && s.label);
   return out;
 }
 
@@ -791,7 +844,7 @@ export function mergeCounts(maps) {
 // each present ONLY when its period map is supplied (else the WoW shape, unchanged). A metric
 // row appears when ANY period has a value for it, in REPORT_METRICS order; the optional
 // periods read 0 for an absent key (additive, never reshaping the base contract).
-export function reportsFromGrids(periods, labels = METRIC_LABELS) {
+export function reportsFromGrids(periods, labels = METRIC_LABELS, meta = {}) {
   const { current = {}, prior = {}, yearAgo, monthToDate, prevMonth } = periods || {};
   const hasYoY = yearAgo && Object.keys(yearAgo).length > 0;
   const hasMoM = monthToDate && prevMonth
@@ -819,7 +872,8 @@ export function reportsFromGrids(periods, labels = METRIC_LABELS) {
     totalEncounters.prevMonth = sum(metrics, (m) => m.prevMonth || 0);
   }
   return {
-    weekNumber: 0,
+    weekNumber: 0, // DEPRECATED (MAD-50): kept for back-compat; the UI now renders `period`.
+    period: meta.period || null, // { current: 'June 2026', prior: 'May 2026' } (MAD-50, additive)
     metrics,
     encountersBySpecialty: metrics.slice(0, 6).map((m) => {
       const row = { label: m.label, last: m.last, prior: m.prior };

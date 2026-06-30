@@ -268,23 +268,35 @@ router.get('/reports', route('spreadsheet',
       let metricTabs = T.selectMetricTabs(await graph.workbookWorksheetNames(src));
       if (capToMonth) metricTabs = T.capMetricTabsToMonth(metricTabs, new Date()); // current month, practice zone
       const item = (src && src.itemId) || 'env';
-      const collected = []; // latest-first: [current, prior]
+      const collected = []; // latest-first: [{ counts, tab }]
+      const unmapped = []; // MAD-50: unrecognized metric labels (references only) → report warnings
       for (let i = metricTabs.length - 1; i >= 0 && collected.length < 2; i -= 1) {
         const tab = metricTabs[i];
         const parsed = T.countsFromGrid(await graph.workbookUsedRange(tab, src));
         // AC-8/9: surface unmapped labels PHI-safely — item + sheet + index references, no values.
         if (parsed.unmapped.length) {
           workbookUnmappedEvent({ sessionId, ref: item, sheet: tab, columns: parsed.unmapped.map((u) => u.col ?? u.row) });
+          unmapped.push(...parsed.unmapped);
         }
-        if (Object.keys(parsed.counts).length > 0) collected.push(parsed.counts); // skip empty tabs
+        if (Object.keys(parsed.counts).length > 0) collected.push({ counts: parsed.counts, tab }); // skip empty tabs
       }
-      return { current: collected[0] || {}, prior: collected[1] || {} };
+      return {
+        current: collected[0]?.counts || {},
+        prior: collected[1]?.counts || {},
+        currentTab: collected[0]?.tab || null, // MAD-50: drives the real period label
+        priorTab: collected[1]?.tab || null,
+        unmapped,
+      };
     };
 
     // Aggregate current/prior across all current sources — capped to the current month (MAD-45).
     const currentReads = await Promise.all(currentSources.map((src) => readSource(src, true)));
     const current = T.mergeCounts(currentReads.map((r) => r.current));
     const prior = T.mergeCounts(currentReads.map((r) => r.prior));
+    // MAD-50: the real period (month labels) comes from the first source that yielded a current tab.
+    const periodLead = currentReads.find((r) => r.currentTab) || {};
+    const period = T.periodFromTabs(periodLead.currentTab, periodLead.priorTab, new Date());
+    const metricUnmapped = currentReads.flatMap((r) => r.unmapped || []);
     // YoY: the prior-year file's latest tab → additive yearAgo (NOT capped — it's a past year).
     const prevYearReads = await Promise.all(prevYearSources.map((src) => readSource(src, false)));
     const yearAgo = T.mergeCounts(prevYearReads.map((r) => r.current));
@@ -302,27 +314,39 @@ router.get('/reports', route('spreadsheet',
       provTabs = T.capMetricTabsToMonth(provTabs, new Date());
       const item = (src && src.itemId) || 'env';
       const collected = []; // latest-first: [current, prior]
+      const skipped = []; // MAD-50: after-TOTAL labels found but not counted (references only)
       for (let i = provTabs.length - 1; i >= 0 && collected.length < 2; i -= 1) {
-        const counts = T.providerCountsFromGrid(await graph.workbookUsedRange(provTabs[i], src));
+        const { counts, skipped: sk } = T.providerCountsFromGrid(await graph.workbookUsedRange(provTabs[i], src));
+        if (sk.length) skipped.push(...sk);
         if (Object.keys(counts).length > 0) collected.push(counts);
       }
-      return { current: collected[0] || {}, prior: collected[1] || {}, item };
+      return { current: collected[0] || {}, prior: collected[1] || {}, item, skipped };
     };
     let providers = [];
+    let providerSkipped = [];
     try {
       const provReads = await Promise.all(currentSources.map(readProviders));
       providers = T.providersSection(
         T.mergeProviderCounts(provReads.map((r) => r.current)),
         T.mergeProviderCounts(provReads.map((r) => r.prior)),
       );
+      providerSkipped = provReads.flatMap((r) => r.skipped || []);
     } catch { providers = []; } // additive — a provider-read failure never breaks the metrics report
 
     // Audit the workbook READ once per request — item reference(s) + outcome, never cell values (AC-8).
     const items = [...currentSources, ...prevYearSources].map((s) => (s && s.itemId) || 'env').join(',') || 'env';
     workbookEvent('read', { sessionId, ref: items, outcome: 'ok' });
 
-    const dto = T.reportsFromGrids({ current, prior, yearAgo: Object.keys(yearAgo).length ? yearAgo : undefined });
+    const dto = T.reportsFromGrids(
+      { current, prior, yearAgo: Object.keys(yearAgo).length ? yearAgo : undefined },
+      undefined,
+      { period }, // MAD-50: real month period (replaces the hardcoded "Week 0")
+    );
     if (providers.length) dto.providers = providers; // additive section (MAD-46)
+    // MAD-50: "found but not counted" — unrecognized metric labels + after-TOTAL provider rows,
+    // surfaced for review. Labels/references only, never cell values (AC-3). Additive; absent when empty.
+    const warnings = T.reportWarnings(metricUnmapped, providerSkipped);
+    if (warnings.length) dto.warnings = warnings;
     return dto;
   }),
 ));

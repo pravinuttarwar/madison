@@ -35,6 +35,7 @@ export function apiFixtureFor(pathname: string, search: string): unknown {
   if (pathname === '/api/reports') {
     return {
       weekNumber: dashboardMonday.weekNumber,
+      period: { current: 'June 2026', prior: 'May 2026' }, // MAD-50: real period (no "Week 0")
       metrics: dashboardMonday.metrics,
       encountersBySpecialty: (dashboardMonday.metrics ?? [])
         .slice(0, 6)
