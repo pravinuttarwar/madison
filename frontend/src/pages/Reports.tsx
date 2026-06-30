@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { RefreshCw, FileSpreadsheet, AlertTriangle, Pencil } from 'lucide-react';
 import { Panel, Trend, Bar } from '@/components/primitives';
 import { Loading } from '@/components/AsyncState';
@@ -143,8 +143,15 @@ export default function Reports() {
   // reloadKey bumps after a (re)connect to refetch; editing shows the connect form over a report.
   const [reloadKey, setReloadKey] = useState(0);
   const [editing, setEditing] = useState(false);
-  const { data, loading } = useApi(getReports, [reloadKey]);
+  // MAD-48: the report is cached 24h; the Refresh button forces a re-read via getReports(refresh).
+  const forceRefresh = useRef(false);
+  const { data, loading } = useApi(() => {
+    const r = forceRefresh.current;
+    forceRefresh.current = false;
+    return getReports(r);
+  }, [reloadKey]);
   const { data: conn } = useApi(getWorkbookConnection, [reloadKey]);
+  const onRefresh = () => { forceRefresh.current = true; setReloadKey((k) => k + 1); };
 
   if (loading) return <Loading label="Loading the weekly report…" />;
 
@@ -192,6 +199,13 @@ export default function Reports() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={onRefresh}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50"
+          >
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+            Refresh
+          </button>
           <button
             onClick={() => setEditing(true)}
             className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50"
