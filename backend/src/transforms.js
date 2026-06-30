@@ -493,11 +493,11 @@ function normHeader(raw) {
 
 // Structural / non-metric columns we skip SILENTLY (not surfaced as "unmapped" — they're
 // expected): the date column, totals, and weekday headers.
-const IGNORED_HEADERS = new Set([
-  '', 'date', 'total', 'totals',
+const WEEKDAY_HEADERS = new Set([
   'mon', 'tue', 'tues', 'wed', 'thu', 'thur', 'thurs', 'fri', 'sat', 'sun',
   'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
 ]);
+const IGNORED_HEADERS = new Set(['', 'date', 'total', 'totals', ...WEEKDAY_HEADERS]);
 
 // normalized-header → canonical metric key. Every documented dirty variant resolves here.
 // AC-2: the combined ("iv & ma", "iv and ma") AND split ("iv", "ma") columns ALL map to one
@@ -624,8 +624,16 @@ export function countsFromGrid(grid) {
   const rowLabelMode = metricMatchCount(colA) > metricMatchCount(headerRow);
 
   if (rowLabelMode) {
-    // Columns that are a "Totals" column anywhere → excluded so we don't double-count (AC-4).
-    const totalsCols = new Set([0]); // col 0 is the metric LABEL, never a value
+    // MAD-49: anchor sums to the weekday-headed columns. Every block carries a `Mon..Sun` header
+    // row that names exactly which columns are counts — so a stray value in an out-of-grid column
+    // (a note column, a far-right cell) is NOT summed. Deterministic; no guessing.
+    const dayCols = new Set();
+    rows.forEach((row) => (Array.isArray(row) ? row : []).forEach((cell, c) => {
+      if (WEEKDAY_HEADERS.has(normHeader(cell))) dayCols.add(c);
+    }));
+    const anchored = dayCols.size > 0; // AC-4: only when a weekday-header row exists
+    // Fallback (no day headers): old behavior — sum all but the label col + any Totals column.
+    const totalsCols = new Set([0]);
     rows.forEach((row) => (Array.isArray(row) ? row : []).forEach((cell, c) => {
       if (['total', 'totals'].includes(normHeader(cell))) totalsCols.add(c);
     }));
@@ -635,7 +643,7 @@ export function countsFromGrid(grid) {
       if (v.unmapped) { surface({ row: r, header: String((row && row[0]) ?? '') }); return; }
       let total = 0; let saw = false;
       (Array.isArray(row) ? row : []).forEach((cell, c) => {
-        if (totalsCols.has(c)) return;  // skip the label col + any Totals column
+        if (anchored ? !dayCols.has(c) : totalsCols.has(c)) return; // AC-1 / AC-4 fallback
         const n = numeric(cell);
         if (n != null) { total += n; saw = true; }
       });
