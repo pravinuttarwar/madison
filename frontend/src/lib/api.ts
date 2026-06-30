@@ -80,6 +80,18 @@ export type ProviderRow = { name: string; current: number; prior: number };
 // row, an unrecognized metric label). Carries the LABEL only (references, never cell values).
 export type ReportWarning = { label: string };
 
+// MAD-51: the additive WEEKLY-block view. Same shape as the monthly report (period + metrics +
+// encounters + totals [+ providers]), but each figure is a SINGLE weekly block (latest vs prior
+// week) and the period is labeled "Week of Jun 22" from the block's DATE serials. Present only when
+// the workbook's tabs contain a weekly block — absent otherwise (the UI then shows Month only).
+export type WeeklyView = {
+  period?: { current: string; prior: string } | null;
+  metrics: WeeklyMetric[];
+  encountersBySpecialty: EncounterRow[];
+  totalEncounters: { last: number; prior: number; yearAgo?: number; monthToDate?: number; prevMonth?: number };
+  providers?: ProviderRow[];
+};
+
 export type ReportsData = {
   weekNumber: number; // DEPRECATED (MAD-50): superseded by `period`; no longer rendered.
   // MAD-50: the real reporting period (month labels from the selected tabs), e.g.
@@ -90,6 +102,7 @@ export type ReportsData = {
   encountersBySpecialty: EncounterRow[];
   totalEncounters: { last: number; prior: number; yearAgo?: number; monthToDate?: number; prevMonth?: number };
   providers?: ProviderRow[];
+  weekly?: WeeklyView; // MAD-51: additive weekly-block view; absent when no weekly block was found
 };
 
 // The Dashboard is a composed (BFF) view — the backend fans out to the sources it

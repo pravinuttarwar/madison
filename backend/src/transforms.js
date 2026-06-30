@@ -683,7 +683,11 @@ export function countsFromGrid(grid) {
     rows.forEach((row, r) => {
       const v = mapHeader(Array.isArray(row) ? row[0] : '');
       if (v.ignored) return;            // DATE / TOTAL / day-header / blank rows
-      if (v.unmapped) { surface({ row: r, header: String((row && row[0]) ?? '') }); return; }
+      if (v.unmapped) {
+        // a "New Patients: N" row is counted by the free-text scan below — never a "not counted" row.
+        if (newPatientsInCell(row && row[0]) != null) return;
+        surface({ row: r, header: String((row && row[0]) ?? '') }); return;
+      }
       let total = 0; let saw = false;
       (Array.isArray(row) ? row : []).forEach((cell, c) => {
         if (anchored ? !dayCols.has(c) : totalsCols.has(c)) return; // AC-1 / AC-4 fallback
@@ -698,7 +702,10 @@ export function countsFromGrid(grid) {
     headerRow.forEach((h, col) => {
       const v = mapHeader(h);
       if (v.ignored) return;
-      if (v.unmapped) { surface({ col, header: String(h == null ? '' : h) }); return; }
+      if (v.unmapped) {
+        if (newPatientsInCell(h) != null) return; // counted via the free-text scan, not "unmapped"
+        surface({ col, header: String(h == null ? '' : h) }); return;
+      }
       let total = 0; let saw = false;
       for (const row of body) {
         const n = numeric(Array.isArray(row) ? row[col] : undefined);
@@ -838,6 +845,79 @@ export function mergeCounts(maps) {
     for (const [k, v] of Object.entries(m || {})) out[k] = (out[k] || 0) + (Number(v) || 0);
   }
   return out;
+}
+
+// ── MAD-51: weekly-block view ─────────────────────────────────────────────────
+// The monthly tabs hold stacked WEEKLY blocks (a weekday-header row → a DATE row of calendar
+// serials → metric/provider rows → TOTAL). MAD-50 sums a whole month; this splits a tab into its
+// blocks so each week sums independently, and labels the week from the block's DATE serials.
+
+// Split a month tab's grid into its stacked weekly blocks. A block starts at a weekday-header row
+// (a row naming ≥2 weekday columns: Mon, Tues, …) and runs to the row before the next such header
+// (or end of grid). Each block carries the numeric DATE serials from its `DATE` row (the week's
+// calendar days) so the period can be labeled from data. Pure + date-math-free here (serials are
+// just numbers); a grid with no weekday-header rows → [] (drives the "weekly absent" path).
+export function splitWeeklyBlocks(grid) {
+  const rows = Array.isArray(grid) ? grid : [];
+  const isHeaderRow = (row) =>
+    Array.isArray(row) && row.filter((c) => WEEKDAY_HEADERS.has(normHeader(c))).length >= 2;
+  const starts = [];
+  rows.forEach((row, i) => { if (isHeaderRow(row)) starts.push(i); });
+  return starts.map((start, k) => {
+    const end = k + 1 < starts.length ? starts[k + 1] : rows.length;
+    const blockRows = rows.slice(start, end);
+    const dateRow = blockRows.find((r) => Array.isArray(r) && normHeader(r[0]) === 'date');
+    const dateSerials = Array.isArray(dateRow)
+      ? dateRow.slice(1).map(numeric).filter((n) => n != null)
+      : [];
+    return { dateSerials, rows: blockRows };
+  });
+}
+
+// An Excel date serial → its UTC calendar date. Excel's day 0 is 1899-12-30; we build the instant
+// with Date.UTC and read it back with getUTC* so the calendar day is identical in every timezone.
+function excelSerialToUTCDate(serial) {
+  // tz-safe: pure UTC arithmetic on a data serial (Excel day 0 = 1899-12-30); never reads a wall clock.
+  return new Date(Date.UTC(1899, 11, 30) + Math.round(serial) * 86_400_000);
+}
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// "Jun 22" from a week's EARLIEST DATE serial (the week start), via UTC components.
+function weekStartLabel(serials) {
+  const nums = (Array.isArray(serials) ? serials : []).filter((n) => typeof n === 'number');
+  if (!nums.length) return '';
+  const d = excelSerialToUTCDate(Math.min(...nums));
+  return `${MONTH_ABBR[d.getUTCMonth()]} ${d.getUTCDate()}`;
+}
+// The weekly reporting period: { current: 'Week of Jun 22', prior: 'Week of Jun 15' }. Derived
+// purely from the blocks' DATE serials (data, not the clock) — zone-independent for every viewer.
+export function weeklyPeriodFromBlocks(currentSerials, priorSerials) {
+  // tz-safe: the label comes from Excel DATE serials via UTC components (weekStartLabel) — there is
+  // no wall-clock read and no TZ conversion, so the week reads identically in any host/browser zone.
+  const cur = weekStartLabel(currentSerials);
+  const prior = weekStartLabel(priorSerials);
+  return { current: cur ? `Week of ${cur}` : '', prior: prior ? `Week of ${prior}` : '' };
+}
+
+// Assemble the additive `weekly` report section from the current/prior weekly blocks. Same shape
+// as the monthly report (period, metrics, encountersBySpecialty, totalEncounters [+ providers]),
+// reusing reportsFromGrids. Returns null when there is NO current week block — the route then omits
+// `weekly` entirely and the monthly report is untouched (AC-5). `providers` is an already-built
+// providersSection array (per-week), attached only when present.
+export function weeklyReportSection({ current, prior, currentSerials, priorSerials, providers } = {}) {
+  if (!current || Object.keys(current).length === 0) return null;
+  const dto = reportsFromGrids(
+    { current, prior: prior || {} },
+    undefined,
+    { period: weeklyPeriodFromBlocks(currentSerials || [], priorSerials || []) },
+  );
+  const section = {
+    period: dto.period,
+    metrics: dto.metrics,
+    encountersBySpecialty: dto.encountersBySpecialty,
+    totalEncounters: dto.totalEncounters,
+  };
+  if (Array.isArray(providers) && providers.length) section.providers = providers;
+  return section;
 }
 
 // Build the /api/reports DTO from already-aggregated count-maps per period. Byte-compatible

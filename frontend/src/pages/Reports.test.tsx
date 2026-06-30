@@ -76,7 +76,7 @@ describe('Reports — connect then render (MAD-43)', () => {
     const input = await screen.findByPlaceholderText(/share.?link or drive path/i);
     fireEvent.change(input, { target: { value: '/Reports/Weekly.xlsx' } });
     fireEvent.click(screen.getByRole('button', { name: /connect/i }));
-    await waitFor(() => expect(screen.getByText(/last week/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Encounters by specialty/i)).toBeTruthy());
   });
 });
 
@@ -96,7 +96,7 @@ describe('Reports — connect by year + overwrite warning (MAD-52)', () => {
       return Promise.resolve({ ok: true, status: 200, json: async () => REPORT_WOW_ONLY });
     });
     render(<Reports />);
-    expect(await screen.findByText(/last week/i)).toBeTruthy();
+    expect(await screen.findByText(/Encounters by specialty/i)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /change workbook/i }));
     const input = await screen.findByPlaceholderText(/share.?link or drive path/i);
     expect(screen.getByLabelText(/year this workbook covers/i)).toBeTruthy();
@@ -124,7 +124,7 @@ describe('Reports — change workbook when connected (MAD-43)', () => {
       return Promise.resolve({ ok: true, status: 200, json: async () => REPORT_WOW_ONLY });
     });
     render(<Reports />);
-    expect(await screen.findByText(/last week/i)).toBeTruthy();
+    expect(await screen.findByText(/Encounters by specialty/i)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /change workbook/i }));
     expect(await screen.findByPlaceholderText(/share.?link or drive path/i)).toBeTruthy();
   });
@@ -182,7 +182,7 @@ describe('Reports — refresh button (MAD-48)', () => {
       return Promise.resolve({ ok: true, status: 200, json: async () => REPORT_WOW_ONLY });
     });
     render(<Reports />);
-    await screen.findByText(/last week/i);
+    await screen.findByText(/Encounters by specialty/i);
     expect(urls.some((u) => u.includes('/api/reports?refresh=1'))).toBe(false); // not on first load
     fireEvent.click(screen.getByRole('button', { name: /refresh/i }));
     await waitFor(() => expect(urls.some((u) => u.includes('/api/reports?refresh=1'))).toBe(true));
@@ -208,7 +208,7 @@ describe('Reports — by-provider breakdown (MAD-46)', () => {
   it('[AC-4] omits the By provider panel when there are no providers (additive)', async () => {
     stubReports(REPORT_WOW_ONLY);
     render(<Reports />);
-    await screen.findByText(/last week/i);
+    await screen.findByText(/Encounters by specialty/i);
     expect(screen.queryByText('By provider')).toBeNull();
   });
 });
@@ -238,13 +238,61 @@ describe('Reports — period label + not-counted warnings (MAD-50)', () => {
   });
 });
 
+// MAD-51 — Month | Week period toggle. The report carries an additive `weekly` block view; a
+// toggle (default Month) swaps the numbers AND the labels to the selected period.
+const REPORT_WITH_WEEKLY = {
+  ...REPORT_WOW_ONLY,
+  metrics: [{ key: 'newPatients', label: 'New patients', last: 22, prior: 18 }],
+  encountersBySpecialty: [{ label: 'New patients', last: 22, prior: 18 }],
+  totalEncounters: { last: 22, prior: 18 },
+  period: { current: 'June 2026', prior: 'May 2026' },
+  weekly: {
+    period: { current: 'Week of Jun 22', prior: 'Week of Jun 15' },
+    metrics: [{ key: 'newPatients', label: 'New patients', last: 9, prior: 7 }],
+    encountersBySpecialty: [{ label: 'New patients', last: 9, prior: 7 }],
+    totalEncounters: { last: 9, prior: 7 },
+  },
+};
+
+describe('Reports — Month | Week period toggle (MAD-51)', () => {
+  it('[AC-6] shows a Month|Week toggle (default Month) and swaps period + numbers on Week', async () => {
+    stubReports(REPORT_WITH_WEEKLY);
+    render(<Reports />);
+    // default Month view: the month period + the month label, with a toggle present
+    expect(await screen.findByText(/June 2026 vs May 2026/)).toBeTruthy();
+    expect(screen.getByText('This month')).toBeTruthy();
+    const weekBtn = screen.getByRole('button', { name: /^week$/i });
+    const monthBtn = screen.getByRole('button', { name: /^month$/i });
+    expect(weekBtn && monthBtn).toBeTruthy();
+
+    // switch to Week → weekly period label + the weekly column label
+    fireEvent.click(weekBtn);
+    await waitFor(() => expect(screen.getByText(/Week of Jun 22/)).toBeTruthy());
+    expect(screen.getByText('This week')).toBeTruthy();
+    expect(screen.queryByText('This month')).toBeNull();
+
+    // back to Month → restores the monthly labels
+    fireEvent.click(monthBtn);
+    await waitFor(() => expect(screen.getByText('This month')).toBeTruthy());
+    expect(screen.queryByText(/Week of Jun 22/)).toBeNull();
+  });
+
+  it('[AC-6] shows NO toggle when the report has no weekly section', async () => {
+    stubReports({ ...REPORT_WOW_ONLY, period: { current: 'June 2026', prior: 'May 2026' } });
+    render(<Reports />);
+    await screen.findByText(/Encounters by specialty/i);
+    expect(screen.queryByRole('button', { name: /^week$/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^month$/i })).toBeNull();
+  });
+});
+
 describe('Reports — month-over-month comparison (MAD-28)', () => {
   it('[AC-2] shows a month-over-month column/indicator when month values are present', async () => {
     stubReports(REPORT_WITH_MOM);
     render(<Reports />);
     expect((await screen.findAllByText(/month.?over.?month|mom|vs last month/i)).length).toBeGreaterThanOrEqual(1);
     // WoW column still present.
-    expect(screen.getByText('Last week')).toBeTruthy();
+    expect(screen.getByText('This month')).toBeTruthy();
   });
 
   it('[AC-4] encounters-by-specialty reflects the month-over-month comparison', async () => {
@@ -257,7 +305,7 @@ describe('Reports — month-over-month comparison (MAD-28)', () => {
   it('[AC-3] renders week-over-week with no MoM column when month values are absent', async () => {
     stubReports(REPORT_WOW_ONLY);
     render(<Reports />);
-    expect(await screen.findByText(/last week/i)).toBeTruthy();
+    expect(await screen.findByText(/Encounters by specialty/i)).toBeTruthy();
     expect(screen.queryByText(/month.?over.?month|mom|vs last month/i)).toBeNull();
     expect(screen.queryByText("Couldn't load this view")).toBeNull();
   });
@@ -270,7 +318,7 @@ describe('Reports — year-over-year comparison (MAD-29)', () => {
     // A YoY treatment appears, distinct from the week-over-week "Prior" column.
     expect((await screen.findAllByText(/year.?over.?year|yoy|vs last year/i)).length).toBeGreaterThanOrEqual(1);
     // The week-over-week column is still there (unique table header).
-    expect(screen.getByText('Last week')).toBeTruthy();
+    expect(screen.getByText('This month')).toBeTruthy();
   });
 
   it('[AC-4] encounters-by-specialty reflects the year-ago comparison', async () => {
@@ -286,7 +334,7 @@ describe('Reports — year-over-year comparison (MAD-29)', () => {
     stubReports(REPORT_WOW_ONLY);
     render(<Reports />);
     // WoW view intact…
-    expect(await screen.findByText(/last week/i)).toBeTruthy();
+    expect(await screen.findByText(/Encounters by specialty/i)).toBeTruthy();
     // …and no YoY treatment is shown.
     expect(screen.queryByText(/year.?over.?year|yoy|vs last year/i)).toBeNull();
     expect(screen.queryByText("Couldn't load this view")).toBeNull();

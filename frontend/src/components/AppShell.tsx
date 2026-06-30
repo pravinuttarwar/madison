@@ -155,8 +155,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <footer className="mx-auto max-w-[1240px] px-4 pb-16 pt-2 sm:px-6">
         <p className="text-center text-[11px] text-muted-foreground">
           {LIVE_MODE === 'sandbox'
-            ? 'Connected to a test Microsoft 365 account · read-only · no data is stored.'
-            : 'Live read-only connections active · no data is stored.'}
+            ? 'Connected to a test Microsoft 365 account · read-only'
+            : 'Live read-only connections active.'}
         </p>
       </footer>
     </div>
