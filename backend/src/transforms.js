@@ -537,13 +537,6 @@ export function selectMetricTabs(names) {
   });
 }
 
-// Pick the period tabs by POSITION (no date math → no timezone concerns): the last metric
-// tab in workbook order is the current period, the one before it is the prior period — AC-3.
-export function pickPeriodTabs(metricTabs) {
-  const t = Array.isArray(metricTabs) ? metricTabs : [];
-  return { current: t[t.length - 1] || null, prior: t.length >= 2 ? t[t.length - 2] : null };
-}
-
 // "New Patients: 31" (and "New Patient: 7", trailing notes) → 31. Non-matching cell → null.
 function newPatientsInCell(cell) {
   const m = String(cell == null ? '' : cell).match(/new\s+patient[s]?\s*:?\s*(\d+)/i);
@@ -552,31 +545,69 @@ function newPatientsInCell(cell) {
 
 const numeric = (v) => (typeof v === 'number' ? v : (v != null && v !== '' && !Number.isNaN(Number(v)) ? Number(v) : null));
 
-// Parse ONE used-range grid (2-D array: row 0 = headers, rows below = day values) into
-// { counts: {metricKey: sum}, unmapped: [{col, header}] }. Tolerant: blank/non-numeric
-// cells are skipped, ragged rows are fine, and a malformed grid yields empty counts —
-// never throws (AC-7). `unmapped` carries column REFERENCES only (index + header text),
-// never cell values (AC-9). Headers come from the workbook (already non-PHI metric labels);
-// patient free-text would only live in cells, which we never put in `unmapped`.
+// How many cells in an axis map to a known metric — used to detect the label axis (MAD-41).
+function metricMatchCount(cells) {
+  return (Array.isArray(cells) ? cells : []).filter((c) => mapHeader(c).key).length;
+}
+
+// Parse ONE used-range grid (2-D array) into { counts: {metricKey: sum}, unmapped: [{...}] }.
+// ORIENTATION-AWARE (MAD-41): the real workbooks put metrics as ROW LABELS in column A with
+// days across columns (and stacked weekly blocks), while the MAD-27 model put metrics as
+// column HEADERS in row 0. We auto-detect which axis carries the metric labels and sum the
+// value cells along the other axis. Tolerant: blank/non-numeric cells skipped, ragged rows
+// fine, malformed grid → empty counts, never throws (AC-7). `unmapped` carries REFERENCES
+// only (index + label text), never cell values (AC-9).
 export function countsFromGrid(grid) {
   const counts = {};
   const unmapped = [];
+  const seenUnmapped = new Set();
   const rows = Array.isArray(grid) ? grid : [];
-  const headers = Array.isArray(rows[0]) ? rows[0] : [];
-  const body = rows.slice(1);
   const add = (key, n) => { counts[key] = (counts[key] || 0) + n; };
+  const surface = (ref) => {
+    const k = String(ref.header || '').toLowerCase();
+    if (seenUnmapped.has(k)) return; // dedupe (stacked blocks repeat the same label)
+    seenUnmapped.add(k); unmapped.push(ref);
+  };
 
-  headers.forEach((h, col) => {
-    const v = mapHeader(h);
-    if (v.ignored) return;
-    if (v.unmapped) { unmapped.push({ col, header: String(h == null ? '' : h) }); return; }
-    let total = 0; let saw = false;
-    for (const row of body) {
-      const n = numeric(Array.isArray(row) ? row[col] : undefined);
-      if (n != null) { total += n; saw = true; }
-    }
-    if (saw) add(v.key, total); // skip phantom 0s from header-only/empty columns
-  });
+  // Detect the label axis: compare metric matches in row 0 (column-header layout) vs column A
+  // (row-label layout). More matches wins; ties favor the header model (MAD-27 back-compat).
+  const headerRow = Array.isArray(rows[0]) ? rows[0] : [];
+  const colA = rows.map((r) => (Array.isArray(r) ? r[0] : undefined));
+  const rowLabelMode = metricMatchCount(colA) > metricMatchCount(headerRow);
+
+  if (rowLabelMode) {
+    // Columns that are a "Totals" column anywhere → excluded so we don't double-count (AC-4).
+    const totalsCols = new Set([0]); // col 0 is the metric LABEL, never a value
+    rows.forEach((row) => (Array.isArray(row) ? row : []).forEach((cell, c) => {
+      if (['total', 'totals'].includes(normHeader(cell))) totalsCols.add(c);
+    }));
+    rows.forEach((row, r) => {
+      const v = mapHeader(Array.isArray(row) ? row[0] : '');
+      if (v.ignored) return;            // DATE / TOTAL / day-header / blank rows
+      if (v.unmapped) { surface({ row: r, header: String((row && row[0]) ?? '') }); return; }
+      let total = 0; let saw = false;
+      (Array.isArray(row) ? row : []).forEach((cell, c) => {
+        if (totalsCols.has(c)) return;  // skip the label col + any Totals column
+        const n = numeric(cell);
+        if (n != null) { total += n; saw = true; }
+      });
+      if (saw) add(v.key, total);       // a metric recurring across blocks accumulates (AC-3)
+    });
+  } else {
+    // Column-header layout (MAD-27): metric per column header, days down the rows.
+    const body = rows.slice(1);
+    headerRow.forEach((h, col) => {
+      const v = mapHeader(h);
+      if (v.ignored) return;
+      if (v.unmapped) { surface({ col, header: String(h == null ? '' : h) }); return; }
+      let total = 0; let saw = false;
+      for (const row of body) {
+        const n = numeric(Array.isArray(row) ? row[col] : undefined);
+        if (n != null) { total += n; saw = true; }
+      }
+      if (saw) add(v.key, total);
+    });
+  }
 
   // newPatients lives as free text anywhere in the grid → scan every cell, sum the numbers.
   let np = 0; let sawNp = false;
@@ -589,6 +620,18 @@ export function countsFromGrid(grid) {
   if (sawNp) add('newPatients', np);
 
   return { counts, unmapped };
+}
+
+// From metric tabs read in workbook order (each { tab, counts }), pick the period maps: the
+// LATEST tab with data is the current period, the previous tab with data is prior. Empty
+// trailing/interleaved tabs are skipped (a year file's future months are blank) — MAD-41 AC-5.
+// Position/data-based only — no date math, so no timezone concern.
+export function pickNonEmptyPeriods(items) {
+  const nonEmpty = (Array.isArray(items) ? items : [])
+    .filter((it) => it && it.counts && Object.keys(it.counts).length > 0);
+  const current = nonEmpty[nonEmpty.length - 1]?.counts || {};
+  const prior = nonEmpty.length >= 2 ? nonEmpty[nonEmpty.length - 2].counts : {};
+  return { current, prior };
 }
 
 // Sum a list of count-maps ({metricKey: n}) into one — aggregation across tabs AND files (AC-3).

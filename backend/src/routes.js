@@ -240,21 +240,23 @@ router.get('/reports', route('spreadsheet',
       ? prevYearRefs
       : (config.graph.prevYearSpreadsheetPath ? [{ envPath: config.graph.prevYearSpreadsheetPath }] : []);
 
-    // Read ONE workbook source → { current, prior } metric count-maps from its period tabs.
+    // Read ONE workbook source → { current, prior } metric count-maps. Read the metric tabs
+    // from the LATEST backward, parsing each, and keep the first two that have data — so empty
+    // trailing/future month tabs are skipped (MAD-41 AC-5). Position/data-based; no date math.
     const readSource = async (src) => {
       const metricTabs = T.selectMetricTabs(await graph.workbookWorksheetNames(src));
-      const { current, prior } = T.pickPeriodTabs(metricTabs);
       const item = (src && src.itemId) || 'env';
-      const tabCounts = async (tab) => {
-        if (!tab) return {};
+      const collected = []; // latest-first: [current, prior]
+      for (let i = metricTabs.length - 1; i >= 0 && collected.length < 2; i -= 1) {
+        const tab = metricTabs[i];
         const parsed = T.countsFromGrid(await graph.workbookUsedRange(tab, src));
-        // AC-9: surface unmapped columns PHI-safely — item + sheet + column indexes, no values.
+        // AC-8/9: surface unmapped labels PHI-safely — item + sheet + index references, no values.
         if (parsed.unmapped.length) {
-          workbookUnmappedEvent({ sessionId, ref: item, sheet: tab, columns: parsed.unmapped.map((u) => u.col) });
+          workbookUnmappedEvent({ sessionId, ref: item, sheet: tab, columns: parsed.unmapped.map((u) => u.col ?? u.row) });
         }
-        return parsed.counts;
-      };
-      return { current: await tabCounts(current), prior: await tabCounts(prior) };
+        if (Object.keys(parsed.counts).length > 0) collected.push(parsed.counts); // skip empty tabs
+      }
+      return { current: collected[0] || {}, prior: collected[1] || {} };
     };
 
     // Aggregate current/prior across all current sources (files × tabs — AC-3).
