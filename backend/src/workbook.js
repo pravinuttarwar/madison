@@ -14,14 +14,24 @@ function configFile(file) {
   return file || config.workbookConfigPath;
 }
 
-// MAD-27: the report can read MORE than one workbook (e.g. a prior-year file for YoY), so the
-// persisted state is an ARRAY of refs, each tagged with a role ('current' | 'prevYear'). The
-// store stays a small server-side JSON file (NON-PHI location refs only — never cell values),
-// so the backend remains DB-less with no PHI at rest.
+// MAD-52: the report can read MORE than one workbook (a prior-year file for YoY), so the
+// persisted state is an ARRAY of refs, now keyed by YEAR (the year the file covers). The
+// report uses the LATEST connected year as current and the next-latest as the prior-year
+// (YoY) source. The store stays a small server-side JSON file (NON-PHI location refs only —
+// never cell values), so the backend remains DB-less with no PHI at rest.
+// (Pre-MAD-52 records were tagged with role 'current'|'prevYear'; readWorkbooks normalizes
+// those legacy refs to a year so an existing connection keeps working.)
 export const DEFAULT_ROLE = 'current';
 
+// Normalize a legacy role-tagged ref (no year) to a synthetic year so ordering still works:
+// 'current' sorts newest, 'prevYear' one below it. New refs always carry a real `year`.
+function legacyYear(w) {
+  if (w.year != null) return Number(w.year);
+  return (w.role || DEFAULT_ROLE) === 'prevYear' ? 1 : 2; // current > prevYear, both below any real year
+}
+
 // All persisted connections as an array. BACK-COMPAT: a legacy single-object file (MAD-26)
-// reads as a one-element array tagged 'current'. Missing/corrupt → [] (→ env fallback).
+// reads as a one-element array. Missing/corrupt → [] (→ env fallback).
 export function readWorkbooks(file) {
   let raw;
   try {
@@ -30,49 +40,66 @@ export function readWorkbooks(file) {
     return [];
   }
   if (Array.isArray(raw)) return raw;
-  if (raw && raw.driveId) return [{ ...raw, role: raw.role || DEFAULT_ROLE }]; // legacy single object
+  if (raw && raw.driveId) return [raw]; // legacy single object
   return [];
 }
 
-// The connection for a role as a flat object, or null. readWorkbook() (no role) returns the
-// 'current' one — back-compat for callers/tests that expect a single connection.
-export function readWorkbook(file, role = DEFAULT_ROLE) {
-  return readWorkbooks(file).find((w) => (w.role || DEFAULT_ROLE) === role) || null;
+// The CURRENT connection (latest connected year) as a flat object, or null — back-compat for
+// callers/tests that expect a single connection (e.g. graph.workbookNamedRange's read base).
+export function readWorkbook(file) {
+  const cur = resolveYearSources(readWorkbooks(file)).current;
+  return cur ? readWorkbooks(file).find((w) => w.itemId === cur.itemId) || null : null;
 }
 
-// Persist ONLY the location reference (driveId/itemId/name/source/role) — never cell values.
-// Upserts by ROLE into the array, so connecting a prior-year file doesn't clobber the current
-// one (and re-connecting a role replaces it). Extra keys (e.g. fetched values) are dropped.
+// Persist ONLY the location reference (driveId/itemId/name/source/year) — never cell values.
+// Upserts by YEAR, so connecting a prior-year file doesn't clobber the current one, and
+// re-connecting the SAME year replaces only that year. Extra keys (e.g. fetched values) dropped.
 export function saveWorkbook(ref, file) {
-  const role = ref.role || DEFAULT_ROLE;
+  const year = ref.year != null ? Number(ref.year) : null;
   const rec = {
     driveId: ref.driveId,
     itemId: ref.itemId,
     name: ref.name,
     source: ref.source,
-    role,
+    year,
     // tz-safe: connectedAt is an ISO-8601 UTC stamp for record-keeping only — never parsed
     // back or rendered as a time-of-day, so timezone/DST never enters in.
     connectedAt: new Date().toISOString(),
   };
-  const others = readWorkbooks(file).filter((w) => (w.role || DEFAULT_ROLE) !== role);
+  const others = readWorkbooks(file).filter((w) => (w.year != null ? Number(w.year) : null) !== year);
   const f = configFile(file);
   mkdirSync(dirname(f), { recursive: true });
   writeFileSync(f, JSON.stringify([...others, rec], null, 2));
   return rec;
 }
 
-// The item reference reports read from for a role, or null when nothing is persisted.
-export function workbookRef(file, role = DEFAULT_ROLE) {
-  const wb = readWorkbook(file, role);
-  return wb && wb.driveId && wb.itemId ? { driveId: wb.driveId, itemId: wb.itemId } : null;
+// Pick the report's sources from the connected workbooks: the LATEST year is `current`, the
+// next-latest is `prevYear` (the YoY comparison). Pure + position/year-based — no date math,
+// so no timezone concern. Legacy role-tagged refs are ordered via legacyYear().
+export function resolveYearSources(workbooks) {
+  const sorted = (Array.isArray(workbooks) ? workbooks : [])
+    .filter((w) => w && w.driveId && w.itemId)
+    .sort((a, b) => legacyYear(b) - legacyYear(a));
+  const toRef = (w) => (w ? { driveId: w.driveId, itemId: w.itemId, name: w.name, year: w.year ?? null } : null);
+  return { current: toRef(sorted[0]), prevYear: toRef(sorted[1]) };
 }
 
-// Every persisted ref with both ids, tagged by role — what the reports route iterates.
+// True when a workbook for `year` is already connected — drives the UI's overwrite warning.
+export function isYearConnected(year, file) {
+  return readWorkbooks(file).some((w) => w.year != null && Number(w.year) === Number(year));
+}
+
+// The item reference the current-source reads address, or null when nothing is persisted.
+export function workbookRef(file) {
+  const cur = resolveYearSources(readWorkbooks(file)).current;
+  return cur ? { driveId: cur.driveId, itemId: cur.itemId } : null;
+}
+
+// Every persisted ref with both ids, carrying its year — what the reports route iterates.
 export function workbookRefs(file) {
   return readWorkbooks(file)
     .filter((w) => w.driveId && w.itemId)
-    .map((w) => ({ role: w.role || DEFAULT_ROLE, driveId: w.driveId, itemId: w.itemId, name: w.name }));
+    .map((w) => ({ year: w.year ?? null, driveId: w.driveId, itemId: w.itemId, name: w.name }));
 }
 
 // The Graph base segment a workbook read addresses: the connected drive item when a
@@ -113,7 +140,7 @@ export async function connectWorkbook(input, deps) {
   const {
     resolveShareUrl, resolveDrivePath, workbookReachable,
     audit = () => {}, save = saveWorkbook, configFile: file, sessionId = 'none',
-    role = DEFAULT_ROLE,
+    year = null, // MAD-52: the year this workbook covers (drives YoY + upsert-by-year)
   } = deps;
   const { kind, value } = classifyInput(input);
 
@@ -133,8 +160,9 @@ export async function connectWorkbook(input, deps) {
     audit('validate', { sessionId, ref: ref.itemId, outcome: 'denied' });
     throw new WorkbookError('not_reachable', "We found the file but couldn't read it as a workbook. Confirm it's an Excel file you can open.");
   }
-  audit('validate', { sessionId, ref: ref.itemId, outcome: 'ok' });
+  // MAD-52 [AC-5]: the audit carries the YEAR + item reference + outcome — never the share-URL/token.
+  audit('validate', { sessionId, ref: ref.itemId, year, outcome: 'ok' });
 
-  const rec = save({ driveId: ref.driveId, itemId: ref.itemId, name: ref.name, source: kind, role }, file);
-  return { connected: true, name: rec.name, source: kind, role: rec.role };
+  const rec = save({ driveId: ref.driveId, itemId: ref.itemId, name: ref.name, source: kind, year }, file);
+  return { connected: true, name: rec.name, source: kind, year: rec.year };
 }

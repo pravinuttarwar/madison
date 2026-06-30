@@ -1,0 +1,34 @@
+{
+  "issueKey": "MAD-52",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "Year selector on connect: user selects the year a workbook represents; the year is sent to POST /api/reports/connection and persisted with the connection (location + year only, never cell values)"
+    },
+    {
+      "id": "AC-2",
+      "text": "Overwrite warning: if a workbook for the selected year is already connected, the UI confirms before replacing (no silent overwrite); confirm replaces that years connection, cancel leaves it unchanged"
+    },
+    {
+      "id": "AC-3",
+      "text": "YoY appears with two years: current-year + prior-year workbooks connected -> /api/reports attaches yearAgo (current vs prior) and the Reports page shows the YoY column/%; only one year -> no YoY (unchanged)"
+    },
+    {
+      "id": "AC-4",
+      "text": "Year-keyed selection: with multiple years connected, latest year = current source, next-latest = prior-year (YoY) source; connecting/replacing one year does not disturb another"
+    },
+    {
+      "id": "AC-5",
+      "kind": "app-logging",
+      "text": "PHI-safe connection audit: a connect/replace records item reference + year + outcome, never the share-URL/token or cell values"
+    },
+    {
+      "id": "AC-6",
+      "text": "Backward-compatible contract: year is additive on POST and GET reports connected year(s); existing single-current-workbook flow preserved; connect UI updated in lockstep"
+    },
+    {
+      "id": "AC-7",
+      "text": "Offline gate: synthetic fixtures (two per-year workbooks) pin year-keyed persistence, overwrite guard, and YoY wiring with no network/creds; no real names committed"
+    }
+  ]
+}

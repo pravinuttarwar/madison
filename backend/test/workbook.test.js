@@ -69,7 +69,7 @@ test('[AC-4] persistence stores only the location reference and survives a resta
     // Drive-path only, never cell values. Pin the EXACT persisted key set — time-independent
     // (the older `.includes('22')` check false-failed when the connectedAt timestamp held "22").
     assert.ok(!('cellValues' in reloaded), 'cell values must not be persisted');
-    assert.deepEqual(Object.keys(reloaded).sort(), ['connectedAt', 'driveId', 'itemId', 'name', 'role', 'source']);
+    assert.deepEqual(Object.keys(reloaded).sort(), ['connectedAt', 'driveId', 'itemId', 'name', 'source', 'year']);
 
     // workbookRef exposes just the item reference reports read from.
     assert.deepEqual(workbookRef(file), { driveId: 'drive-1', itemId: 'item-9' });
@@ -92,27 +92,26 @@ test('[AC-5] connect audits resolve + validate by item reference, never the raw 
   assert.doesNotMatch(serialized, /sharepoint\.com/, 'no share host in the audit');
 });
 
-test('[AC-5] multi-URL: roles persist side-by-side as a JSON array of refs (no cell values)', () => {
+test('[AC-5] multi-year: workbooks persist side-by-side keyed by year (no cell values)', () => {
   const { file, dir } = tmpConfig();
   try {
-    // Connect a current-year file, then a prior-year file — different roles, both persisted.
-    saveWorkbook({ driveId: 'd1', itemId: 'cur', name: '2026.xlsx', source: 'share-url' }, file); // role defaults to current
-    saveWorkbook({ driveId: 'd1', itemId: 'py', name: '2025.xlsx', source: 'drive-path', role: 'prevYear' }, file);
+    // Connect a current-year file, then a prior-year file — different YEARS, both persisted.
+    saveWorkbook({ driveId: 'd1', itemId: 'cur', name: '2026.xlsx', source: 'share-url', year: 2026 }, file);
+    saveWorkbook({ driveId: 'd1', itemId: 'py', name: '2025.xlsx', source: 'drive-path', year: 2025 }, file);
 
     const all = readWorkbooks(file);
-    assert.equal(all.length, 2, 'both roles persisted side-by-side');
-    // workbookRefs exposes every connected ref, tagged by role — what the reports route reads.
-    const byRole = Object.fromEntries(workbookRefs(file).map((r) => [r.role, r]));
-    assert.equal(byRole.current.itemId, 'cur');
-    assert.equal(byRole.prevYear.itemId, 'py');
-    // readWorkbook(role) / workbookRef(role) target one role; default is 'current' (back-compat).
+    assert.equal(all.length, 2, 'both years persisted side-by-side');
+    // workbookRefs exposes every connected ref, tagged by year — what the reports route reads.
+    const byYear = Object.fromEntries(workbookRefs(file).map((r) => [r.year, r]));
+    assert.equal(byYear[2026].itemId, 'cur');
+    assert.equal(byYear[2025].itemId, 'py');
+    // current source = the LATEST year; readWorkbook()/workbookRef() return it (back-compat).
     assert.equal(readWorkbook(file).itemId, 'cur');
-    assert.equal(workbookRef(file, 'prevYear').itemId, 'py');
-    // re-connecting a role REPLACES it (no duplicate), never clobbering the other role.
-    saveWorkbook({ driveId: 'd1', itemId: 'cur2', name: '2026b.xlsx', source: 'share-url' }, file);
+    assert.deepEqual(workbookRef(file), { driveId: 'd1', itemId: 'cur' });
+    // re-connecting a YEAR REPLACES only that year (no duplicate), never clobbering the other.
+    saveWorkbook({ driveId: 'd1', itemId: 'cur2', name: '2026b.xlsx', source: 'share-url', year: 2026 }, file);
     assert.equal(readWorkbooks(file).length, 2);
-    assert.equal(workbookRef(file, 'current').itemId, 'cur2');
-    assert.equal(workbookRef(file, 'prevYear').itemId, 'py');
+    assert.equal(workbookRef(file).itemId, 'cur2');
     // persisted store is location refs only — never cell values.
     assert.ok(!JSON.stringify(readWorkbooks(file)).match(/cellValues|values":\s*\[\[/));
   } finally {
@@ -129,15 +128,15 @@ test('[AC-4] readWorkbook returns null and workbookRef null when no file exists 
 test('[AC-1] connect via share-URL resolves, validates and persists, returning the workbook name', async () => {
   const { deps, calls } = mkDeps();
   const result = await connectWorkbook(SHARE_URL, deps);
-  // MAD-27: the result + persisted ref now carry a role (default 'current' for multi-URL).
-  assert.deepEqual(result, { connected: true, name: 'Weekly Report.xlsx', source: 'share-url', role: 'current' });
+  // MAD-52: the result + persisted ref now carry a `year` (null when none was selected).
+  assert.deepEqual(result, { connected: true, name: 'Weekly Report.xlsx', source: 'share-url', year: null });
   // Resolved via the SHARES endpoint, then reachability validated, then persisted.
   assert.deepEqual(calls.resolve, [['share', SHARE_URL]]);
   assert.equal(calls.validate.length, 1);
   assert.equal(calls.save.length, 1);
   // Persisted record is location refs only — never cell values.
   const [rec] = calls.save[0];
-  assert.deepEqual(rec, { driveId: 'drive-1', itemId: 'item-9', name: 'Weekly Report.xlsx', source: 'share-url', role: 'current' });
+  assert.deepEqual(rec, { driveId: 'drive-1', itemId: 'item-9', name: 'Weekly Report.xlsx', source: 'share-url', year: null });
 });
 
 test('[AC-2] connect via drive path validates and persists the same way', async () => {

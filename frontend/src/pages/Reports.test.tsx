@@ -80,6 +80,40 @@ describe('Reports — connect then render (MAD-43)', () => {
   });
 });
 
+// MAD-52 — connect a workbook by YEAR, with an overwrite warning when that year is already connected.
+describe('Reports — connect by year + overwrite warning (MAD-52)', () => {
+  it('[AC-1][AC-2] warns before overwriting an already-connected year, then replaces (sends the year) on confirm', async () => {
+    const YEAR = new Date().getFullYear(); // the select defaults to this year
+    const posts: { input: string; year?: number }[] = [];
+    vi.stubGlobal('fetch', (req: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(req);
+      if (url.includes('/api/reports/connection') && init?.method === 'POST') {
+        posts.push(JSON.parse(String(init.body || '{}')));
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ connected: true, name: 'x', source: 'drive-path', year: YEAR }) });
+      }
+      if (url.includes('/api/reports/connection')) return Promise.resolve({ ok: true, status: 200, json: async () => ({ connected: true, name: `${YEAR}.xlsx`, via: 'connection', years: [{ year: YEAR, name: `${YEAR}.xlsx` }] }) });
+      if (url.includes('/api/auth/scopes')) return Promise.resolve({ ok: true, status: 200, json: async () => ({ requested: [], delegated: ['Files.Read'], app: [] }) });
+      return Promise.resolve({ ok: true, status: 200, json: async () => REPORT_WOW_ONLY });
+    });
+    render(<Reports />);
+    expect(await screen.findByText(/last week/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /change workbook/i }));
+    const input = await screen.findByPlaceholderText(/share.?link or drive path/i);
+    expect(screen.getByLabelText(/year this workbook covers/i)).toBeTruthy();
+    fireEvent.change(input, { target: { value: '/Reports/new.xlsx' } });
+
+    // First click on the already-connected year → overwrite warning, NO post yet.
+    fireEvent.click(screen.getByRole('button', { name: /connect new workbook/i }));
+    await waitFor(() => expect(screen.getByText(/already connected/i)).toBeTruthy());
+    expect(posts.length).toBe(0);
+
+    // Confirm → posts the connection WITH the year.
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`replace ${YEAR} workbook`, 'i') }));
+    await waitFor(() => expect(posts.length).toBe(1));
+    expect(posts[0].year).toBe(YEAR);
+  });
+});
+
 // MAD-43 — when connected, the report renders and a "Change workbook" affordance is offered.
 describe('Reports — change workbook when connected (MAD-43)', () => {
   it('[AC-3] renders the report and a Change workbook control that reveals the input', async () => {
