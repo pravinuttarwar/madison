@@ -1,19 +1,98 @@
-import { afterEach, describe, it, expect, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import Reports from '@/pages/Reports';
 
 afterEach(cleanup);
+beforeEach(() => vi.unstubAllGlobals());
 
-// MBI-37 (AC2): the providers' spreadsheet isn't wired yet, so a 503/failed read shows the
-// "pending" beat rather than a raw error wall.
-describe('Reports — not-connected pending state (MBI-37)', () => {
-  it('shows the pending beat on a 503 (spreadsheet not connected)', async () => {
-    vi.stubGlobal('fetch', () =>
-      Promise.resolve({ ok: false, status: 503, statusText: 'Service Unavailable', json: async () => ({}) }),
-    );
+// MAD-43 — when no workbook is connected, Reports shows an inline CONNECT card (paste link),
+// not a dead "pending" beat. Replaces the old MBI-37 pending state.
+describe('Reports — inline connect when not connected (MAD-43)', () => {
+  // Route the stub by pathname: report read fails (not connected), connection says not connected.
+  function stubNotConnected(connectPost?: (input: string) => unknown) {
+    vi.stubGlobal('fetch', (req: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(req);
+      if (url.includes('/api/reports/connection') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body || '{}'));
+        const r = connectPost
+          ? connectPost(body.input)
+          : { ok: true, status: 200, json: async () => ({ connected: true, name: 'Weekly.xlsx', source: 'share-url' }) };
+        return Promise.resolve(r);
+      }
+      if (url.includes('/api/reports/connection')) return Promise.resolve({ ok: true, status: 200, json: async () => ({ connected: false }) });
+      if (url.includes('/api/auth/scopes')) return Promise.resolve({ ok: true, status: 200, json: async () => ({ requested: [], delegated: ['Files.Read'], app: [] }) });
+      // /api/reports → not connected → 503
+      return Promise.resolve({ ok: false, status: 503, statusText: 'Service Unavailable', json: async () => ({}) });
+    });
+  }
+
+  it('[AC-1] shows a connect input + button (no nav tab), not the named-ranges pending copy', async () => {
+    stubNotConnected();
     render(<Reports />);
-    expect(await screen.findByText('Pending implementation')).toBeTruthy();
-    expect(screen.queryByText("Couldn't load this view")).toBeNull();
+    expect(await screen.findByPlaceholderText(/share.?link or drive path/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /connect/i })).toBeTruthy();
+    expect(screen.queryByText(/named ranges/i)).toBeNull();
+  });
+
+  it('[AC-1] surfaces the Sites.Read.All hint when SharePoint scope is absent', async () => {
+    stubNotConnected();
+    render(<Reports />);
+    await screen.findByPlaceholderText(/share.?link or drive path/i);
+    await waitFor(() => expect(screen.getByText(/Sites\.Read\.All/)).toBeTruthy());
+  });
+
+  it('[AC-4] shows the specific failure reason and never echoes the pasted URL', async () => {
+    stubNotConnected(() => ({
+      ok: false, status: 422, statusText: 'Unprocessable Entity',
+      json: async () => ({ error: 'not_reachable', reason: "We couldn't open that link. Check it and that you have access." }),
+    }));
+    render(<Reports />);
+    const input = await screen.findByPlaceholderText(/share.?link or drive path/i);
+    fireEvent.change(input, { target: { value: 'https://contoso.sharepoint.com/:x:/s/ops/secret.xlsx' } });
+    fireEvent.click(screen.getByRole('button', { name: /connect/i }));
+    await waitFor(() => expect(screen.getByText(/couldn't open that link/i)).toBeTruthy());
+    expect(screen.queryByText(/contoso\.sharepoint\.com/)).toBeNull();
+  });
+});
+
+// MAD-43 — connecting a valid workbook refetches and renders the report (AC-2). The shared
+// connection's persistence across a backend restart is covered by the backend suite.
+describe('Reports — connect then render (MAD-43)', () => {
+  it('[AC-2] a successful connect refetches and renders the report', async () => {
+    let connected = false;
+    vi.stubGlobal('fetch', (req: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(req);
+      if (url.includes('/api/reports/connection') && init?.method === 'POST') {
+        connected = true;
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ connected: true, name: 'Weekly.xlsx', source: 'drive-path' }) });
+      }
+      if (url.includes('/api/reports/connection')) return Promise.resolve({ ok: true, status: 200, json: async () => (connected ? { connected: true, name: 'Weekly.xlsx', via: 'connection' } : { connected: false }) });
+      if (url.includes('/api/auth/scopes')) return Promise.resolve({ ok: true, status: 200, json: async () => ({ requested: [], delegated: ['Files.Read'], app: [] }) });
+      return connected
+        ? Promise.resolve({ ok: true, status: 200, json: async () => REPORT_WOW_ONLY })
+        : Promise.resolve({ ok: false, status: 503, statusText: 'Service Unavailable', json: async () => ({}) });
+    });
+    render(<Reports />);
+    const input = await screen.findByPlaceholderText(/share.?link or drive path/i);
+    fireEvent.change(input, { target: { value: '/Reports/Weekly.xlsx' } });
+    fireEvent.click(screen.getByRole('button', { name: /connect/i }));
+    await waitFor(() => expect(screen.getByText(/last week/i)).toBeTruthy());
+  });
+});
+
+// MAD-43 — when connected, the report renders and a "Change workbook" affordance is offered.
+describe('Reports — change workbook when connected (MAD-43)', () => {
+  it('[AC-3] renders the report and a Change workbook control that reveals the input', async () => {
+    vi.stubGlobal('fetch', (req: RequestInfo | URL) => {
+      const url = String(req);
+      if (url.includes('/api/reports/connection')) return Promise.resolve({ ok: true, status: 200, json: async () => ({ connected: true, name: 'Weekly.xlsx', source: 'share-url', via: 'connection' }) });
+      if (url.includes('/api/auth/scopes')) return Promise.resolve({ ok: true, status: 200, json: async () => ({ requested: [], delegated: ['Files.Read'], app: [] }) });
+      return Promise.resolve({ ok: true, status: 200, json: async () => REPORT_WOW_ONLY });
+    });
+    render(<Reports />);
+    expect(await screen.findByText(/last week/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /change workbook/i }));
+    expect(await screen.findByPlaceholderText(/share.?link or drive path/i)).toBeTruthy();
   });
 });
 

@@ -78,6 +78,20 @@ test('[AC-4] persistence stores only the location reference and survives a resta
   }
 });
 
+// MAD-43 [AC-5]: the inline Reports connect reuses this flow — the resolve/validate audit must
+// carry the item reference + outcome only, never the raw share-URL/token (no PHI, no secret).
+test('[AC-5] connect audits resolve + validate by item reference, never the raw URL/token', async () => {
+  const { deps, calls } = mkDeps();
+  await connectWorkbook(SHARE_URL, deps);
+  const byAction = Object.fromEntries(calls.audit.map(([a, m]) => [a, m]));
+  assert.equal(byAction.resolve.ref, 'item-9');
+  assert.equal(byAction.resolve.outcome, 'ok');
+  assert.equal(byAction.validate.outcome, 'ok');
+  const serialized = JSON.stringify(calls.audit);
+  assert.doesNotMatch(serialized, /secrettoken/, 'no raw share-URL token in the audit');
+  assert.doesNotMatch(serialized, /sharepoint\.com/, 'no share host in the audit');
+});
+
 test('[AC-5] multi-URL: roles persist side-by-side as a JSON array of refs (no cell values)', () => {
   const { file, dir } = tmpConfig();
   try {
