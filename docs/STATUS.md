@@ -17,9 +17,9 @@ holds the active feature stories. This doc summarizes; the tickets are authorita
 | Important-email triage, categorized, never a raw inbox | Email Queue + Dashboard email panel | ✅ Done on sample data (MBI-19); live mail pending consent |
 | "Sent, no reply" follow-up | Email Queue + Dashboard "Awaiting response" | 🟡 UI done; detection engine spec'd, not wired (needs live Graph) |
 | Calendar: today + week ahead | Calendar (`/calendar`) | ✅ UI done on sample data |
-| Tasks grouped by owner, due/overdue | Tasks (`/tasks`) | ✅ UI done on sample data |
+| Tasks grouped by owner, due/overdue | Tasks (`/tasks`) | 🟡 **Multi-owner "tasks by owner" board wired (MAD-37)** — `/api/tasks` reads each configured team member's To Do app-only (`Tasks.Read.All`), grouped server-side by real owner (no hardcoded owner); single-user fallback preserved. Live data pending M365 admin consent for the app-only scope |
 | Clean QuickBooks snapshot (deposits, variable spend, net contribution, **revenue**, **outstanding A/R**, **cash flow**) | Financials (`/financials`) | 🟡 UI done incl. accrual revenue tile (MAD-23) + outstanding-invoice / A/R aging (MAD-24) + cash-flow overview (MAD-25); live QBO via OAuth (MAD-15); fixed-cost exclusion is config-only |
-| Weekly provider spreadsheet snapshot + WoW/YoY deltas | Reports (`/reports`) | 🟡 UI done with the 12 metrics; **workbook connection wired (MAD-26)** — paste/validate/persist a OneDrive/SharePoint link, `/api/reports` reads from it (env fallback); **year-over-year wired (MAD-29)** via additive prior-year ranges; MoM (MAD-28) + named-range → metric mapping for the practice's real sheets still parked (MBI-22) |
+| Weekly provider spreadsheet snapshot + WoW/MoM/YoY deltas | Reports (`/reports`) | 🟡 UI done with the 12 metrics; **workbook connection wired (MAD-26)** — paste/validate/persist a OneDrive/SharePoint link, `/api/reports` reads from it (env fallback); **WoW + month-over-month (MAD-28) + year-over-year (MAD-29)** all wired via additive named ranges; multi-period source-picker/chart + named-range → metric mapping for the practice's real sheets still parked (MBI-22) |
 | Color-blind-accessible UI (never color alone) | accessibility primitives + Display menu | ✅ Done — exact dark palette + Color-Vision-Friendly default (MBI-21) |
 | Timezone-correct dates (practice zone, America/New_York) | dashboard view default + date transforms | ✅ Done (MBI-26/27/28) |
 | Mirror the owner's design; drop CureMD, Plaid, AI panel, Projects, Connections, Teams | app shell + composition | ✅ Done |
@@ -162,6 +162,19 @@ Legend: ✅ done · 🟡 prototype/partial (UI real, live data pending) · ⛔ o
   `Reports.test.tsx`. PR [#36](https://github.com/pravinuttarwar/madison/pull/36) merged; **Testing (owner QA)**.
   Go-live data dependency: customer populates the prior-year ranges. The multi-year source-picker + Recharts chart
   stay parked under MBI-22 (salvage branch `origin/feature/reports-spreadsheet` is the reference).
+- **[MAD-28](https://connecthealth.atlassian.net/browse/MAD-28) — Month-over-month reporting comparison**
+  (Phase-1 productionization, epic [MAD-1](https://connecthealth.atlassian.net/browse/MAD-1), MAD Sprint 2; SOW
+  Module 4 scope-gap). Adds an **additive** true month-over-month comparison — **month-to-date vs prior-month total** —
+  to the weekly report, sourced from MTD + prior-month named ranges (`<Metric>MTD` / `<Metric>PrevMonth`), independent
+  of the YoY field (MAD-29). When present, each metric + the total + each specialty row gain `monthToDate`/`prevMonth`
+  and the Reports page shows a **MoM** column/indicators (color-blind-safe `Trend`); when absent the report stays
+  week-over-week **byte-for-byte as before** (back-compat). Net-new: `reportsFromRanges` month support,
+  `config.monthToDateRanges`/`prevMonthRanges` (`SPREADSHEET_MTD_RANGES` / `SPREADSHEET_PREV_MONTH_RANGES`),
+  `/api/reports` month reads, optional `monthToDate`/`prevMonth` on the DTO. **Additive — `/api/reports` shape
+  unchanged without month ranges; no DB; not ePHI.** AC-1..AC-5 pinned by `transforms`/`characterization-fixtures`/
+  `Reports.test.tsx`. PR [#38](https://github.com/pravinuttarwar/madison/pull/38) merged; **Testing (owner QA)**.
+  Go-live data dependency: customer populates the MTD + prior-month ranges. **With MAD-28 + MAD-29, the SOW Module 4
+  WoW/MoM/YoY comparison set is complete** (real-sheet metric mapping + multi-period chart remain parked under MBI-22).
 - **[MAD-40](https://connecthealth.atlassian.net/browse/MAD-40) — Self-host the mockup fonts**
   (Phase-1 productionization, epic [MAD-1](https://connecthealth.atlassian.net/browse/MAD-1), MAD Sprint 2). The
   crimson accent + Fraunces/JetBrains-Mono typography already shipped (MBI-21); this removes the **runtime Google

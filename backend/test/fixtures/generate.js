@@ -29,9 +29,18 @@ const PREV_MONTH_RANGE_NAMES = Object.fromEntries(
   Object.entries(RANGE_NAMES).map(([k, name]) => [k, `${name}PrevMonth`]),
 );
 
+// MAD-37: synthetic team for the multi-owner "tasks by owner" board. The third UPN has NO
+// user fixture on purpose → resolveUser returns null → it's skipped (proves unreadable
+// owners don't break the board). Synthetic only — never real team addresses.
+export const TASKS_TEAM = ['alice@clinic.test', 'bob@clinic.test', 'ghost@clinic.test'];
+export const TASKS_TEAM_ENV = { TASKS_TEAM_USERS: TASKS_TEAM.join(',') };
+
 // Env the spawned server needs for the live path to read these fixtures.
 export const FIXTURE_ENV = {
   MS_USER,
+  // Pin the single-user path for the default characterization run: never inherit a dev's
+  // local .env TASKS_TEAM_USERS (real addresses). The team-board test sets it explicitly.
+  TASKS_TEAM_USERS: '',
   SPREADSHEET_NAMED_RANGES: JSON.stringify(RANGE_NAMES),
   // MAD-29: prior-year ranges → /api/reports adds an additive yearAgo per metric.
   SPREADSHEET_PREV_YEAR_RANGES: JSON.stringify(PREV_YEAR_RANGE_NAMES),
@@ -100,6 +109,31 @@ export function writeFixtures(dir, now = new Date()) {
       { id: 'k4', title: 'No-date item', status: 'notStarted' },
       { id: 'k5', title: 'Completed item', status: 'completed', dueDateTime: due(-1) },
     ],
+  });
+
+  // ── Graph: MAD-37 multi-owner "tasks by owner" (app-only Tasks.Read.All) ──
+  // Per-OWNER fixtures so each owner has a DISTINCT, non-overlapping task set → owner
+  // attribution + isolation are observable, and Alice (more overdue) sorts before Bob.
+  // ghost@clinic.test deliberately has NO user fixture → resolveUser → null → skipped.
+  const users = join(g, 'users');
+  mkdirSync(users, { recursive: true });
+  w(users, 'alice@clinic.test.json')({ id: 'u-alice', displayName: 'Alice Adams', userPrincipalName: 'alice@clinic.test' });
+  w(users, 'bob@clinic.test.json')({ id: 'u-bob', displayName: 'Bob Brown', userPrincipalName: 'bob@clinic.test' });
+  w(users, 'u-alice-lists.json')({ value: [{ id: 'la1', displayName: 'Clinic' }] });
+  w(users, 'u-bob-lists.json')({ value: [{ id: 'lb1', displayName: 'Clinic' }] });
+  // Alice: 2 overdue + 1 due-today + 1 upcoming (4 open). Distinct titles (isolation probe).
+  w(users, 'u-alice-tasks.json')({
+    value: [
+      { id: 'a1', title: 'Alice overdue A', status: 'notStarted', dueDateTime: due(-3) },
+      { id: 'a2', title: 'Alice overdue B', status: 'notStarted', dueDateTime: due(-1) },
+      { id: 'a3', title: 'Alice due today', status: 'notStarted', dueDateTime: due(0) },
+      { id: 'a4', title: 'Alice upcoming', status: 'notStarted', dueDateTime: due(4) },
+    ],
+  });
+  // Bob: 1 upcoming only (0 overdue) → sorts after Alice. The fetch already filters
+  // completed at the source, so no 'done' task is included here.
+  w(users, 'u-bob-tasks.json')({
+    value: [{ id: 'b1', title: 'Bob upcoming', status: 'notStarted', dueDateTime: due(5) }],
   });
 
   // ── Graph: sent items + conversation (awaiting-response engine: latest from owner, old) ──

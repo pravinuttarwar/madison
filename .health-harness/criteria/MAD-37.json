@@ -1,0 +1,35 @@
+{
+  "issueKey": "MAD-37",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "Multi-owner board: TASKS_TEAM_USERS set + app creds -> GET /api/tasks returns {multiOwner:true, owners[]} per configured UPN, app-only Tasks.Read.All, grouped server-side by real owner (no hardcoded DCR), sorted overdue->open"
+    },
+    {
+      "id": "AC-2",
+      "text": "Single-user fallback preserved: no team configured -> GET /api/tasks returns {multiOwner:false, tasks[]} delegated own To Do; additive multiOwner discriminator only shape change"
+    },
+    {
+      "id": "AC-3",
+      "text": "Frontend renders both shapes: per-owner cards (fixed-height scrollable) for multiOwner:true, single list for false, no crash on either"
+    },
+    {
+      "id": "AC-4",
+      "text": "Owner resolution + isolation: UPN resolves to {id,name} via User.ReadBasic.All, cached per-user (no cross-owner bleed), unreadable/not-found owner skipped not fatal"
+    },
+    {
+      "id": "AC-5",
+      "kind": "audit",
+      "text": "HIPAA audit: reading an owner tasks records who/what(source=tasks,owner id/upn)/when/where(route)/outcome, never task titles or PHI values"
+    },
+    {
+      "id": "AC-6",
+      "kind": "app-logging",
+      "text": "PHI-safe logging: error on tasks path logs owner id/route/status, never task titles or content"
+    },
+    {
+      "id": "AC-7",
+      "text": "Offline gate: FIXTURES_DIR multi-owner To Do fixtures pin both DTO variants through live route+transform path, no network/creds, demo path absent"
+    }
+  ]
+}

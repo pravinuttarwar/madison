@@ -30,7 +30,8 @@ export function apiFixtureFor(pathname: string, search: string): unknown {
   if (pathname === '/api/calendar') {
     return { today: dashboardMonday.schedule, week: dashboardMonday.weekCalendar };
   }
-  if (pathname === '/api/tasks') return dashboardMonday.tasks;
+  // MAD-37: /api/tasks now returns the wrapper. Default stub = single-user (multiOwner:false).
+  if (pathname === '/api/tasks') return { multiOwner: false, tasks: dashboardMonday.tasks };
   if (pathname === '/api/reports') {
     return {
       weekNumber: dashboardMonday.weekNumber,
