@@ -43,6 +43,45 @@ function stubReports(payload: unknown) {
   );
 }
 
+// MAD-28 — month-over-month (month-to-date vs prior-month total).
+const REPORT_WITH_MOM = {
+  weekNumber: 16,
+  metrics: [
+    { key: 'newPatients', label: 'New patients', last: 22, prior: 18, monthToDate: 80, prevMonth: 95 },
+    { key: 'medicalSeen', label: 'Medical seen', last: 284, prior: 271, monthToDate: 1100, prevMonth: 1180 },
+  ],
+  encountersBySpecialty: [
+    { label: 'New patients', last: 22, prior: 18, monthToDate: 80, prevMonth: 95 },
+    { label: 'Medical seen', last: 284, prior: 271, monthToDate: 1100, prevMonth: 1180 },
+  ],
+  totalEncounters: { last: 306, prior: 289, monthToDate: 1180, prevMonth: 1275 },
+};
+
+describe('Reports — month-over-month comparison (MAD-28)', () => {
+  it('[AC-2] shows a month-over-month column/indicator when month values are present', async () => {
+    stubReports(REPORT_WITH_MOM);
+    render(<Reports />);
+    expect((await screen.findAllByText(/month.?over.?month|mom|vs last month/i)).length).toBeGreaterThanOrEqual(1);
+    // WoW column still present.
+    expect(screen.getByText('Last week')).toBeTruthy();
+  });
+
+  it('[AC-4] encounters-by-specialty reflects the month-over-month comparison', async () => {
+    stubReports(REPORT_WITH_MOM);
+    render(<Reports />);
+    expect(await screen.findByText('Encounters by specialty')).toBeTruthy();
+    expect(screen.getAllByText(/month.?over.?month|mom|vs last month/i).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('[AC-3] renders week-over-week with no MoM column when month values are absent', async () => {
+    stubReports(REPORT_WOW_ONLY);
+    render(<Reports />);
+    expect(await screen.findByText(/last week/i)).toBeTruthy();
+    expect(screen.queryByText(/month.?over.?month|mom|vs last month/i)).toBeNull();
+    expect(screen.queryByText("Couldn't load this view")).toBeNull();
+  });
+});
+
 describe('Reports — year-over-year comparison (MAD-29)', () => {
   it('[AC-2] shows a year-over-year column/indicator when year-ago values are present', async () => {
     stubReports(REPORT_WITH_YOY);

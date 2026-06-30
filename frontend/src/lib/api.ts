@@ -76,7 +76,7 @@ export type ReportsData = {
   weekNumber: number;
   metrics: WeeklyMetric[];
   encountersBySpecialty: EncounterRow[];
-  totalEncounters: { last: number; prior: number; yearAgo?: number };
+  totalEncounters: { last: number; prior: number; yearAgo?: number; monthToDate?: number; prevMonth?: number };
 };
 
 // The Dashboard is a composed (BFF) view — the backend fans out to the sources it

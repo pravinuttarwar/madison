@@ -39,6 +39,47 @@ test('[AC-4] encountersBySpecialty rows carry yearAgo when prior-year is present
   assert.equal(r.encountersBySpecialty[0].yearAgo, 15);
 });
 
+// ── MAD-28: month-over-month (month-to-date vs prior-month total) ──
+const MONTHS = {
+  monthToDate: { newPatients: [[80]], medicalSeen: [[1100]] }, // { key: [[mtd]] }
+  prevMonth: { newPatients: [[95]], medicalSeen: [[1180]] },   // { key: [[prevMonth]] }
+};
+
+test('[AC-1] reportsFromRanges adds monthToDate + prevMonth per metric + summed totals when month ranges are present', () => {
+  const r = reportsFromRanges(RV, {}, undefined, MONTHS);
+  const byKey = Object.fromEntries(r.metrics.map((m) => [m.key, m]));
+  assert.equal(byKey.newPatients.monthToDate, 80);
+  assert.equal(byKey.newPatients.prevMonth, 95);
+  assert.equal(byKey.medicalSeen.monthToDate, 1100);
+  assert.equal(byKey.medicalSeen.prevMonth, 1180);
+  // WoW fields untouched
+  assert.equal(byKey.newPatients.last, 22);
+  // totals are summed
+  assert.equal(r.totalEncounters.monthToDate, 1180);
+  assert.equal(r.totalEncounters.prevMonth, 1275);
+});
+
+test('[AC-3] reportsFromRanges omits month fields when no month ranges (back-compat); YoY stays independent', () => {
+  const r = reportsFromRanges(RV, {}); // neither YoY nor MoM
+  for (const m of r.metrics) {
+    assert.ok(!('monthToDate' in m) && !('prevMonth' in m), 'no month fields on metric');
+  }
+  assert.ok(!('monthToDate' in r.totalEncounters), 'no month total');
+  // YoY without MoM still works and adds no month fields
+  const y = reportsFromRanges(RV, {}, { newPatients: [[15]], medicalSeen: [[250]] });
+  for (const m of y.metrics) assert.ok(!('monthToDate' in m), 'YoY-only adds no month fields');
+});
+
+test('[AC-4] encountersBySpecialty rows carry month values when month ranges are present', () => {
+  const r = reportsFromRanges(RV, {}, undefined, MONTHS);
+  for (const row of r.encountersBySpecialty) {
+    assert.equal(typeof row.monthToDate, 'number');
+    assert.equal(typeof row.prevMonth, 'number');
+  }
+  assert.equal(r.encountersBySpecialty[0].monthToDate, 80);
+  assert.equal(r.encountersBySpecialty[0].prevMonth, 95);
+});
+
 // ── MAD-25: cash-flow overview (derived inflow/outflow/net) ───────────────────
 // now = 2026-06-25 (Thu) ET → financePeriods: lastWeek 06-15..06-21, priorWeek
 // 06-08..06-14, mtd 06-01..06-25. Cash in = deposits, cash out = ALL purchases

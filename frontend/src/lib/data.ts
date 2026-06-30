@@ -27,12 +27,19 @@ export const DATA_SOURCES: { name: Source; detail: string }[] = [
 ];
 
 // ── Weekly clinical report (the providers' weekly spreadsheet) ────────────────
-// `yearAgo` (MAD-29) is the same-period-last-year value — present only when the workbook
-// has prior-year named ranges configured; absent → week-over-week only (back-compat).
-export type WeeklyMetric = { key: string; label: string; last: number; prior: number; yearAgo?: number };
+// `yearAgo` (MAD-29) is the same-period-last-year value. `monthToDate`/`prevMonth` (MAD-28)
+// are the month-over-month pair. All optional — present only when the workbook has the
+// corresponding named ranges configured; absent → week-over-week only (back-compat).
+export type WeeklyMetric = {
+  key: string; label: string; last: number; prior: number;
+  yearAgo?: number; monthToDate?: number; prevMonth?: number;
+};
 
 // Encounters by specialty (for the Reports bar visual)
-export type EncounterRow = { label: string; last: number; prior: number; yearAgo?: number };
+export type EncounterRow = {
+  label: string; last: number; prior: number;
+  yearAgo?: number; monthToDate?: number; prevMonth?: number;
+};
 
 // ── Financial (QuickBooks) ────────────────────────────────────────────────────
 export type WeeklyFinancial = {

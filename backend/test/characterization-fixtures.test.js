@@ -263,6 +263,39 @@ test('[AC-1] GET /api/reports — additive year-ago (YoY) values from prior-year
   for (const row of body.encountersBySpecialty) assert.equal(typeof row.yearAgo, 'number');
 });
 
+// [AC-1] MAD-28: with month-to-date + prior-month ranges configured, each metric carries
+// additive monthToDate + prevMonth, and totalEncounters carries both sums — live route.
+test('[AC-1] GET /api/reports — additive month-over-month (MoM) values from month ranges', async () => {
+  const { status, body } = await getJson('/api/reports');
+  assert.equal(status, 200);
+  for (const m of body.metrics) {
+    assert.equal(typeof m.monthToDate, 'number', `metric ${m.key} has numeric monthToDate`);
+    assert.equal(typeof m.prevMonth, 'number', `metric ${m.key} has numeric prevMonth`);
+  }
+  assert.equal(body.totalEncounters.monthToDate, body.metrics.reduce((s, m) => s + m.monthToDate, 0));
+  assert.equal(body.totalEncounters.prevMonth, body.metrics.reduce((s, m) => s + m.prevMonth, 0));
+  // encounters-by-specialty rows carry month values too [AC-4]
+  for (const row of body.encountersBySpecialty) {
+    assert.equal(typeof row.monthToDate, 'number');
+    assert.equal(typeof row.prevMonth, 'number');
+  }
+});
+
+// [AC-5] MAD-28: the report stays aggregate-only with month fields present — every value
+// numeric, no individual identifiers (no email, no MRN/SSN-style ids).
+test('[AC-5] GET /api/reports — MoM values are aggregate numbers, no identifiers', async () => {
+  const { status, body } = await getJson('/api/reports');
+  assert.equal(status, 200);
+  for (const m of body.metrics) {
+    for (const k of ['monthToDate', 'prevMonth']) {
+      if (k in m) assert.equal(typeof m[k], 'number', `${m.key}.${k} is a number`);
+    }
+  }
+  const blob = JSON.stringify(body);
+  assert.ok(!/[\w.+-]+@[\w-]+\.[\w.-]+/.test(blob), 'no email addresses in the report payload');
+  assert.ok(!/\b\d{3}-\d{2}-\d{4}\b/.test(blob), 'no SSN/MRN-style identifiers in the report payload');
+});
+
 // [AC-5] MAD-29: the report is aggregate-only — every metric value is a number and the
 // payload carries no individual identifiers (no email addresses, no MRN/SSN-style ids).
 // (Metric LABELS like "newPatients" are aggregate names, not identifiers — not banned.)

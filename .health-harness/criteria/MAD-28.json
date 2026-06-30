@@ -1,0 +1,25 @@
+{
+  "issueKey": "MAD-28",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "MoM values in the report: when month-to-date AND prior-month named ranges are configured, /api/reports includes numeric monthToDate and prevMonth per metric (and totalEncounters carries both as sums), alongside existing last/prior WoW fields"
+    },
+    {
+      "id": "AC-2",
+      "text": "MoM delta in the Reports page: each metric shows a month-over-month change (monthToDate vs prevMonth, percent + direction) visually distinct from WoW and any YoY, color-blind-safe (icon/text not color alone)"
+    },
+    {
+      "id": "AC-3",
+      "text": "Graceful absence / back-compat: a workbook with no month ranges omits the month fields; the page renders WoW (and YoY if present) exactly as before with no MoM column and no error; no breaking change to the DTO"
+    },
+    {
+      "id": "AC-4",
+      "text": "Encounters-by-specialty MoM: each specialty row carries its month-over-month comparison consistent with the metric table"
+    },
+    {
+      "id": "AC-5",
+      "text": "Aggregate-only, no PHI: response and logs carry only aggregate counts (no patient/customer identifiers); workbook read audits item reference + outcome only, never cell values (per MAD-26)"
+    }
+  ]
+}

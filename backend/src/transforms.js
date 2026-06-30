@@ -456,26 +456,40 @@ export function financePeriods(now = new Date()) {
 // values from prior-year named ranges. When provided, each metric/specialty row gains an
 // additive `yearAgo` and totalEncounters gains a summed `yearAgo`. When omitted, the output
 // is byte-for-byte the week-over-week shape as before (no `yearAgo` keys) — back-compat.
-export function reportsFromRanges(rangeValues, labels, prevYearValues) {
+// prevYearValues (MAD-29, optional): { metricKey: [[yearAgo]] } → additive `yearAgo`.
+// monthValues (MAD-28, optional): { monthToDate: { metricKey: [[mtd]] }, prevMonth: { metricKey: [[prevMonth]] } }
+//   → additive `monthToDate` + `prevMonth` (true month-over-month). Each comparison is
+//   independent: present only when its ranges are configured; absent → week-over-week shape
+//   unchanged (back-compat). The workbook supplies the period values — no date math here.
+export function reportsFromRanges(rangeValues, labels, prevYearValues, monthValues) {
   const hasYoY = prevYearValues && Object.keys(prevYearValues).length > 0;
-  const yearAgoOf = (key) => {
-    const row = (prevYearValues[key] && prevYearValues[key][0]) || [];
+  const mtdMap = (monthValues && monthValues.monthToDate) || {};
+  const prevMonthMap = (monthValues && monthValues.prevMonth) || {};
+  const hasMoM = Object.keys(mtdMap).length > 0 && Object.keys(prevMonthMap).length > 0;
+  const firstCell = (map, key) => {
+    const row = (map[key] && map[key][0]) || [];
     return Number(row[0]) || 0;
   };
   const metrics = Object.entries(rangeValues).map(([key, vals]) => {
     const row = (vals && vals[0]) || [];
     const m = { key, label: labels[key] || key, last: Number(row[0]) || 0, prior: Number(row[1]) || 0 };
-    if (hasYoY) m.yearAgo = yearAgoOf(key);
+    if (hasYoY) m.yearAgo = firstCell(prevYearValues, key);
+    if (hasMoM) { m.monthToDate = firstCell(mtdMap, key); m.prevMonth = firstCell(prevMonthMap, key); }
     return m;
   });
   const totalEncounters = { last: sum(metrics, (m) => m.last), prior: sum(metrics, (m) => m.prior) };
   if (hasYoY) totalEncounters.yearAgo = sum(metrics, (m) => m.yearAgo || 0);
+  if (hasMoM) {
+    totalEncounters.monthToDate = sum(metrics, (m) => m.monthToDate || 0);
+    totalEncounters.prevMonth = sum(metrics, (m) => m.prevMonth || 0);
+  }
   return {
     weekNumber: 0,
     metrics,
     encountersBySpecialty: metrics.slice(0, 6).map((m) => {
       const row = { label: m.label, last: m.last, prior: m.prior };
       if (hasYoY) row.yearAgo = m.yearAgo;
+      if (hasMoM) { row.monthToDate = m.monthToDate; row.prevMonth = m.prevMonth; }
       return row;
     }),
     totalEncounters,

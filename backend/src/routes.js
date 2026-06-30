@@ -187,10 +187,22 @@ router.get('/reports', route('spreadsheet',
     for (const [key, rangeName] of Object.entries(prevMap)) {
       prevValues[key] = await graph.workbookNamedRange(rangeName);
     }
+    // MAD-28: month-to-date + prior-month ranges, when configured → additive MoM. Omitted otherwise.
+    const readMap = async (rangeMap) => {
+      const out = {};
+      for (const [key, rangeName] of Object.entries(rangeMap)) {
+        out[key] = await graph.workbookNamedRange(rangeName);
+      }
+      return out;
+    };
+    const monthValues = {
+      monthToDate: await readMap(config.graph.monthToDateRanges),
+      prevMonth: await readMap(config.graph.prevMonthRanges),
+    };
     // Audit the workbook READ once per request — item reference + outcome, never cell values.
     const ref = workbookRef();
     workbookEvent('read', { sessionId: currentSession()?.id || 'none', ref: ref?.itemId || 'env', outcome: 'ok' });
-    return T.reportsFromRanges(values, labels, prevValues);
+    return T.reportsFromRanges(values, labels, prevValues, monthValues);
   },
 ));
 
