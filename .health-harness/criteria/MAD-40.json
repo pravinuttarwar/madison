@@ -1,0 +1,17 @@
+{
+  "issueKey": "MAD-40",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "No third-party font CDN at runtime: index.html and the bundle contain no fonts.googleapis.com / fonts.gstatic.com links or requests (the CDN link tags are removed)"
+    },
+    {
+      "id": "AC-2",
+      "text": "Fonts self-hosted and wired: Fraunces + JetBrains Mono are provided by bundled @fontsource packages imported at the app entry (main.tsx), served from our own origin; --font-display / --font-mono tokens still name those families"
+    },
+    {
+      "id": "AC-3",
+      "text": "Accent + headings unchanged (no regression): the crimson primary (#c0002a) accent and the Fraunces heading treatment remain exactly as today — self-hosting changes the font source, not the look"
+    }
+  ]
+}

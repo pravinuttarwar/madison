@@ -162,6 +162,15 @@ Legend: ✅ done · 🟡 prototype/partial (UI real, live data pending) · ⛔ o
   `Reports.test.tsx`. PR [#36](https://github.com/pravinuttarwar/madison/pull/36) merged; **Testing (owner QA)**.
   Go-live data dependency: customer populates the prior-year ranges. The multi-year source-picker + Recharts chart
   stay parked under MBI-22 (salvage branch `origin/feature/reports-spreadsheet` is the reference).
+- **[MAD-40](https://connecthealth.atlassian.net/browse/MAD-40) — Self-host the mockup fonts**
+  (Phase-1 productionization, epic [MAD-1](https://connecthealth.atlassian.net/browse/MAD-1), MAD Sprint 2). The
+  crimson accent + Fraunces/JetBrains-Mono typography already shipped (MBI-21); this removes the **runtime Google
+  Fonts CDN** dependency — the fonts are now bundled and **served from our own origin** via `@fontsource-variable`
+  (imported in `main.tsx`), eliminating a third-party runtime call (HIPAA/privacy posture + offline-reliable
+  shipped artifact). No visual change; the `--font-display`/`--font-mono` tokens now prefer the self-hosted variable
+  faces. **Frontend-only; no API/DTO/DB change; not ePHI.** AC-1..AC-3 pinned by `theme-fonts.test.ts`; `pnpm build`
+  bundles the woff2 locally and `dist/index.html` has no Google Fonts references. (Applying JetBrains Mono across all
+  KPI/metric figures — currently `tabular-nums` only — is a deferred taste decision.)
 
 ### 🟡 Remaining (open in Jira)
 
