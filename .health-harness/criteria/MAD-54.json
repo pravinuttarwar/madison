@@ -1,0 +1,21 @@
+{
+  "issueKey": "MAD-54",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "Given the current-month tab has columns but a zero total (no encounters yet), when /api/reports is read with no month selected, then the default is the latest month with a non-zero total (the last active month), not the empty current month."
+    },
+    {
+      "id": "AC-2",
+      "text": "Given the normalized model, when /api/reports is read, then the DTO carries availableMonths (latest first) as { key: YYYY-MM, label, hasData } and echoes the resolved selectedMonth."
+    },
+    {
+      "id": "AC-3",
+      "text": "Given a month key, when /api/reports?month=YYYY-MM is read, then the report is computed for THAT month vs its prior month (even an empty or past month); an unknown/absent month falls back to the default."
+    },
+    {
+      "id": "AC-4",
+      "text": "Given availableMonths, when the page renders, then a Month dropdown appears defaulting to the resolved month; empty months are labeled no data yet; choosing a month refetches and updates the numbers, period label and comparisons."
+    }
+  ]
+}

@@ -212,6 +212,16 @@ Legend: ✅ done · 🟡 prototype/partial (UI real, live data pending) · ⛔ o
   `WORKBOOK_CONFIG_PATH` in two spawn tests (were reading a real persisted connection) and made the cashFlow assertion
   month-rollover-robust. Breaking change: none.
 
+- **[MAD-54](https://connecthealth.atlassian.net/browse/MAD-54) — Reports: month picker + non-zero-month default**
+  (Phase-1 productionization, epic [MAD-1](https://connecthealth.atlassian.net/browse/MAD-1), MAD Sprint 2). On the 1st of a
+  month the live sheet has the new month's tab (columns) but no encounters yet, so the report picked the **empty current
+  month** and showed all `0` / `-100%`. Now the default is the **latest month with a non-zero total** (June on July 1) and a
+  **Month picker** dropdown (`availableMonths` in the DTO, `/api/reports?month=YYYY-MM`) lets the user choose any month;
+  empty months are labeled "no data yet" so choosing one is deliberate. Completes MAD-45's intent in the normalized model
+  (`assembleReportDTO`). **Additive — `availableMonths`/`selectedMonth` + optional `?month=`; monthly/weekly shape unchanged;
+  not ePHI.** AC-1..AC-4 pinned by `reports-model` + `reports-weekly-route` + `Reports.test.tsx`; full gate green
+  (backend 222 + frontend 116). Breaking change: none.
+
 ### 🟡 Remaining (open in Jira)
 
 - **[MBI-22](https://connecthealth.atlassian.net/browse/MBI-22) — Operational reporting from SharePoint/OneDrive spreadsheets.**

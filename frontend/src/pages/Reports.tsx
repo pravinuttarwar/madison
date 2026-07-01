@@ -188,13 +188,15 @@ export default function Reports() {
   // MAD-51: Month (default) vs Week period view. Only offered when the report carries a `weekly`
   // block section; selecting it swaps the numbers AND the labels to the weekly period.
   const [view, setView] = useState<'month' | 'week'>('month');
+  // MAD-54: which month to view (YYYY-MM). Undefined → the backend picks the latest month with data.
+  const [monthParam, setMonthParam] = useState<string | undefined>(undefined);
   // MAD-48: the report is cached 24h; the Refresh button forces a re-read via getReports(refresh).
   const forceRefresh = useRef(false);
   const { data, loading } = useApi(() => {
     const r = forceRefresh.current;
     forceRefresh.current = false;
-    return getReports(r);
-  }, [reloadKey]);
+    return getReports(r, monthParam);
+  }, [reloadKey, monthParam]);
   const { data: conn } = useApi(getWorkbookConnection, [reloadKey]);
   const onRefresh = () => { forceRefresh.current = true; setReloadKey((k) => k + 1); };
 
@@ -264,6 +266,20 @@ export default function Reports() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* MAD-54: month picker — choose which month to view; defaults to the resolved (latest-with-
+              data) month. Empty months are labeled "no data yet". Only shown when there's a choice. */}
+          {data.availableMonths && data.availableMonths.length > 1 && (
+            <select
+              value={data.selectedMonth ?? ''}
+              onChange={(e) => setMonthParam(e.target.value)}
+              aria-label="Month to view"
+              className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm outline-none focus:border-primary focus:ring-2 focus:ring-ring/30"
+            >
+              {data.availableMonths.map((m) => (
+                <option key={m.key} value={m.key}>{m.label}{m.hasData ? '' : ' — no data yet'}</option>
+              ))}
+            </select>
+          )}
           {/* MAD-51: Month | Week period toggle — only when the report carries a weekly block. */}
           {showToggle && (
             <div className="inline-flex rounded-full border border-border bg-card p-0.5 text-xs font-medium" role="group" aria-label="Reporting period">

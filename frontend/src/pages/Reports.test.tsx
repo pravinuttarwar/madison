@@ -278,6 +278,43 @@ describe('Reports — YoY correctness (MAD-53)', () => {
   });
 });
 
+// MAD-54 — month picker: a dropdown to choose which month (default = the resolved latest-with-data),
+// empty months labeled, changing it refetches with ?month=.
+describe('Reports — month picker (MAD-54)', () => {
+  function monthAwarePayload(selected: string) {
+    return {
+      weekNumber: 0,
+      period: { current: 'June 2026', prior: 'May 2026' },
+      metrics: [{ key: 'med', label: 'Medical', last: 120, prior: 110 }],
+      encountersBySpecialty: [{ label: 'Medical', last: 120, prior: 110 }],
+      totalEncounters: { last: 120, prior: 110 },
+      availableMonths: [
+        { key: '2026-07', label: 'July 2026', hasData: false },
+        { key: '2026-06', label: 'June 2026', hasData: true },
+        { key: '2026-05', label: 'May 2026', hasData: true },
+      ],
+      selectedMonth: selected,
+    };
+  }
+  it('[AC-4] renders a month dropdown (empty labeled) and refetches with ?month= on change', async () => {
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', (req: RequestInfo | URL) => {
+      const url = String(req);
+      urls.push(url);
+      if (url.includes('/api/reports/connection')) return Promise.resolve({ ok: true, status: 200, json: async () => ({ connected: true, name: 'W.xlsx', via: 'connection' }) });
+      if (url.includes('/api/auth/scopes')) return Promise.resolve({ ok: true, status: 200, json: async () => ({ requested: [], delegated: [], app: [] }) });
+      const m = new URL(url, 'http://x').searchParams.get('month') || '2026-06';
+      return Promise.resolve({ ok: true, status: 200, json: async () => monthAwarePayload(m) });
+    });
+    render(<Reports />);
+    const picker = await screen.findByLabelText(/month to view/i);
+    expect(picker).toBeTruthy();
+    expect(screen.getByText(/July 2026 — no data yet/i)).toBeTruthy(); // empty month labeled
+    fireEvent.change(picker, { target: { value: '2026-05' } });
+    await waitFor(() => expect(urls.some((u) => u.includes('month=2026-05'))).toBe(true));
+  });
+});
+
 describe('Reports — Month | Week period toggle (MAD-51)', () => {
   it('[AC-6] shows a Month|Week toggle (default Month) and swaps period + numbers on Week', async () => {
     stubReports(REPORT_WITH_WEEKLY);

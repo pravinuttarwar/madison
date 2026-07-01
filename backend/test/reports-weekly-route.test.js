@@ -106,3 +106,28 @@ test('[AC-4] GET /api/reports — monthly shape unchanged (June vs May, provider
   assert.ok(Array.isArray(body.providers) && body.providers.length >= 3);
   assert.ok(Array.isArray(body.warnings) && body.warnings.some((w) => /wombat/i.test(w.label)));
 });
+
+// [AC-2] MAD-54 — the DTO lists the workbook's months and echoes the resolved selection; the default
+// selection is a real month that has data.
+test('[AC-2] GET /api/reports — availableMonths + a data-backed default selectedMonth', async () => {
+  const { status, body } = await getJson('/api/reports');
+  assert.equal(status, 200);
+  assert.ok(Array.isArray(body.availableMonths) && body.availableMonths.length > 0, 'availableMonths present');
+  for (const m of body.availableMonths) {
+    assert.match(m.key, /^\d{4}-\d{2}$/);
+    assert.equal(typeof m.hasData, 'boolean');
+    assert.ok(m.label);
+  }
+  const sel = body.availableMonths.find((m) => m.key === body.selectedMonth);
+  assert.ok(sel && sel.hasData, 'the default selectedMonth is a month WITH data');
+});
+
+// [AC-3] MAD-54 — ?month=YYYY-MM selects that month; the resolved selectedMonth echoes it.
+test('[AC-3] GET /api/reports?month= — selects the requested month', async () => {
+  const { body } = await getJson('/api/reports');
+  const other = body.availableMonths.find((m) => m.key !== body.selectedMonth && m.hasData);
+  assert.ok(other, 'fixture has a second month with data to select');
+  const { status, body: b2 } = await getJson(`/api/reports?month=${other.key}`);
+  assert.equal(status, 200);
+  assert.equal(b2.selectedMonth, other.key, 'the requested month is selected');
+});

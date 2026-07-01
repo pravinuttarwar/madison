@@ -247,7 +247,10 @@ export const REPORT_TTL_MS = 24 * 60 * 60 * 1000; // tz-safe: a fixed cache dura
 export function reportCacheTtl(refresh) { return refresh ? 0 : REPORT_TTL_MS; }
 
 router.get('/reports', route('spreadsheet',
-  async (req) => cached(sk('reports'), reportCacheTtl(req?.query?.refresh === '1'), async () => {
+  // MAD-54: an optional ?month=YYYY-MM selects which month to view (else the latest with data). The
+  // cache key includes it so each month is cached independently.
+  async (req) => cached(sk(`reports:${(req && req.query && req.query.month) || 'default'}`), reportCacheTtl(req?.query?.refresh === '1'), async () => {
+    const selectedMonth = (req && req.query && req.query.month) || undefined;
     const sessionId = currentSession()?.id || 'none';
     // MAD-52: connections are keyed by YEAR — the latest connected year is the current source,
     // the next-latest is the prior-year (YoY) source. Falls back to the env drive path(s).
@@ -298,7 +301,9 @@ router.get('/reports', route('spreadsheet',
 
     // MAD-53: assemble every view (monthly, weekly WoW, same-month YoY) from the one model. Null when
     // the current model has no month with data → fall back to an empty WoW-shaped report (never 500).
-    const dto = T.assembleReportDTO({ currentModel, priorYearModel, now: new Date() });
+    // tz-safe: `new Date()` is a zone-agnostic instant; assembleReportDTO interprets it in the
+    // practice zone (PRACTICE_TZ) only to bound the "current month" — the report is otherwise data-driven.
+    const dto = T.assembleReportDTO({ currentModel, priorYearModel, now: new Date(), month: selectedMonth });
     return dto || T.reportsFromGrids({ current: {}, prior: {} }, undefined, {});
   }),
 ));
