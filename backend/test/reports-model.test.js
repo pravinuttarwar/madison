@@ -217,3 +217,18 @@ test('[AC-3] an unknown month key falls back to the default month', () => {
   const dto = assembleReportDTO({ currentModel: CUR_EMPTY_JULY, priorYearModel: null, now: JULY_1, month: '2026-12' });
   assert.equal(dto.selectedMonth, '2026-06');
 });
+
+// ── MAD-55: Total excludes New patients; same-file YoY guard ──────────────────
+// [AC-1] "New patients" is a descriptor (a subset count), not an encounter type — it must NOT be
+// summed into Total Encounters, though it still shows as its own metric row.
+test('[AC-1] Total Encounters excludes the New patients descriptor', () => {
+  const dto = reportsFromGrids({
+    current: { med: 100, chiro: 50, newPatients: 20 },
+    prior: { med: 90, chiro: 40, newPatients: 10 },
+    yearAgo: { med: 80, chiro: 30, newPatients: 5 },
+  });
+  assert.ok(dto.metrics.find((m) => m.key === 'newPatients'), 'New patients still a visible metric row');
+  assert.equal(dto.totalEncounters.last, 150, '100 + 50 (NOT + 20)');
+  assert.equal(dto.totalEncounters.prior, 130, '90 + 40 (NOT + 10)');
+  assert.equal(dto.totalEncounters.yearAgo, 110, '80 + 30 (NOT + 5)');
+});

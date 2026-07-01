@@ -222,6 +222,17 @@ Legend: ✅ done · 🟡 prototype/partial (UI real, live data pending) · ⛔ o
   not ePHI.** AC-1..AC-4 pinned by `reports-model` + `reports-weekly-route` + `Reports.test.tsx`; full gate green
   (backend 222 + frontend 116). Breaking change: none.
 
+- **[MAD-55](https://connecthealth.atlassian.net/browse/MAD-55) — Sheet-faithful fixtures + same-file YoY guard + Total excludes New patients**
+  (Phase-1 productionization, epic [MAD-1](https://connecthealth.atlassian.net/browse/MAD-1), MAD Sprint 2). Validating the live
+  report against the real sample workbooks (`docs/report sample/`) surfaced gaps the green suite missed. Fixes: (1)
+  **same-file YoY guard** — when the same workbook item is connected for both the current and prior year (the live bug — the
+  2026 file was registered as 2025 too), YoY is **suppressed** with an explanatory note on the Reports UI, never a silent
+  2026-vs-2026 zero; (2) **Total Encounters excludes New patients** (a descriptor / subset count — was double-counting); (3)
+  **fixtures now mirror the real sheet** (after-TOTAL `Osman` on the totals tab, `Allergy`+`MO` below the provider TOTAL; a
+  distinct prior-year drive item so YoY reads genuinely different data). AC-1..AC-4 pinned by `reports-model` +
+  `reports-yoy-guard` + `characterization-fixtures` + `Reports.test.tsx`; full gate green (backend 225 + frontend 117).
+  **Additive — DTO shape unchanged (Total value corrected); not ePHI.** Breaking change: none.
+
 ### 🟡 Remaining (open in Jira)
 
 - **[MBI-22](https://connecthealth.atlassian.net/browse/MBI-22) — Operational reporting from SharePoint/OneDrive spreadsheets.**

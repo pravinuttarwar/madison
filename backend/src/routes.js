@@ -290,9 +290,17 @@ router.get('/reports', route('spreadsheet',
       return T.buildYearModel({ year: (src && src.year) || null, metricTabs, providerTabs });
     };
 
+    // MAD-55: if the SAME workbook file is connected for both the current and prior year (same
+    // itemId), a year-over-year comparison would compare the file to ITSELF (all zeros). Suppress YoY
+    // and explain it on the report, rather than showing a misleading same-file 0.
+    const sameWorkbook = Boolean(
+      currentSource && prevYearSource && currentSource.itemId
+      && currentSource.itemId === prevYearSource.itemId,
+    );
+
     const currentModel = await fetchYearModel(currentSource, true);
     let priorYearModel = null;
-    try { priorYearModel = prevYearSource ? await fetchYearModel(prevYearSource, false) : null; }
+    try { priorYearModel = (prevYearSource && !sameWorkbook) ? await fetchYearModel(prevYearSource, false) : null; }
     catch { priorYearModel = null; } // YoY is additive — a prior-year read failure never breaks the report
 
     // Audit the workbook READ once per request — item reference(s) + outcome, never cell values (AC-8).
@@ -301,10 +309,14 @@ router.get('/reports', route('spreadsheet',
 
     // MAD-53: assemble every view (monthly, weekly WoW, same-month YoY) from the one model. Null when
     // the current model has no month with data → fall back to an empty WoW-shaped report (never 500).
-    // tz-safe: `new Date()` is a zone-agnostic instant; assembleReportDTO interprets it in the
-    // practice zone (PRACTICE_TZ) only to bound the "current month" — the report is otherwise data-driven.
-    const dto = T.assembleReportDTO({ currentModel, priorYearModel, now: new Date(), month: selectedMonth });
-    return dto || T.reportsFromGrids({ current: {}, prior: {} }, undefined, {});
+    const now = new Date(); // tz-safe: a zone-agnostic instant; assembleReportDTO interprets it in the practice zone only to bound the "current month"
+    const dto = T.assembleReportDTO({ currentModel, priorYearModel, now, month: selectedMonth })
+      || T.reportsFromGrids({ current: {}, prior: {} }, undefined, {});
+    // MAD-55: explain the suppressed YoY on the report (the same file is connected for both years).
+    if (sameWorkbook) {
+      dto.yoyNote = 'Year-over-year is off — the same workbook is connected for both the current and prior year. Use "Change workbook" to connect a separate prior-year file to compare.';
+    }
+    return dto;
   }),
 ));
 

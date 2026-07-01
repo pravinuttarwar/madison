@@ -104,7 +104,7 @@ test('[AC-4] GET /api/reports — monthly shape unchanged (June vs May, provider
   assert.equal(byKey.newPatients.last, 31);
   // providers + warnings still present (MAD-46 / MAD-50)
   assert.ok(Array.isArray(body.providers) && body.providers.length >= 3);
-  assert.ok(Array.isArray(body.warnings) && body.warnings.some((w) => /wombat/i.test(w.label)));
+  assert.ok(Array.isArray(body.warnings) && body.warnings.some((w) => /osman/i.test(w.label)));
 });
 
 // [AC-2] MAD-54 — the DTO lists the workbook's months and echoes the resolved selection; the default
