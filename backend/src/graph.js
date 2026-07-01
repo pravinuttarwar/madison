@@ -29,7 +29,11 @@ function graphFixture(reqPath) {
   if (/\/todo\/lists\/[^/]+\/tasks/.test(reqPath)) return loadFixture('graph', 'todo-tasks.json');
   if (reqPath.includes('/todo/lists')) return loadFixture('graph', 'todo-lists.json');
   // MAD-26 workbook connection: share-URL resolve, drive-path resolve, reachability check.
-  if (reqPath.includes('/shares/')) return loadFixture('graph', 'driveitem.json');
+  // MAD-55: a path/URL carrying the '2025' marker resolves to a DISTINCT prior-year item (its id
+  // also carries '2025' so its later grid reads route to the prior-year fixtures) — so a two-file
+  // (2026 + 2025) connection reads genuinely different data, and connecting the SAME file twice
+  // (no marker) yields the same item id (exercising the same-file YoY guard).
+  if (reqPath.includes('/shares/')) return loadFixture('graph', reqPath.includes('2025') ? 'driveitem-prevyear.json' : 'driveitem.json');
   // MAD-27 grid reads: a single tab's used-range grid — matched BEFORE the worksheet list
   // (its path also contains '/workbook/worksheets'). The '2025' marker selects the prior-year
   // file's grids/list; everything else is the current-year file.
@@ -41,7 +45,7 @@ function graphFixture(reqPath) {
   if (reqPath.includes('/workbook/worksheets')) {
     return loadFixture('graph', reqPath.includes('2025') ? 'worksheets-prevyear.json' : 'worksheets.json');
   }
-  if (reqPath.includes('/drive/root:') && reqPath.includes('$select=id,name')) return loadFixture('graph', 'driveitem.json');
+  if (reqPath.includes('/drive/root:') && reqPath.includes('$select=id,name')) return loadFixture('graph', reqPath.includes('2025') ? 'driveitem-prevyear.json' : 'driveitem.json');
   if (reqPath.startsWith('/me?$select=displayName')) return loadFixture('graph', 'me.json');
   if (reqPath.includes('/messages')) return loadFixture('graph', 'messages.json');
   throw new Error(`No graph fixture for path: ${reqPath}`);

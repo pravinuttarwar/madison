@@ -213,7 +213,7 @@ export function writeFixtures(dir, now = new Date()) {
     mrow('IV', c.ivMa), mrow('ACU', c.acu),
     ['TOTAL', 777, 0, 0, 0, 0, 0, 0, 777], // subtotal row → must be IGNORED, not counted
     mrow('MO', c.mo), mrow('Allergy', c.allergy), mrow('Covid Test', c.covid), mrow('Telehealth', c.telehealth),
-    ['Sprained Wombat', 9, 0, 0, 0, 0, 0, 0, 9], // unknown row label → surfaced as unmapped
+    ['Osman', 9, 0, 0, 0, 0, 0, 0, 9], // a provider name in the TOTALS tab (real sheet) → unmapped → warned
     [`New Patients: ${c.newPatients}`],
   ];
   const gridFor = (c, w1 = JUN_W1, w2 = JUN_W2) => ({
@@ -257,6 +257,7 @@ export function writeFixtures(dir, now = new Date()) {
       ['Mac', c.mac, 0, c.mac],
       ['TOTAL', 0, 0, 0],
       ['allergy', c.allergy, 0, c.allergy], // AFTER total → not a provider (warning)
+      ['MO', 4, 0, 4],                       // AFTER total → a service tally, not a provider (warning)
       ['', '', '', ''],
       ['', 'Mon', 'Tues', 'Totals'], // block 2
       ['DATE', w2[0], w2[1], ''], // later week
@@ -275,4 +276,7 @@ export function writeFixtures(dir, now = new Date()) {
   // Synthetic refs only (no real drive). A connected read addresses item-9 → served the same
   // current-year worksheets/grids above (graph.js fixture routing defaults to current). ──
   w(g, 'driveitem.json')({ id: 'item-9', name: 'Madison Weekly Report.xlsx', parentReference: { driveId: 'drive-1' } });
+  // MAD-55: a DISTINCT prior-year drive item — its id carries '2025' so its grid reads route to the
+  // prior-year fixtures. A drive-path/URL containing '2025' resolves here; anything else → item-9.
+  w(g, 'driveitem-prevyear.json')({ id: 'item-2025-py', name: '2025 Patient Numbers.xlsx', parentReference: { driveId: 'drive-1' } });
 }

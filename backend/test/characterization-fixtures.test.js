@@ -265,8 +265,8 @@ test('[AC-1][AC-2] GET /api/reports — canonical metrics from the grid parser (
   assert.equal(byKey.ivMa.last, 40);
   // newPatients parsed from the free-typed "New Patients: 31" cell
   assert.equal(byKey.newPatients.last, 31);
-  // the unknown column never becomes a metric
-  assert.ok(!body.metrics.some((m) => /wombat/i.test(m.key) || /wombat/i.test(m.label)));
+  // a provider name in the totals tab never becomes a metric (Osman is unmapped → warned, not counted)
+  assert.ok(!body.metrics.some((m) => /osman/i.test(m.key) || /osman/i.test(m.label)));
 });
 
 // MAD-50 [AC-4] the report carries the REAL period (month labels from the selected tabs),
@@ -279,15 +279,17 @@ test('[AC-4] GET /api/reports — real month period (June vs May), never "Week 0
   assert.deepEqual(body.period, { current: `June ${year}`, prior: `May ${year}` });
 });
 
-// MAD-50 [AC-2][AC-3] "found but not counted" warnings surface the after-TOTAL provider row
-// (allergy) AND the unmapped metric label (Sprained Wombat) — as LABELS only, never cell values.
-test('[AC-2][AC-3] GET /api/reports — not-counted warnings carry labels only, no values', async () => {
+// MAD-50/MAD-55 [AC-2] "found but not counted" warnings mirror the REAL sheet's after-TOTAL rows:
+// a provider name in the totals tab (Osman) + service tallies below the provider TOTAL (allergy, MO)
+// — as LABELS only, never cell values.
+test('[AC-2] GET /api/reports — not-counted warnings are the after-TOTAL labels (Osman, allergy, MO)', async () => {
   const { status, body } = await getJson('/api/reports');
   assert.equal(status, 200);
-  assert.ok(Array.isArray(body.warnings) && body.warnings.length >= 2);
+  assert.ok(Array.isArray(body.warnings) && body.warnings.length >= 3);
   const labels = body.warnings.map((w) => w.label.toLowerCase());
-  assert.ok(labels.includes('allergy'), 'after-TOTAL provider-tab row surfaced');
-  assert.ok(labels.some((l) => /wombat/.test(l)), 'unmapped metric label surfaced');
+  assert.ok(labels.includes('osman'), 'unmapped totals-tab provider name surfaced');
+  assert.ok(labels.includes('allergy'), 'after-TOTAL provider-tab service tally surfaced');
+  assert.ok(labels.includes('mo'), 'after-TOTAL provider-tab MO surfaced');
   // references only — each warning is exactly { label }, no positions/counts
   for (const w of body.warnings) assert.deepEqual(Object.keys(w), ['label']);
   // no provider-tab cell value (e.g. allergy's 8) leaks into the warning payload
@@ -324,7 +326,11 @@ test('[AC-1] GET /api/reports — additive year-ago (YoY) values from prior-year
     assert.equal(typeof m.prior, 'number');
   }
   assert.equal(typeof body.totalEncounters.yearAgo, 'number');
-  assert.equal(body.totalEncounters.yearAgo, body.metrics.reduce((s, m) => s + m.yearAgo, 0));
+  // MAD-55: Total excludes the New-patients descriptor (a subset count) — sum the ENCOUNTER metrics only.
+  assert.equal(
+    body.totalEncounters.yearAgo,
+    body.metrics.filter((m) => m.key !== 'newPatients').reduce((s, m) => s + m.yearAgo, 0),
+  );
   // encounters-by-specialty rows carry it too [AC-4]
   for (const row of body.encountersBySpecialty) assert.equal(typeof row.yearAgo, 'number');
 });

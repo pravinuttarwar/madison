@@ -280,6 +280,31 @@ describe('Reports — YoY correctness (MAD-53)', () => {
 
 // MAD-54 — month picker: a dropdown to choose which month (default = the resolved latest-with-data),
 // empty months labeled, changing it refetches with ?month=.
+// MAD-55 — when the same workbook is connected for both years, the report explains why YoY is off.
+describe('Reports — same-file YoY note (MAD-55)', () => {
+  it('[AC-4] shows the same-file explanation on the UI and no YoY column', async () => {
+    stubReports({
+      weekNumber: 0,
+      period: { current: 'April 2026', prior: 'March 2026' },
+      metrics: [
+        { key: 'med', label: 'Medical', last: 3479, prior: 2808 }, // no yearAgo → YoY suppressed
+        { key: 'chiro', label: 'Chiro', last: 1793, prior: 1407 },
+      ],
+      encountersBySpecialty: [
+        { label: 'Medical', last: 3479, prior: 2808 },
+        { label: 'Chiro', last: 1793, prior: 1407 },
+      ],
+      totalEncounters: { last: 5272, prior: 4215 },
+      yoyNote: 'Year-over-year is off — the same workbook is connected for both the current and prior year. Use "Change workbook" to connect a separate prior-year file to compare.',
+    });
+    render(<Reports />);
+    // the note explains the suppression and points at "Change workbook"
+    expect(await screen.findByText(/same workbook is connected for both.*Change workbook/is)).toBeTruthy();
+    // no YoY column/indicator when suppressed (the "YoY"/"YOY" labels, not the explanatory note)
+    expect(screen.queryByText(/^yoy$/i)).toBeNull();
+  });
+});
+
 describe('Reports — month picker (MAD-54)', () => {
   function monthAwarePayload(selected: string) {
     return {

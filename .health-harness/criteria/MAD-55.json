@@ -1,0 +1,21 @@
+{
+  "issueKey": "MAD-55",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "Given a New Patients metric, when Total Encounters is computed, then New patients is EXCLUDED from the total (still a visible metric row); the total equals the sum of the encounter metrics only (last/prior/yearAgo/MoM consistent)."
+    },
+    {
+      "id": "AC-2",
+      "text": "Given fixtures that mirror the real sheet layout (after-TOTAL non-metric rows on the totals tab and the provider tab), when /api/reports is read, then the not-counted warnings are exactly those after-TOTAL labels (Osman, Allergy, MO), labels-only and deduped."
+    },
+    {
+      "id": "AC-3",
+      "text": "Given a genuinely different prior-year workbook, when YoY is computed, then each covered metric shows the correct non-zero same-month delta (yearAgo != current), and a metric missing from the prior year shows a dash + the partial note."
+    },
+    {
+      "id": "AC-4",
+      "text": "Given the same workbook item is connected for both the current and prior year, when /api/reports is read, then YoY is suppressed (no yearAgo, no total YoY) and a clear actionable note is returned and shown on the Reports UI, never a silent same-file zero comparison."
+    }
+  ]
+}

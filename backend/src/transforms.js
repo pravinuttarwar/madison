@@ -502,6 +502,10 @@ export const REPORT_METRICS = [
   { key: 'newPatients', label: 'New patients' },
 ];
 const METRIC_LABELS = Object.fromEntries(REPORT_METRICS.map((m) => [m.key, m.label]));
+// MAD-55: metrics that are NOT encounter counts and must be excluded from Total Encounters.
+// `newPatients` is a descriptor (already counted inside the specialty visits) — summing it
+// double-counts. It still renders as its own metric row.
+const TOTAL_EXCLUDED = new Set(['newPatients']);
 
 // Normalize a raw header to a comparison form: decode &amp;, lowercase, strip punctuation
 // (& / -), collapse whitespace. So "PT&OT", "PT OT", "PT/OT" all reduce to "pt ot" etc.
@@ -1119,14 +1123,17 @@ export function reportsFromGrids(periods, labels = METRIC_LABELS, meta = {}) {
     if (hasMoM) { m.monthToDate = at(monthToDate, key); m.prevMonth = at(prevMonth, key); }
     return m;
   });
-  const totalEncounters = { last: sum(metrics, (m) => m.last), prior: sum(metrics, (m) => m.prior) };
-  // Total YoY only when EVERY shown metric has a prior-year value (apples-to-apples). A partial
+  // MAD-55: "New patients" is a descriptor (a subset already counted inside the specialty visits) —
+  // it is NOT an encounter type, so it's EXCLUDED from Total Encounters (still shown as its own row).
+  const totalMetrics = metrics.filter((m) => !TOTAL_EXCLUDED.has(m.key));
+  const totalEncounters = { last: sum(totalMetrics, (m) => m.last), prior: sum(totalMetrics, (m) => m.prior) };
+  // Total YoY only when EVERY counted metric has a prior-year value (apples-to-apples). A partial
   // prior-year sheet → omit the total YoY rather than show a skewed % (AC-3); AC-6 warns instead.
-  const fullYoY = hasYoY && metrics.length > 0 && metrics.every((m) => m.yearAgo !== undefined);
-  if (fullYoY) totalEncounters.yearAgo = sum(metrics, (m) => m.yearAgo);
+  const fullYoY = hasYoY && totalMetrics.length > 0 && totalMetrics.every((m) => m.yearAgo !== undefined);
+  if (fullYoY) totalEncounters.yearAgo = sum(totalMetrics, (m) => m.yearAgo);
   if (hasMoM) {
-    totalEncounters.monthToDate = sum(metrics, (m) => m.monthToDate || 0);
-    totalEncounters.prevMonth = sum(metrics, (m) => m.prevMonth || 0);
+    totalEncounters.monthToDate = sum(totalMetrics, (m) => m.monthToDate || 0);
+    totalEncounters.prevMonth = sum(totalMetrics, (m) => m.prevMonth || 0);
   }
   return {
     weekNumber: 0, // DEPRECATED (MAD-50): kept for back-compat; the UI now renders `period`.
