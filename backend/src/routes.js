@@ -301,6 +301,8 @@ router.get('/reports', route('spreadsheet',
 
     // MAD-53: assemble every view (monthly, weekly WoW, same-month YoY) from the one model. Null when
     // the current model has no month with data → fall back to an empty WoW-shaped report (never 500).
+    // tz-safe: `new Date()` is a zone-agnostic instant; assembleReportDTO interprets it in the
+    // practice zone (PRACTICE_TZ) only to bound the "current month" — the report is otherwise data-driven.
     const dto = T.assembleReportDTO({ currentModel, priorYearModel, now: new Date(), month: selectedMonth });
     return dto || T.reportsFromGrids({ current: {}, prior: {} }, undefined, {});
   }),
