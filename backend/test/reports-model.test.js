@@ -165,3 +165,55 @@ test('[AC-2] no prior-year model → no YoY, monthly report intact', () => {
   assert.ok(!dto.yoyNote, 'no partial note when YoY was never attempted');
   assert.equal(dto.metrics.find((m) => m.key === 'med').last, 120);
 });
+
+// ── MAD-54: month picker + non-zero-month default ─────────────────────────────
+// A current-year model where the current calendar month (July) has columns but a ZERO total (the
+// live sheet on the 1st: tab present, no encounters yet). Default must skip it → June.
+const CUR_EMPTY_JULY = {
+  year: 2026,
+  months: {
+    4: { label: 'May', metrics: { med: 110 }, providers: {}, weeks: [], warnings: [] },
+    5: {
+      label: 'June', metrics: { med: 120 }, providers: {},
+      weeks: [
+        { startSerial: 46188, label: 'Jun 15', metrics: { med: 70 }, providers: {} },
+        { startSerial: 46195, label: 'Jun 22', metrics: { med: 50 }, providers: {} },
+      ], warnings: [],
+    },
+    6: { label: 'July', metrics: { med: 0, chiro: 0 }, providers: {}, weeks: [{ startSerial: 46234, label: 'Jul 1', metrics: { med: 0 }, providers: {} }], warnings: [] },
+  },
+};
+const JULY_1 = new Date('2026-07-01T12:00:00Z'); // monthInZone(ET) = July (6)
+
+// [AC-1] the empty current month (July, zero total) is skipped → default is June (latest non-zero).
+test('[AC-1] default skips an empty current month, falling back to the latest month with data', () => {
+  const dto = assembleReportDTO({ currentModel: CUR_EMPTY_JULY, priorYearModel: null, now: JULY_1 });
+  assert.deepEqual(dto.period, { current: 'June 2026', prior: 'May 2026' });
+  assert.equal(dto.metrics.find((m) => m.key === 'med').last, 120);
+  assert.equal(dto.selectedMonth, '2026-06');
+});
+
+// [AC-2] the DTO lists the workbook's months (latest first) with hasData, and echoes selectedMonth.
+test('[AC-2] availableMonths (latest first, with hasData) + selectedMonth are on the DTO', () => {
+  const dto = assembleReportDTO({ currentModel: CUR_EMPTY_JULY, priorYearModel: null, now: JULY_1 });
+  assert.deepEqual(dto.availableMonths.map((m) => m.key), ['2026-07', '2026-06', '2026-05']);
+  const july = dto.availableMonths.find((m) => m.key === '2026-07');
+  assert.equal(july.label, 'July 2026');
+  assert.equal(july.hasData, false);
+  assert.equal(dto.availableMonths.find((m) => m.key === '2026-06').hasData, true);
+  assert.equal(dto.selectedMonth, '2026-06');
+});
+
+// [AC-3] an explicit month selection shows THAT month (even the empty one) vs its prior month.
+test('[AC-3] explicit month=2026-07 shows July (empty) vs June', () => {
+  const dto = assembleReportDTO({ currentModel: CUR_EMPTY_JULY, priorYearModel: null, now: JULY_1, month: '2026-07' });
+  assert.deepEqual(dto.period, { current: 'July 2026', prior: 'June 2026' });
+  assert.equal(dto.metrics.find((m) => m.key === 'med').last, 0);
+  assert.equal(dto.selectedMonth, '2026-07');
+});
+
+// [AC-3] an unknown month key falls back to the default.
+test('[AC-3] an unknown month key falls back to the default month', () => {
+  const dto = assembleReportDTO({ currentModel: CUR_EMPTY_JULY, priorYearModel: null, now: JULY_1, month: '2026-12' });
+  assert.equal(dto.selectedMonth, '2026-06');
+});

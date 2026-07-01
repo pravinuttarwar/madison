@@ -104,7 +104,13 @@ export type ReportsData = {
   providers?: ProviderRow[];
   weekly?: WeeklyView; // MAD-51: additive weekly-block view; absent when no weekly block was found
   yoyNote?: string; // MAD-53: present when the prior-year sheet is a partial match for the current month
+  availableMonths?: AvailableMonth[]; // MAD-54: months in the workbook (latest first) for the picker
+  selectedMonth?: string; // MAD-54: the resolved month key (YYYY-MM) this payload is for
 };
+
+// MAD-54: a month the workbook holds; `hasData` false = columns present but no encounters yet (the
+// current month early on) — the picker labels it "no data yet" and it's not the default.
+export type AvailableMonth = { key: string; label: string; hasData: boolean };
 
 // The Dashboard is a composed (BFF) view — the backend fans out to the sources it
 // needs in parallel and returns one payload, so the browser makes a single call.
@@ -207,8 +213,12 @@ export function getFinancials(): Promise<FinancialsData> {
 
 // MAD-48: the report is cached 24h server-side; pass refresh=true (the Refresh button) to
 // bypass the cache and re-read the workbook.
-export function getReports(refresh = false): Promise<ReportsData> {
-  return fetchJson<ReportsData>(`/api/reports${refresh ? '?refresh=1' : ''}`);
+export function getReports(refresh = false, month?: string): Promise<ReportsData> {
+  const q = new URLSearchParams();
+  if (month) q.set('month', month); // MAD-54: which month to view (else the latest with data)
+  if (refresh) q.set('refresh', '1');
+  const qs = q.toString();
+  return fetchJson<ReportsData>(`/api/reports${qs ? `?${qs}` : ''}`);
 }
 
 // ── Weekly-report workbook connection (MAD-26) ───────────────────────────────

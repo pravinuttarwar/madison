@@ -971,18 +971,41 @@ export function buildYearModel({ year, metricTabs = [], providerTabs = [] } = {}
 // SAME-MONTH YoY (current month vs the same month a year ago — not the prior-year file's latest
 // tab). Honest-absent + partial-coverage handling come from reportsFromGrids + the yoyNote below.
 // Pure (takes `now`); returns null when the current model has no month with data (route falls back).
-export function assembleReportDTO({ currentModel, priorYearModel, now = new Date() } = {}) {
+export function assembleReportDTO({ currentModel, priorYearModel, now = new Date(), month } = {}) {
   const months = (currentModel && currentModel.months) || {};
   // tz-safe: the practice-zone calendar month only BOUNDS which months are "not future"; the period
-  // label's month is data-driven (model month names), so the report is zone-independent.
+  // label's month is data-driven (model month names), so the report is zone-independent. The calendar
+  // YEAR comes from the connected workbook when known, else the practice-zone year (env fallback).
   const nowMonth = monthInZone(now);
-  const withData = Object.keys(months)
-    .map(Number)
-    .filter((idx) => idx <= nowMonth && months[idx] && Object.keys(months[idx].metrics || {}).length > 0)
-    .sort((a, b) => a - b);
-  if (!withData.length) return null;
-  const curIdx = withData[withData.length - 1];
-  const priorIdx = withData.length >= 2 ? withData[withData.length - 2] : null;
+  const yr = currentModel && currentModel.year != null
+    ? Number(currentModel.year)
+    : Number(new Intl.DateTimeFormat('en-US', { timeZone: PRACTICE_TZ, year: 'numeric' }).format(now));
+  const monthTotal = (m) => Object.values(m || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+  const keyFor = (idx) => `${yr}-${String(idx + 1).padStart(2, '0')}`;
+
+  // Months present in the workbook, not in the future (≤ the calendar month). MAD-54: "has data" now
+  // means a NON-ZERO total — a month with columns but no encounters yet (the current month on the 1st)
+  // is NOT auto-selected. `availableMonths` (latest first) lets the UI offer a picker; a zero-total
+  // month is still listed (labeled "no data yet") so it can be chosen explicitly.
+  const present = Object.keys(months).map(Number).filter((idx) => idx <= nowMonth).sort((a, b) => a - b);
+  const withData = present.filter((idx) => monthTotal(months[idx].metrics) > 0);
+  const availableMonths = [...present].reverse().map((idx) => ({
+    key: keyFor(idx), label: `${MONTH_NAMES[idx]} ${yr}`, hasData: monthTotal(months[idx].metrics) > 0,
+  }));
+
+  // Resolve the selected month: an explicit `month` (YYYY-MM) that exists in the workbook wins (even
+  // an empty/past month — a deliberate choice); otherwise default to the LATEST month with data.
+  const requestedIdx = (() => {
+    const mm = /^\d{4}-(\d{2})$/.exec(String(month || ''));
+    const idx = mm ? Number(mm[1]) - 1 : null;
+    return idx != null && months[idx] ? idx : null;
+  })();
+  const curIdx = requestedIdx != null
+    ? requestedIdx
+    : (withData.length ? withData[withData.length - 1] : (present.length ? present[present.length - 1] : null));
+  if (curIdx == null) return null;
+  // Prior month = the latest month WITH DATA before the selected one (the meaningful comparison).
+  const priorIdx = present.filter((idx) => idx < curIdx && monthTotal(months[idx].metrics) > 0).pop() ?? null;
   const curMonth = months[curIdx];
   const priorMonth = priorIdx != null ? months[priorIdx] : null;
 
@@ -990,9 +1013,6 @@ export function assembleReportDTO({ currentModel, priorYearModel, now = new Date
   const yoyMonth = priorYearModel && priorYearModel.months ? priorYearModel.months[curIdx] : null;
   const yearAgo = yoyMonth && Object.keys(yoyMonth.metrics || {}).length ? yoyMonth.metrics : undefined;
 
-  // tz-safe: only the calendar YEAR is read from `now` (pinned to the practice zone); the month is
-  // data-driven from the model — so the period reads identically in any host/browser zone.
-  const yr = new Intl.DateTimeFormat('en-US', { timeZone: PRACTICE_TZ, year: 'numeric' }).format(now);
   const period = {
     current: `${MONTH_NAMES[curIdx]} ${yr}`,
     prior: priorIdx != null ? `${MONTH_NAMES[priorIdx]} ${yr}` : '',
@@ -1008,8 +1028,10 @@ export function assembleReportDTO({ currentModel, priorYearModel, now = new Date
   const providers = providersSection(curMonth.providers || {}, (priorMonth && priorMonth.providers) || {});
   if (providers.length) dto.providers = providers;
 
-  // weekly (WoW) — the latest week block vs the prior week block, across months (chronological).
-  const allWeeks = withData
+  // weekly (WoW) — the latest week block vs the prior week block, across months up to the SELECTED
+  // month (chronological), so the "latest week" stays within the month being viewed.
+  const allWeeks = present
+    .filter((idx) => idx <= curIdx)
     .flatMap((idx) => months[idx].weeks || [])
     .sort((a, b) => (a.startSerial || 0) - (b.startSerial || 0));
   const curWeek = allWeeks[allWeeks.length - 1];
@@ -1038,6 +1060,10 @@ export function assembleReportDTO({ currentModel, priorYearModel, now = new Date
   // warnings — the current month's own not-counted rows (labels only, never cell values).
   const warnings = (curMonth.warnings || []).map((w) => ({ label: w.label }));
   if (warnings.length) dto.warnings = warnings;
+
+  // MAD-54: the month picker — the workbook's months (latest first) + the resolved selection.
+  dto.availableMonths = availableMonths;
+  dto.selectedMonth = keyFor(curIdx);
   return dto;
 }
 
