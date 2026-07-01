@@ -198,6 +198,20 @@ Legend: ✅ done · 🟡 prototype/partial (UI real, live data pending) · ⛔ o
   `reports-weekly`/`reports-weekly-route`/`Reports.test.tsx`; full gate green (backend 207 + frontend 114). Breaking
   change: none.
 
+- **[MAD-53](https://connecthealth.atlassian.net/browse/MAD-53) — Normalized per-year report model + correct same-month YoY**
+  (Phase-1 productionization, epic [MAD-1](https://connecthealth.atlassian.net/browse/MAD-1), MAD Sprint 2). Fixes the
+  **fake YoY deltas** (Total +4118%, Medical +2120) seen on the live sandbox. Root cause: YoY read the prior-year file's
+  **latest tab** (a sparse December) and treated metrics absent from it as `0`. Now each workbook is parsed **once** into a
+  normalized model — `{ year, months: { idx: { label, metrics, providers, weeks[], warnings } } }` (`buildYearModel`) — and
+  every view reads it by lookup (`assembleReportDTO`): monthly = this month vs prior month; weekly (WoW) = latest block vs
+  prior; **YoY = the SAME month a year ago** (June 2026 vs June 2025). A metric absent from the prior-year month renders
+  **"—"** (no fake delta); the **total YoY** shows only on full coverage; a partial prior-year sheet surfaces a **`yoyNote`**.
+  Per-month not-counted warnings live in the model; a listed-but-unreadable tab is **skipped** (never 500s the report).
+  **Additive — the monthly DTO shape is byte-unchanged; not ePHI.** AC-1..AC-6 pinned by `reports-model` +
+  `characterization-fixtures` + `Reports.test.tsx`; full gate green (backend 216 + frontend 115). Also isolated
+  `WORKBOOK_CONFIG_PATH` in two spawn tests (were reading a real persisted connection) and made the cashFlow assertion
+  month-rollover-robust. Breaking change: none.
+
 ### 🟡 Remaining (open in Jira)
 
 - **[MBI-22](https://connecthealth.atlassian.net/browse/MBI-22) — Operational reporting from SharePoint/OneDrive spreadsheets.**

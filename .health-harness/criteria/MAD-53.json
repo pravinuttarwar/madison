@@ -1,0 +1,29 @@
+{
+  "issueKey": "MAD-53",
+  "criteria": [
+    {
+      "id": "AC-1",
+      "text": "Given a connected workbook's parsed grids, when normalized, then the backend produces a per-year model { year, months: { idx: { label, metrics, providers, weeks:[{startSerial,label,metrics,providers}], warnings } } } — a single parse that feeds every view (pure, offline-testable)."
+    },
+    {
+      "id": "AC-2",
+      "text": "Given a 2026 (current) and 2025 (prior-year) workbook connected, when /api/reports builds YoY, then it compares the SAME month (June 2026 vs June 2025), not the prior-year file's latest tab."
+    },
+    {
+      "id": "AC-3",
+      "text": "Given a metric absent from a comparison period, when the report renders, then that metric shows — for YoY and the total YoY is computed only over metrics present in both periods — never a fake delta from treating absent as 0."
+    },
+    {
+      "id": "AC-4",
+      "text": "Given the normalized model, when /api/reports assembles monthly + weekly (WoW) + MoM + YoY, then all read from the one model and the existing DTO shape is byte-unchanged (characterization-stable)."
+    },
+    {
+      "id": "AC-5",
+      "text": "Given not-counted rows in a month, when normalized, then each month carries its own warnings (labels only, never cell values); the report surfaces the current period's warnings."
+    },
+    {
+      "id": "AC-6",
+      "text": "Given the prior-year same-month tab maps notably fewer metrics than the current month, when /api/reports builds YoY, then it surfaces a note that YoY is partial — check the prior-year sheet, so a sparse prior-year sheet never silently produces garbage."
+    }
+  ]
+}

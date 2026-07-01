@@ -320,6 +320,16 @@ export default function Reports() {
         </div>
       )}
 
+      {/* MAD-53: the prior-year sheet is a partial match for this month — YoY is shown only for the
+          metrics it covers (the rest read "—"), and this note explains why, so a sparse prior-year
+          workbook never silently produces a misleading comparison. */}
+      {data.yoyNote && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+          <p className="text-xs leading-relaxed text-foreground">{data.yoyNote}</p>
+        </div>
+      )}
+
       {/* Top-line encounters */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className="rounded-xl border border-border bg-card p-4 shadow-sm sm:col-span-1">

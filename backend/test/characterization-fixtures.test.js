@@ -66,6 +66,9 @@ before(async () => {
       ...FIXTURE_ENV,
       DEMO_MODE: '',
       FIXTURES_DIR: fixturesDir,
+      // Isolate the workbook connection store to this temp dir — never read a developer's real
+      // persisted connection from the default path (which would point graph reads at live items).
+      WORKBOOK_CONFIG_PATH: path.join(fixturesDir, 'state', 'workbook.json'),
       PORT: String(port),
       FRONTEND_DIST: '/nonexistent',
     },
@@ -239,8 +242,10 @@ test('[AC-1][AC-8] GET /api/financials — additive cashFlow (inflow/outflow/net
   assert.equal(w.net.prior, w.inflow.prior - w.outflow.prior);
   const m = body.cashFlow.mtd;
   assert.equal(m.net, m.inflow - m.outflow);
-  // MTD spans both weeks, so its totals are at least the last-week magnitudes.
-  assert.ok(m.inflow >= w.inflow.last && m.outflow >= w.outflow.last);
+  // Date-robust: MTD totals are non-negative numbers. (An earlier check assumed MTD always spans a
+  // full month — false on the 1st, when month-to-date is a single day; the net invariant is the real
+  // contract and is asserted above.)
+  for (const k of ['inflow', 'outflow']) assert.ok(typeof m[k] === 'number' && m[k] >= 0, `mtd.${k} is a non-negative number`);
 });
 
 // MAD-27: /api/reports now reads the tolerant GRID parser over the (dirty) Totals-Madison

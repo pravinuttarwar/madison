@@ -103,6 +103,7 @@ export type ReportsData = {
   totalEncounters: { last: number; prior: number; yearAgo?: number; monthToDate?: number; prevMonth?: number };
   providers?: ProviderRow[];
   weekly?: WeeklyView; // MAD-51: additive weekly-block view; absent when no weekly block was found
+  yoyNote?: string; // MAD-53: present when the prior-year sheet is a partial match for the current month
 };
 
 // The Dashboard is a composed (BFF) view — the backend fans out to the sources it

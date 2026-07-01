@@ -197,8 +197,13 @@ export function writeFixtures(dir, now = new Date()) {
   // month splits across two weeks (prior = Jun 15, current = Jun 22) whose columns SUM to the
   // monthly value — so the monthly rollup (MAD-50) is byte-identical while the weekly view (MAD-51)
   // can pick a single block. Excel serials: 46188 = 2026-06-15, 46195 = 2026-06-22.
-  const W1_SERIALS = [46188, 46189, 46190, 46191, 46192, 46193, 46194]; // week of Jun 15 (prior)
-  const W2_SERIALS = [46195, 46196, 46197, 46198, 46199, 46200, 46201]; // week of Jun 22 (current)
+  // MAD-53: each MONTH gets DISTINCT week serials (the normalized model flattens weeks across months
+  // chronologically, so May and June must not share serials). June: Jun 15 / Jun 22; May: May 18 / 25.
+  const seriesFrom = (start) => Array.from({ length: 7 }, (_, i) => start + i);
+  const JUN_W1 = seriesFrom(46188); // week of Jun 15 (prior)
+  const JUN_W2 = seriesFrom(46195); // week of Jun 22 (current)
+  const MAY_W1 = seriesFrom(46160); // week of May 18
+  const MAY_W2 = seriesFrom(46167); // week of May 25
   const splitWk = (v) => { const w2 = Math.floor(v * 0.4); return [v - w2, w2]; }; // [prior, current]
   const pickWk = (c, idx) => Object.fromEntries(Object.entries(c).map(([k, v]) => [k, splitWk(v)[idx]]));
   const weekBlock = (serials, c) => [
@@ -211,10 +216,10 @@ export function writeFixtures(dir, now = new Date()) {
     ['Sprained Wombat', 9, 0, 0, 0, 0, 0, 0, 9], // unknown row label → surfaced as unmapped
     [`New Patients: ${c.newPatients}`],
   ];
-  const gridFor = (c) => ({
+  const gridFor = (c, w1 = JUN_W1, w2 = JUN_W2) => ({
     values: [
-      ...weekBlock(W1_SERIALS, pickWk(c, 0)), // prior week (Jun 15)
-      ...weekBlock(W2_SERIALS, pickWk(c, 1)), // current week (Jun 22, latest)
+      ...weekBlock(w1, pickWk(c, 0)), // earlier week
+      ...weekBlock(w2, pickWk(c, 1)), // later week (latest)
     ],
   });
   const emptyTab = { values: [HEADER_ROW, ['DATE', '', '', '', '', '', '', '', '']] }; // no metric rows
@@ -233,8 +238,8 @@ export function writeFixtures(dir, now = new Date()) {
       { name: 'microsoft.com:RD' },
     ],
   });
-  w(usedrange, 'June Totals Madison.json')(gridFor(JUNE));
-  w(usedrange, 'May Totals Madison.json')(gridFor(MAY));
+  w(usedrange, 'June Totals Madison.json')(gridFor(JUNE)); // June serials (default)
+  w(usedrange, 'May Totals Madison.json')(gridFor(MAY, MAY_W1, MAY_W2)); // May serials (distinct weeks)
   w(usedrange, 'July Totals Madison.json')(emptyTab);
 
   // MAD-46: Provider Totals tabs — providers as row labels (same layout). June=current, May=prior;
@@ -243,10 +248,10 @@ export function writeFixtures(dir, now = new Date()) {
   // "Bachman" (block 2) both sit BEFORE their TOTALs → still merge (name normalization). A service
   // tally ("allergy") sits AFTER block 1's TOTAL → it is NOT a provider; it's surfaced as a
   // "found but not counted" warning, never miscounted.
-  const provGrid = (c) => ({
+  const provGrid = (c, w1 = JUN_W1, w2 = JUN_W2) => ({
     values: [
       ['', 'Mon', 'Tues', 'Totals'],
-      ['DATE', 45663, 45664, ''],
+      ['DATE', w1[0], w1[1], ''], // earlier week — SAME serials as the matching metric tab (week align)
       ['Lisa', c.lisa, 0, c.lisa],
       ['Bachman ', c.bachman, 0, c.bachman], // trailing space → merges with "Bachman" below
       ['Mac', c.mac, 0, c.mac],
@@ -254,13 +259,13 @@ export function writeFixtures(dir, now = new Date()) {
       ['allergy', c.allergy, 0, c.allergy], // AFTER total → not a provider (warning)
       ['', '', '', ''],
       ['', 'Mon', 'Tues', 'Totals'], // block 2
-      ['DATE', 45670, 45671, ''],
+      ['DATE', w2[0], w2[1], ''], // later week
       ['Bachman', 0, c.bachman2, c.bachman2], // no space → merges with "Bachman " above
       ['TOTAL', 0, 0, 0],
     ],
   });
-  w(usedrange, 'June Provier Totals .json')(provGrid({ lisa: 50, bachman: 30, bachman2: 4, mac: 20, allergy: 8 }));
-  w(usedrange, 'May Provider Totals .json')(provGrid({ lisa: 45, bachman: 28, bachman2: 0, mac: 18, allergy: 7 }));
+  w(usedrange, 'June Provier Totals .json')(provGrid({ lisa: 50, bachman: 30, bachman2: 4, mac: 20, allergy: 8 })); // June weeks
+  w(usedrange, 'May Provider Totals .json')(provGrid({ lisa: 45, bachman: 28, bachman2: 0, mac: 18, allergy: 7 }, MAY_W1, MAY_W2)); // May weeks
 
   // Prior-year file (YoY): one month tab → its values become the additive yearAgo.
   w(g, 'worksheets-prevyear.json')({ value: [{ name: 'June Totals Madison' }, { name: 'microsoft.com:RD' }] });
