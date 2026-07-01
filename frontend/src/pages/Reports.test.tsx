@@ -254,6 +254,30 @@ const REPORT_WITH_WEEKLY = {
   },
 };
 
+// MAD-53 — same-month YoY correctness: absent prior-year metrics render "—" (no fake delta) and a
+// partial prior-year sheet surfaces a note.
+describe('Reports — YoY correctness (MAD-53)', () => {
+  it('[AC-6] shows a partial-YoY note and renders "—" for a metric missing from the prior year', async () => {
+    stubReports({
+      weekNumber: 0,
+      period: { current: 'June 2026', prior: 'May 2026' },
+      metrics: [
+        { key: 'med', label: 'Medical', last: 120, prior: 110, yearAgo: 100 },
+        { key: 'chiro', label: 'Chiro', last: 64, prior: 60 }, // absent in prior year → no yearAgo
+      ],
+      encountersBySpecialty: [
+        { label: 'Medical', last: 120, prior: 110, yearAgo: 100 },
+        { label: 'Chiro', last: 64, prior: 60 },
+      ],
+      totalEncounters: { last: 184, prior: 170 }, // no yearAgo → partial coverage
+      yoyNote: 'Year-over-year is partial — the prior-year sheet matched only 1 of 2 metrics for June. Check that the prior-year workbook has the same June columns.',
+    });
+    render(<Reports />);
+    expect(await screen.findByText(/year-over-year is partial/i)).toBeTruthy();
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(1); // the absent Chiro YoY cell
+  });
+});
+
 describe('Reports — Month | Week period toggle (MAD-51)', () => {
   it('[AC-6] shows a Month|Week toggle (default Month) and swaps period + numbers on Week', async () => {
     stubReports(REPORT_WITH_WEEKLY);

@@ -898,6 +898,149 @@ export function weeklyPeriodFromBlocks(currentSerials, priorSerials) {
   return { current: cur ? `Week of ${cur}` : '', prior: prior ? `Week of ${prior}` : '' };
 }
 
+// ── MAD-53: normalized per-year report model ──────────────────────────────────
+// Parse a whole workbook ONCE into a clean per-year structure so every view (monthly, weekly WoW,
+// MoM, YoY) reads from it by simple lookup — instead of each re-scanning tabs with its own ad-hoc
+// selection logic (the drift that produced the fake YoY deltas). Inputs are already-fetched grids
+// (the route does the I/O), so this is pure + offline-testable. Shape:
+//   { year, months: { [idx]: { label, metrics:{key:n}, providers:{key:{name,count}},
+//                  weeks: [{ startSerial, label, metrics, providers }], warnings:[{label}] } } }
+function addModelWarning(list, label) {
+  const raw = String(label == null ? '' : label).trim();
+  const k = raw.toLowerCase();
+  if (!k || list.some((w) => w.label.toLowerCase() === k)) return; // dedupe by normalized label
+  list.push({ label: raw });
+}
+function startSerialOf(serials) {
+  const nums = (Array.isArray(serials) ? serials : []).filter((n) => typeof n === 'number');
+  return nums.length ? Math.min(...nums) : null;
+}
+// Find-or-create the week (keyed by its earliest DATE serial) so a month's metric tab and provider
+// tab contribute to the SAME week object — they share the block's calendar days.
+function upsertWeek(weeks, serials) {
+  const start = startSerialOf(serials);
+  let wk = weeks.find((w) => w.startSerial === start);
+  if (!wk) { wk = { startSerial: start, label: weekStartLabel(serials), metrics: {}, providers: {} }; weeks.push(wk); }
+  return wk;
+}
+export function buildYearModel({ year, metricTabs = [], providerTabs = [] } = {}) {
+  const months = {};
+  const monthAt = (idx) => {
+    if (!months[idx]) {
+      months[idx] = { label: MONTH_NAMES[idx] || String(idx), metrics: {}, providers: {}, weeks: [], warnings: [] };
+    }
+    return months[idx];
+  };
+
+  // metric tabs → month totals + weekly metric blocks + unmapped (not-counted) warnings
+  for (const { name, grid } of (metricTabs || [])) {
+    const idx = monthIndexFromTabName(name);
+    if (idx == null) continue;
+    const m = monthAt(idx);
+    const { counts, unmapped } = countsFromGrid(grid);
+    m.metrics = mergeCounts([m.metrics, counts]);
+    for (const u of unmapped) addModelWarning(m.warnings, u.header);
+    for (const block of splitWeeklyBlocks(grid)) {
+      const wk = upsertWeek(m.weeks, block.dateSerials);
+      wk.metrics = mergeCounts([wk.metrics, countsFromGrid(block.rows).counts]);
+    }
+  }
+
+  // provider tabs → month provider totals + weekly provider blocks + after-TOTAL (skipped) warnings
+  for (const { name, grid } of (providerTabs || [])) {
+    const idx = monthIndexFromTabName(name);
+    if (idx == null) continue;
+    const m = monthAt(idx);
+    const { counts, skipped } = providerCountsFromGrid(grid);
+    m.providers = mergeProviderCounts([m.providers, counts]);
+    for (const s of skipped) addModelWarning(m.warnings, s.label);
+    for (const block of splitWeeklyBlocks(grid)) {
+      const wk = upsertWeek(m.weeks, block.dateSerials);
+      wk.providers = mergeProviderCounts([wk.providers, providerCountsFromGrid(block.rows).counts]);
+    }
+  }
+
+  for (const idx of Object.keys(months)) {
+    months[idx].weeks.sort((a, b) => (a.startSerial || 0) - (b.startSerial || 0)); // chronological
+  }
+  return { year, months };
+}
+
+// MAD-53: assemble the full /api/reports DTO from the normalized year model(s). Every view reads
+// from the one model: monthly (this month vs prior month), the additive weekly (WoW) section, and
+// SAME-MONTH YoY (current month vs the same month a year ago — not the prior-year file's latest
+// tab). Honest-absent + partial-coverage handling come from reportsFromGrids + the yoyNote below.
+// Pure (takes `now`); returns null when the current model has no month with data (route falls back).
+export function assembleReportDTO({ currentModel, priorYearModel, now = new Date() } = {}) {
+  const months = (currentModel && currentModel.months) || {};
+  // tz-safe: the practice-zone calendar month only BOUNDS which months are "not future"; the period
+  // label's month is data-driven (model month names), so the report is zone-independent.
+  const nowMonth = monthInZone(now);
+  const withData = Object.keys(months)
+    .map(Number)
+    .filter((idx) => idx <= nowMonth && months[idx] && Object.keys(months[idx].metrics || {}).length > 0)
+    .sort((a, b) => a - b);
+  if (!withData.length) return null;
+  const curIdx = withData[withData.length - 1];
+  const priorIdx = withData.length >= 2 ? withData[withData.length - 2] : null;
+  const curMonth = months[curIdx];
+  const priorMonth = priorIdx != null ? months[priorIdx] : null;
+
+  // YoY: the SAME month a year ago (June↔June), NOT the prior-year file's latest tab.
+  const yoyMonth = priorYearModel && priorYearModel.months ? priorYearModel.months[curIdx] : null;
+  const yearAgo = yoyMonth && Object.keys(yoyMonth.metrics || {}).length ? yoyMonth.metrics : undefined;
+
+  // tz-safe: only the calendar YEAR is read from `now` (pinned to the practice zone); the month is
+  // data-driven from the model — so the period reads identically in any host/browser zone.
+  const yr = new Intl.DateTimeFormat('en-US', { timeZone: PRACTICE_TZ, year: 'numeric' }).format(now);
+  const period = {
+    current: `${MONTH_NAMES[curIdx]} ${yr}`,
+    prior: priorIdx != null ? `${MONTH_NAMES[priorIdx]} ${yr}` : '',
+  };
+
+  const dto = reportsFromGrids(
+    { current: curMonth.metrics, prior: (priorMonth && priorMonth.metrics) || {}, yearAgo },
+    undefined,
+    { period },
+  );
+
+  // providers — this month vs prior month
+  const providers = providersSection(curMonth.providers || {}, (priorMonth && priorMonth.providers) || {});
+  if (providers.length) dto.providers = providers;
+
+  // weekly (WoW) — the latest week block vs the prior week block, across months (chronological).
+  const allWeeks = withData
+    .flatMap((idx) => months[idx].weeks || [])
+    .sort((a, b) => (a.startSerial || 0) - (b.startSerial || 0));
+  const curWeek = allWeeks[allWeeks.length - 1];
+  const priorWeek = allWeeks.length >= 2 ? allWeeks[allWeeks.length - 2] : null;
+  if (curWeek) {
+    const weekly = weeklyReportSection({
+      current: curWeek.metrics || {},
+      prior: (priorWeek && priorWeek.metrics) || {},
+      currentSerials: curWeek.startSerial != null ? [curWeek.startSerial] : [],
+      priorSerials: priorWeek && priorWeek.startSerial != null ? [priorWeek.startSerial] : [],
+      providers: providersSection(curWeek.providers || {}, (priorWeek && priorWeek.providers) || {}),
+    });
+    if (weekly) dto.weekly = weekly;
+  }
+
+  // AC-6: a partial prior-year same-month tab → a note, so a sparse prior-year sheet never silently
+  // produces garbage (the metrics already render "—" individually; this explains why).
+  if (yearAgo) {
+    const matched = dto.metrics.filter((m) => m.yearAgo !== undefined).length;
+    const total = dto.metrics.length;
+    if (total > 0 && matched < total) {
+      dto.yoyNote = `Year-over-year is partial — the prior-year sheet matched only ${matched} of ${total} metrics for ${MONTH_NAMES[curIdx]}. Check that the prior-year workbook has the same ${MONTH_NAMES[curIdx]} columns.`;
+    }
+  }
+
+  // warnings — the current month's own not-counted rows (labels only, never cell values).
+  const warnings = (curMonth.warnings || []).map((w) => ({ label: w.label }));
+  if (warnings.length) dto.warnings = warnings;
+  return dto;
+}
+
 // Assemble the additive `weekly` report section from the current/prior weekly blocks. Same shape
 // as the monthly report (period, metrics, encountersBySpecialty, totalEncounters [+ providers]),
 // reusing reportsFromGrids. Returns null when there is NO current week block — the route then omits
@@ -941,14 +1084,20 @@ export function reportsFromGrids(periods, labels = METRIC_LABELS, meta = {}) {
     ...[...seen].filter((k) => !METRIC_LABELS[k])];
 
   const at = (map, key) => Number((map || {})[key]) || 0;
+  // MAD-53: a metric ABSENT from the prior-year map gets NO yearAgo (the UI renders "—") — never a
+  // fake "current − 0" delta from an unmapped/sparse prior-year sheet (AC-3).
+  const hasKey = (map, key) => map && Object.prototype.hasOwnProperty.call(map, key);
   const metrics = order.map((key) => {
     const m = { key, label: labels[key] || key, last: at(current, key), prior: at(prior, key) };
-    if (hasYoY) m.yearAgo = at(yearAgo, key);
+    if (hasYoY && hasKey(yearAgo, key)) m.yearAgo = at(yearAgo, key);
     if (hasMoM) { m.monthToDate = at(monthToDate, key); m.prevMonth = at(prevMonth, key); }
     return m;
   });
   const totalEncounters = { last: sum(metrics, (m) => m.last), prior: sum(metrics, (m) => m.prior) };
-  if (hasYoY) totalEncounters.yearAgo = sum(metrics, (m) => m.yearAgo || 0);
+  // Total YoY only when EVERY shown metric has a prior-year value (apples-to-apples). A partial
+  // prior-year sheet → omit the total YoY rather than show a skewed % (AC-3); AC-6 warns instead.
+  const fullYoY = hasYoY && metrics.length > 0 && metrics.every((m) => m.yearAgo !== undefined);
+  if (fullYoY) totalEncounters.yearAgo = sum(metrics, (m) => m.yearAgo);
   if (hasMoM) {
     totalEncounters.monthToDate = sum(metrics, (m) => m.monthToDate || 0);
     totalEncounters.prevMonth = sum(metrics, (m) => m.prevMonth || 0);
@@ -959,7 +1108,7 @@ export function reportsFromGrids(periods, labels = METRIC_LABELS, meta = {}) {
     metrics,
     encountersBySpecialty: metrics.slice(0, 6).map((m) => {
       const row = { label: m.label, last: m.last, prior: m.prior };
-      if (hasYoY) row.yearAgo = m.yearAgo;
+      if (hasYoY && m.yearAgo !== undefined) row.yearAgo = m.yearAgo;
       if (hasMoM) { row.monthToDate = m.monthToDate; row.prevMonth = m.prevMonth; }
       return row;
     }),

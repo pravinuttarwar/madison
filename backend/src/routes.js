@@ -252,163 +252,54 @@ router.get('/reports', route('spreadsheet',
     // MAD-52: connections are keyed by YEAR — the latest connected year is the current source,
     // the next-latest is the prior-year (YoY) source. Falls back to the env drive path(s).
     const { current: currentSrc, prevYear: prevYearSrc } = resolveYearSources(workbookRefs());
-    const currentSources = currentSrc ? [currentSrc] : [null]; // null → current env path
-    const prevYearSources = prevYearSrc
-      ? [prevYearSrc]
-      : (config.graph.prevYearSpreadsheetPath ? [{ envPath: config.graph.prevYearSpreadsheetPath }] : []);
+    const currentSource = currentSrc || null; // null → current env path
+    const prevYearSource = prevYearSrc
+      || (config.graph.prevYearSpreadsheetPath ? { envPath: config.graph.prevYearSpreadsheetPath } : null);
 
-    // Read ONE workbook source → { current, prior } metric count-maps. We read the metric tabs
-    // from the LATEST backward and keep the first two WITH DATA. For the current-year file we
-    // first CAP to the current calendar month (MAD-45) so a phantom future-month tab (e.g. stray
-    // December entries) can't be picked over the real current month; the prior-year file is NOT
-    // capped (all its months are in the past). The current-month tab is kept even if empty — the
-    // latest-with-data scan then falls back to the last month with data (AC-3).
-    const readSource = async (src, capToMonth) => {
-      let metricTabs = T.selectMetricTabs(await graph.workbookWorksheetNames(src));
-      if (capToMonth) metricTabs = T.capMetricTabsToMonth(metricTabs, new Date()); // current month, practice zone
-      const item = (src && src.itemId) || 'env';
-      const collected = []; // latest-first: [{ counts, tab }]
-      const unmapped = []; // MAD-50: unrecognized metric labels (references only) → report warnings
-      for (let i = metricTabs.length - 1; i >= 0 && collected.length < 2; i -= 1) {
-        const tab = metricTabs[i];
-        const parsed = T.countsFromGrid(await graph.workbookUsedRange(tab, src));
-        // AC-8/9: surface unmapped labels PHI-safely — item + sheet + index references, no values.
-        if (parsed.unmapped.length) {
-          workbookUnmappedEvent({ sessionId, ref: item, sheet: tab, columns: parsed.unmapped.map((u) => u.col ?? u.row) });
-          unmapped.push(...parsed.unmapped);
-        }
-        if (Object.keys(parsed.counts).length > 0) collected.push({ counts: parsed.counts, tab }); // skip empty tabs
-      }
-      return {
-        current: collected[0]?.counts || {},
-        prior: collected[1]?.counts || {},
-        currentTab: collected[0]?.tab || null, // MAD-50: drives the real period label
-        priorTab: collected[1]?.tab || null,
-        unmapped,
-      };
-    };
-
-    // Aggregate current/prior across all current sources — capped to the current month (MAD-45).
-    const currentReads = await Promise.all(currentSources.map((src) => readSource(src, true)));
-    const current = T.mergeCounts(currentReads.map((r) => r.current));
-    const prior = T.mergeCounts(currentReads.map((r) => r.prior));
-    // MAD-50: the real period (month labels) comes from the first source that yielded a current tab.
-    const periodLead = currentReads.find((r) => r.currentTab) || {};
-    // tz-safe: period month comes from the tab name (data); `new Date()` only supplies the calendar
-    // year, which periodFromTabs pins to the practice zone — zone-independent for the user.
-    const period = T.periodFromTabs(periodLead.currentTab, periodLead.priorTab, new Date());
-    const metricUnmapped = currentReads.flatMap((r) => r.unmapped || []);
-    // YoY: the prior-year file's latest tab → additive yearAgo (NOT capped — it's a past year).
-    const prevYearReads = await Promise.all(prevYearSources.map((src) => readSource(src, false)));
-    const yearAgo = T.mergeCounts(prevYearReads.map((r) => r.current));
-
-    // MAD-46: per-provider breakdown — read the Provider Totals tabs (or, for the Chiro file
-    // which has no such tabs, its month tabs) from each current source, capped to the current
-    // month, latest-with-data. Additive; failures degrade to an empty list (never break the report).
-    const readProviders = async (src) => {
+    // MAD-53: parse a source's tabs ONCE into a normalized per-year model. The current-year file is
+    // CAPPED to the current calendar month (MAD-45) so a phantom future-month tab can't be picked;
+    // the prior-year file is NOT capped (all months are past). Emits the PHI-safe unmapped-column
+    // audit (item + sheet + column INDEXES, never cell values) per metric tab.
+    const fetchYearModel = async (src, capToMonth) => {
       const names = await graph.workbookWorksheetNames(src);
-      let provTabs = T.selectProviderTabs(names);
-      if (!provTabs.length) {
+      let metricNames = T.selectMetricTabs(names);
+      let provNames = T.selectProviderTabs(names);
+      if (!provNames.length) {
         // Chiro Numbers: no "Provider Totals" tabs — its month tabs ARE the provider data.
-        provTabs = names.filter((n) => T.monthIndexFromTabName(n) != null && !String(n).toLowerCase().startsWith('microsoft.com:'));
+        provNames = names.filter((n) => T.monthIndexFromTabName(n) != null && !String(n).toLowerCase().startsWith('microsoft.com:'));
       }
-      provTabs = T.capMetricTabsToMonth(provTabs, new Date());
+      if (capToMonth) {
+        metricNames = T.capMetricTabsToMonth(metricNames, new Date()); // tz-safe: practice-zone calendar month
+        provNames = T.capMetricTabsToMonth(provNames, new Date());
+      }
+      // A listed-but-unreadable tab (stale name, permissions, a not-yet-created month) is SKIPPED,
+      // never fatal — one bad tab must not 500 the whole report.
+      const fetchTabs = (ns) => Promise.all(ns.map(async (name) => {
+        try { return { name, grid: await graph.workbookUsedRange(name, src) }; }
+        catch { return null; }
+      })).then((tabs) => tabs.filter(Boolean));
+      const [metricTabs, providerTabs] = await Promise.all([fetchTabs(metricNames), fetchTabs(provNames)]);
       const item = (src && src.itemId) || 'env';
-      const collected = []; // latest-first: [current, prior]
-      const skipped = []; // MAD-50: after-TOTAL labels found but not counted (references only)
-      for (let i = provTabs.length - 1; i >= 0 && collected.length < 2; i -= 1) {
-        const { counts, skipped: sk } = T.providerCountsFromGrid(await graph.workbookUsedRange(provTabs[i], src));
-        if (sk.length) skipped.push(...sk);
-        if (Object.keys(counts).length > 0) collected.push(counts);
+      for (const { name, grid } of metricTabs) {
+        const u = T.countsFromGrid(grid).unmapped; // in-memory re-parse (no I/O) → audit refs only
+        if (u.length) workbookUnmappedEvent({ sessionId, ref: item, sheet: name, columns: u.map((x) => x.col ?? x.row) });
       }
-      return { current: collected[0] || {}, prior: collected[1] || {}, item, skipped };
+      return T.buildYearModel({ year: (src && src.year) || null, metricTabs, providerTabs });
     };
-    let providers = [];
-    let providerSkipped = [];
-    try {
-      const provReads = await Promise.all(currentSources.map(readProviders));
-      providers = T.providersSection(
-        T.mergeProviderCounts(provReads.map((r) => r.current)),
-        T.mergeProviderCounts(provReads.map((r) => r.prior)),
-      );
-      providerSkipped = provReads.flatMap((r) => r.skipped || []);
-    } catch { providers = []; } // additive — a provider-read failure never breaks the metrics report
 
-    // MAD-51: the WEEKLY view — split each current source's metric tabs into their stacked weekly
-    // blocks (latest-first across tabs), taking the latest block as the current week and the
-    // previous block as the prior week. Providers are summed per week the same way. Additive: the
-    // `weekly` section is built only when a current week block exists; a failure degrades to no
-    // weekly section, never breaking the monthly report.
-    const readWeeklyBlocks = async (src, counter) => {
-      let tabs = T.selectMetricTabs(await graph.workbookWorksheetNames(src));
-      tabs = T.capMetricTabsToMonth(tabs, new Date());
-      const blocks = []; // latest-first: [current, prior]
-      for (let i = tabs.length - 1; i >= 0 && blocks.length < 2; i -= 1) {
-        const wbs = T.splitWeeklyBlocks(await graph.workbookUsedRange(tabs[i], src));
-        for (let b = wbs.length - 1; b >= 0 && blocks.length < 2; b -= 1) {
-          const counts = counter(wbs[b].rows);
-          if (Object.keys(counts).length > 0) blocks.push({ serials: wbs[b].dateSerials, counts });
-        }
-      }
-      return blocks;
-    };
-    const readWeeklyProviderBlocks = async (src) => {
-      const names = await graph.workbookWorksheetNames(src);
-      let provTabs = T.selectProviderTabs(names);
-      if (!provTabs.length) {
-        provTabs = names.filter((n) => T.monthIndexFromTabName(n) != null && !String(n).toLowerCase().startsWith('microsoft.com:'));
-      }
-      provTabs = T.capMetricTabsToMonth(provTabs, new Date());
-      const blocks = []; // latest-first: [current, prior]
-      for (let i = provTabs.length - 1; i >= 0 && blocks.length < 2; i -= 1) {
-        const wbs = T.splitWeeklyBlocks(await graph.workbookUsedRange(provTabs[i], src));
-        for (let b = wbs.length - 1; b >= 0 && blocks.length < 2; b -= 1) {
-          const counts = T.providerCountsFromGrid(wbs[b].rows).counts;
-          if (Object.keys(counts).length > 0) blocks.push(counts);
-        }
-      }
-      return blocks;
-    };
-    let weekly = null;
-    try {
-      const weekReads = await Promise.all(currentSources.map((src) => readWeeklyBlocks(src, (rows) => T.countsFromGrid(rows).counts)));
-      const curBlocks = weekReads.map((b) => b[0]).filter(Boolean);
-      const priorBlocks = weekReads.map((b) => b[1]).filter(Boolean);
-      if (curBlocks.length) {
-        let wProviders = [];
-        try {
-          const provWeek = await Promise.all(currentSources.map(readWeeklyProviderBlocks));
-          wProviders = T.providersSection(
-            T.mergeProviderCounts(provWeek.map((b) => b[0]).filter(Boolean)),
-            T.mergeProviderCounts(provWeek.map((b) => b[1]).filter(Boolean)),
-          );
-        } catch { wProviders = []; }
-        weekly = T.weeklyReportSection({
-          current: T.mergeCounts(curBlocks.map((b) => b.counts)),
-          prior: T.mergeCounts(priorBlocks.map((b) => b.counts)),
-          currentSerials: curBlocks[0]?.serials || [],
-          priorSerials: priorBlocks[0]?.serials || [],
-          providers: wProviders,
-        });
-      }
-    } catch { weekly = null; } // additive — a weekly-read failure never breaks the monthly report
+    const currentModel = await fetchYearModel(currentSource, true);
+    let priorYearModel = null;
+    try { priorYearModel = prevYearSource ? await fetchYearModel(prevYearSource, false) : null; }
+    catch { priorYearModel = null; } // YoY is additive — a prior-year read failure never breaks the report
 
     // Audit the workbook READ once per request — item reference(s) + outcome, never cell values (AC-8).
-    const items = [...currentSources, ...prevYearSources].map((s) => (s && s.itemId) || 'env').join(',') || 'env';
+    const items = [currentSource, prevYearSource].filter(Boolean).map((s) => (s && s.itemId) || 'env').join(',') || 'env';
     workbookEvent('read', { sessionId, ref: items, outcome: 'ok' });
 
-    const dto = T.reportsFromGrids(
-      { current, prior, yearAgo: Object.keys(yearAgo).length ? yearAgo : undefined },
-      undefined,
-      { period }, // MAD-50: real month period (replaces the hardcoded "Week 0")
-    );
-    if (providers.length) dto.providers = providers; // additive section (MAD-46)
-    if (weekly) dto.weekly = weekly; // additive weekly-block view (MAD-51); absent when no week block
-    // MAD-50: "found but not counted" — unrecognized metric labels + after-TOTAL provider rows,
-    // surfaced for review. Labels/references only, never cell values (AC-3). Additive; absent when empty.
-    const warnings = T.reportWarnings(metricUnmapped, providerSkipped);
-    if (warnings.length) dto.warnings = warnings;
-    return dto;
+    // MAD-53: assemble every view (monthly, weekly WoW, same-month YoY) from the one model. Null when
+    // the current model has no month with data → fall back to an empty WoW-shaped report (never 500).
+    const dto = T.assembleReportDTO({ currentModel, priorYearModel, now: new Date() });
+    return dto || T.reportsFromGrids({ current: {}, prior: {} }, undefined, {});
   }),
 ));
 

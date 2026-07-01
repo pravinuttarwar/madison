@@ -56,6 +56,8 @@ before(async () => {
     env: {
       ...process.env, ...FIXTURE_ENV, DEMO_MODE: '',
       FIXTURES_DIR: fixturesDir, PORT: String(port), FRONTEND_DIST: '/nonexistent',
+      // Isolate the workbook store so we never read a developer's real persisted connection.
+      WORKBOOK_CONFIG_PATH: path.join(fixturesDir, 'state', 'workbook.json'),
     },
     stdio: 'ignore',
   });
